@@ -1,0 +1,75 @@
+﻿# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Large data and generated outputs
+dataset/
+data/raw/
+data/processed/
+outputs/
+runs/
+experiments/
+artifacts/
+dummy/
+paper/
+proposal/
+research/
+testing_work/
+
+# Root generated reports
+*.png
+*.csv
+*.md.bak
+*comparison*.md
+*comparison*.csv
+*comparison*.png
+braking_*.md
+braking_*.csv
+braking_*.png
+paper_*.md
+paper_*.csv
+people_braking_*.md
+people_braking_*.csv
+people_braking_*.png
+context_model_benchmark_*.md
+context_model_benchmark_*.csv
+context_model_benchmark_*.png
+final_threeway_comparison*.md
+final_threeway_comparison*.csv
+final_threeway_comparison*.png
+
+# Binary documents
+*.docx
+*.pptx
+*.pdf
+
+# Large pretrained weights at root
+yolov8n.pt
+yolov8s.pt
+yolo26n.pt
+
+# Models: keep curated checkpoints only
+models/pretrained/
+models/checkpoints/*
+!models/checkpoints/
+!models/checkpoints/yolo3cls_best.pt
+!models/checkpoints/temporal_final_best.pt
+!models/checkpoints/literature_temporal_best.pt
+
+# Keep source configs and annotations
+!data/annotations/
+!data/annotations/context/
+!data/annotations/context/**
+*_manifest.json
+tmp_*.txt
+*.egg-info/

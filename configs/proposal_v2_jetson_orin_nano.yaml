@@ -1,0 +1,60 @@
+runtime:
+  profile: "proposal_v2_jetson_orin_nano"
+  max_frames: 150
+  seed: 11
+
+camera:
+  fps: 12
+  width: 960
+  height: 540
+  channels: 3
+  source_type: "image_folder"
+  image_dir: "dataset/val/image"
+  image_pattern: "*.png"
+  recursive: true
+
+spatial:
+  model_name: "yolo_nano"
+  feature_dim: 48
+  weights_path: "experiments/exp_004_yolo_nano_training/runs/yolov8n_e20_frac01_gpu/weights/best.pt"
+  device: "cpu"
+  conf_threshold: 0.30
+  max_det: 20
+  input_size: 480
+  fallback_to_mock: true
+
+temporal:
+  model_name: "gru_torch"
+  window_size: 6
+  num_contexts: 7
+  hidden_dim: 32
+  checkpoint_path: "experiments/exp_005_temporal_gru_training/runs/gru_e8_vehicle/checkpoints/best.pt"
+  device: "cpu"
+  dropout: 0.05
+
+labels:
+  - "background"
+  - "event_vehicle"
+  - "people"
+  - "speed_bump"
+  - "traffic_light"
+  - "traffic_sign"
+  - "vehicle"
+
+scoring:
+  context_weight: 0.38
+  boundary_weight: 0.30
+  uncertainty_weight: 0.20
+  novelty_weight: 0.12
+  high_threshold: 0.74
+  mid_threshold: 0.50
+
+curation:
+  ring_buffer_size: 96
+  pre_event_frames: 6
+  post_event_frames: 6
+
+storage:
+  base_dir: "outputs"
+  run_name: "proposal_v2_jetson_orin_nano"
+  save_raw_frames: false

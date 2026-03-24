@@ -1,0 +1,9 @@
+path: C:/yolstm/dataset/yolov8_3cls_merged
+train: train/images
+val: valid/images
+test: test/images
+nc: 3
+names:
+  - person
+  - vehicle
+  - bike

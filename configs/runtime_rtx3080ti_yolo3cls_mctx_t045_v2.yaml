@@ -1,0 +1,60 @@
+﻿runtime:
+  profile: "rtx3080ti_yolo3cls_mctx_runtime"
+  max_frames: 0
+  seed: 7
+
+camera:
+  fps: 10
+  width: 1280
+  height: 720
+  channels: 3
+  source_type: "image_folder"
+  image_dir: "dataset/train/image/image_1"
+  image_pattern: "*.png"
+  recursive: true
+
+spatial:
+  model_name: "yolo_nano"
+  feature_dim: 64
+  weights_path: "experiments/exp_011_yolo3cls_training/runs/yolov8n_3cls_from_pretrained_stage2_noaug/weights/best.pt"
+  device: "cuda:0"
+  conf_threshold: 0.45
+  max_det: 30
+  input_size: 640
+  fallback_to_mock: true
+
+temporal:
+  model_name: "gru_torch"
+  window_size: 8
+  num_contexts: 5
+  hidden_dim: 96
+  checkpoint_path: "experiments/exp_012_temporal_manual_context_yolo3cls/runs/mcnn_gru_manual_context_yolo3cls_e20_h96_c24/checkpoints/best.pt"
+  device: "cuda:0"
+  dropout: 0.1
+
+labels:
+  - "dense_traffic"
+  - "front_vehicle_follow"
+  - "hard_brake_risk"
+  - "normal_drive"
+  - "post_brake_recovery"
+
+scoring:
+  context_weight: 0.35
+  boundary_weight: 0.30
+  uncertainty_weight: 0.20
+  novelty_weight: 0.15
+  high_threshold: 0.70
+  mid_threshold: 0.45
+
+curation:
+  ring_buffer_size: 128
+  pre_event_frames: 8
+  post_event_frames: 8
+
+storage:
+  base_dir: "outputs"
+  run_name: "rtx3080ti_yolo3cls_mctx_runtime"
+  save_raw_frames: false
+
+

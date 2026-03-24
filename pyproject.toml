@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vcp-pipeline"
+version = "0.1.0"
+description = "비전인식-맥락 연계형 온디바이스 파이프라인 베이스라인"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0",
+  "numpy>=1.26.0",
+  "pillow>=10.0.0",
+  "opencv-python>=4.9.0",
+  "ultralytics>=8.4.0",
+  "torch>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+vcp-run = "vcp.main:main"
+vcp-build-context-dataset = "vcp.tools.build_context_dataset:main"
+vcp-brake-review = "vcp.tools.brake_review_ui:main"
+vcp-remap-yolo-3cls = "vcp.tools.remap_yolo_dataset_to_3cls:main"
+vcp-train-yolo = "vcp.tools.train_yolo_nano:main"
+vcp-train-temporal = "vcp.tools.train_temporal_gru:main"
+vcp-video-demo = "vcp.tools.run_video_demo:main"
+vcp-benchmark-context = "vcp.tools.benchmark_context_models:main"
+vcp-final-model-ui = "vcp.tools.final_hybrid_model_ui:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

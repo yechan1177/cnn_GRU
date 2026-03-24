@@ -1,0 +1,57 @@
+﻿runtime:
+  profile: "deploy_jetson_orin_nano_8gb"
+  max_frames: 150
+  seed: 11
+
+camera:
+  fps: 12
+  width: 224
+  height: 224
+  channels: 3
+  source_type: "mock"
+  image_dir: null
+  image_pattern: "*.png"
+  recursive: true
+
+spatial:
+  model_name: "mock_yolo_nano_candidate"
+  feature_dim: 48
+  weights_path: null
+  device: "cpu"
+  conf_threshold: 0.25
+  max_det: 20
+  input_size: 640
+  fallback_to_mock: true
+
+temporal:
+  model_name: "gru_mock"
+  window_size: 6
+  num_contexts: 4
+  hidden_dim: 24
+  checkpoint_path: null
+  device: "cpu"
+  dropout: 0.05
+
+labels:
+  - "idle"
+  - "approach"
+  - "manipulate"
+  - "handover"
+
+scoring:
+  context_weight: 0.38
+  boundary_weight: 0.30
+  uncertainty_weight: 0.20
+  novelty_weight: 0.12
+  high_threshold: 0.74
+  mid_threshold: 0.50
+
+curation:
+  ring_buffer_size: 96
+  pre_event_frames: 6
+  post_event_frames: 6
+
+storage:
+  base_dir: "outputs"
+  run_name: "deploy_profile_orin_nano"
+  save_raw_frames: false

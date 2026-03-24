@@ -1,0 +1,59 @@
+﻿runtime:
+  profile: "train_rtx3080ti"
+  max_frames: 300
+  seed: 7
+
+camera:
+  fps: 20
+  width: 320
+  height: 320
+  channels: 3
+  source_type: "mock"
+  image_dir: null
+  image_pattern: "*.png"
+  recursive: true
+
+spatial:
+  model_name: "mock_mobilenetv3_large_candidate"
+  feature_dim: 128
+  weights_path: null
+  device: "cuda:0"
+  conf_threshold: 0.25
+  max_det: 30
+  input_size: 640
+  fallback_to_mock: true
+
+temporal:
+  model_name: "gru_mock"
+  window_size: 16
+  num_contexts: 6
+  hidden_dim: 64
+  checkpoint_path: null
+  device: "cuda:0"
+  dropout: 0.1
+
+labels:
+  - "idle"
+  - "approach"
+  - "grasp"
+  - "transport"
+  - "place"
+  - "handover"
+
+scoring:
+  context_weight: 0.35
+  boundary_weight: 0.30
+  uncertainty_weight: 0.20
+  novelty_weight: 0.15
+  high_threshold: 0.70
+  mid_threshold: 0.45
+
+curation:
+  ring_buffer_size: 256
+  pre_event_frames: 12
+  post_event_frames: 12
+
+storage:
+  base_dir: "outputs"
+  run_name: "train_profile_rtx3080ti"
+  save_raw_frames: false

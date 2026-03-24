@@ -1,0 +1,36 @@
+﻿{
+  "schema_version": "1.1",
+  "description": "수동 맥락 라벨 초안 스키마",
+  "labels": [
+    {
+      "name": "normal_drive",
+      "event_active": false,
+      "description": "특이 이벤트가 없는 일반 주행 구간"
+    },
+    {
+      "name": "front_vehicle_follow",
+      "event_active": false,
+      "description": "전방 차량을 일정 거리에서 추종하는 주행 구간"
+    },
+    {
+      "name": "brake_warning",
+      "event_active": true,
+      "description": "중앙 ROI에서 전방 객체 박스가 짧은 프레임 사이 빠르게 커져 제동 경고가 필요한 구간"
+    },
+    {
+      "name": "hard_brake_risk",
+      "event_active": true,
+      "description": "전방 객체가 급격히 커지거나 움직임이 둔화/정지해 강한 제동 위험이 발생한 구간"
+    },
+    {
+      "name": "post_brake_recovery",
+      "event_active": true,
+      "description": "강한 제동 직후 감속 상태 또는 회복 상태 구간"
+    },
+    {
+      "name": "dense_traffic",
+      "event_active": false,
+      "description": "차량 밀집도가 높고 차간 간격이 짧은 교통 혼잡 구간"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+﻿path: C:/yolstm/dataset/yolov8_6cls_local
+train: images/train
+val: images/val
+nc: 6
+names:
+  0: "vehicle"
+  1: "people"
+  2: "event_vehicle"
+  3: "speed_bump"
+  4: "traffic_sign"
+  5: "traffic_light"

@@ -1,0 +1,60 @@
+runtime:
+  profile: "proposal_v2_rtx3080ti"
+  max_frames: 180
+  seed: 7
+
+camera:
+  fps: 10
+  width: 1280
+  height: 720
+  channels: 3
+  source_type: "image_folder"
+  image_dir: "dataset/train/image/image_1"
+  image_pattern: "*.png"
+  recursive: true
+
+spatial:
+  model_name: "yolo_nano"
+  feature_dim: 64
+  weights_path: "experiments/exp_004_yolo_nano_training/runs/yolov8n_e20_frac01_gpu/weights/best.pt"
+  device: "cuda:0"
+  conf_threshold: 0.25
+  max_det: 30
+  input_size: 640
+  fallback_to_mock: true
+
+temporal:
+  model_name: "gru_torch"
+  window_size: 8
+  num_contexts: 7
+  hidden_dim: 64
+  checkpoint_path: "experiments/exp_005_temporal_gru_training/runs/gru_e8_vehicle/checkpoints/best.pt"
+  device: "cuda:0"
+  dropout: 0.1
+
+labels:
+  - "background"
+  - "event_vehicle"
+  - "people"
+  - "speed_bump"
+  - "traffic_light"
+  - "traffic_sign"
+  - "vehicle"
+
+scoring:
+  context_weight: 0.35
+  boundary_weight: 0.30
+  uncertainty_weight: 0.20
+  novelty_weight: 0.15
+  high_threshold: 0.70
+  mid_threshold: 0.45
+
+curation:
+  ring_buffer_size: 128
+  pre_event_frames: 8
+  post_event_frames: 8
+
+storage:
+  base_dir: "outputs"
+  run_name: "proposal_v2_rtx3080ti"
+  save_raw_frames: false
