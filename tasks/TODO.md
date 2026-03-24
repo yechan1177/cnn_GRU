@@ -43,7 +43,7 @@
 - [x] TASK_044 people_braking 영상 기준 3모델 실측 비교
 - [x] TASK_045 브레이크 positive feature 합성 증강
 - [x] TASK_046 논문용 실험환경/평가지표 표 및 모델 구조 그림 산출
-- [x] TASK_047 GitHub 업로드용 정리 및 커밋
+- [ ] TASK_048 GitHub 문서/README 고도화
 
 ## 현재 스프린트: 발표자료 제작
 - [x] TASK_008 문서 생성
@@ -226,4 +226,5 @@
 - 2026-03-24: 최종 제안모델/하이브리드 룰 게이트 확인 UI 및 실행 배치 추가 (TASK_041)
 - 2026-03-24: 루트 단일 실행 파일 `run_final_model.py` 추가 및 mp4/webcam 전환 단순화 (TASK_042)
 - 2026-03-24: 최종 UI 모델 / YOLO+rule / 문헌형 CNN+시계열 3모델 비교표 및 그래프 재산출 (TASK_043)
+
 

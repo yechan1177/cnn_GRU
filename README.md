@@ -1,17 +1,43 @@
 ﻿# 비전인식-맥락 연계형 온디바이스 파이프라인
 
-실시간 영상에서 `person / vehicle / bike`를 검출하고, 16차원 의미 특징과 CNN-GRU 기반 맥락 모델로 주행 상황을 해석하는 프로젝트다. 최종 실행 파일은 루트의 `run_final_model.py`이며, mp4 또는 웹캠 입력을 바로 사용할 수 있다.
+실시간 주행 영상을 입력으로 받아 객체를 검출하고, 의미 기반 특징 벡터와 CNN-GRU 시계열 모델을 통해 주행 맥락을 해석하는 저장소다. 기본 목적은 **온디바이스에서 바로 실행 가능한 경량 파이프라인**을 제공하고, 이후 멀티모달 데이터셋 자동 구축으로 확장 가능한 기반을 만드는 것이다.
 
-## 저장소에 포함한 핵심 구성
-- `run_final_model.py`: 루트 단일 실행 파일
-- `src/`: 모델, 데이터 변환, UI, 학습 코드
-- `models/checkpoints/`: 실행에 필요한 최소 체크포인트
-- `configs/hybrid_rule_params.json`: 하이브리드 룰 파라미터
-- `launchers/`: Windows 실행 배치 파일
-- `tests/`: 최소 회귀 테스트
-- `docs/`, `tasks/`: 한국어 문서와 작업 이력
+![파이프라인 개요](docs/assets/readme_pipeline_overview.svg)
 
-## 1. 설치
+## 개요
+이 프로젝트는 아래 흐름으로 동작한다.
+
+1. `YOLOv8n`으로 `person / vehicle / bike`를 검출한다.
+2. 검출 결과를 `16차원 의미 특징 벡터`로 변환한다.
+3. 최근 `8프레임`을 `CNN-GRU`에 입력해 맥락을 예측한다.
+4. 하이브리드 룰 게이트로 최종 태그를 보정한다.
+5. UI에서 순수 모델 예측과 최종 하이브리드 결과를 함께 확인한다.
+
+## 핵심 기능
+| 기능 | 설명 |
+|---|---|
+| 실시간 추론 | mp4 또는 웹캠을 입력으로 받아 즉시 동작 |
+| 경량 detector | YOLOv8n 기반 3클래스 검출 |
+| 맥락 인식 | 16차원 의미 특징 + CNN-GRU |
+| 하이브리드 보정 | boundary, ROI, looming, motion 기반 최종 보정 |
+| 검수 루프 | 브레이크 구간 검수 UI 제공 |
+| GitHub 실행성 | 상대경로 기반 실행, 최소 체크포인트 포함 |
+
+## 저장소 구성
+| 경로 | 용도 |
+|---|---|
+| `run_final_model.py` | 가장 빠른 단일 실행 파일 |
+| `src/vcp/` | 파이프라인 본체 코드 |
+| `models/checkpoints/` | 실행용 최소 체크포인트 |
+| `configs/` | 런타임/학습 설정 |
+| `launchers/` | Windows 배치 실행 파일 |
+| `data/annotations/context/` | 수동 맥락 라벨 원본 |
+| `tests/` | 회귀 테스트 |
+| `docs/` | 한국어 설계 문서 |
+| `tasks/` | 작업 이력 및 체크리스트 |
+
+## 빠른 시작
+### 1. 설치
 ```powershell
 cd C:\yolstm
 python -m venv .venv
@@ -21,17 +47,17 @@ python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
-## 2. 가장 빠른 실행
+### 2. 바로 실행
 ```powershell
 cd C:\yolstm
 .\.venv\Scripts\python.exe run_final_model.py
 ```
 
-기본 동작:
+기본 동작은 다음과 같다.
 - `data/raw/videos/people_braking.mp4`가 있으면 해당 영상을 사용한다.
 - 영상이 없으면 자동으로 `webcam:0`으로 전환한다.
 
-## 3. 입력 소스 바꾸기
+## 입력 소스 변경
 `run_final_model.py` 상단 설정만 수정하면 된다.
 
 ```python
@@ -40,10 +66,12 @@ WEBCAM_INDEX = 0
 VIDEO_SOURCE = str(ROOT_DIR / "data" / "raw" / "videos" / "people_braking.mp4")
 ```
 
-- mp4 사용: `USE_WEBCAM = False`, `VIDEO_SOURCE` 수정
-- 웹캠 사용: `USE_WEBCAM = True`, `WEBCAM_INDEX` 수정
+| 사용 방식 | 설정 |
+|---|---|
+| mp4 파일 | `USE_WEBCAM = False`, `VIDEO_SOURCE` 수정 |
+| 웹캠 | `USE_WEBCAM = True`, `WEBCAM_INDEX` 수정 |
 
-## 4. 화면에 표시되는 정보
+## 화면에서 확인할 수 있는 정보
 - YOLO 검출 박스
 - `pure model`: 순수 CNN-GRU 예측
 - `hybrid final`: 룰 게이트 적용 최종 태그
@@ -53,37 +81,59 @@ VIDEO_SOURCE = str(ROOT_DIR / "data" / "raw" / "videos" / "people_braking.mp4")
 
 키 입력:
 - `space`: 재생/일시정지
-- `s`: 스크린샷 저장
+- `s`: 현재 화면 저장
 - `q`: 종료
 
-## 5. 보조 실행 명령
-하이브리드 검수 UI:
+## 보조 실행 명령
+### 최종 하이브리드 UI
 ```powershell
 .\.venv\Scripts\python.exe -m vcp.tools.final_hybrid_model_ui
 ```
 
-브레이크 구간 검수 UI:
+### 브레이크 구간 검수 UI
 ```powershell
 .\.venv\Scripts\python.exe -m vcp.tools.brake_review_ui
 ```
 
-YOLO 3클래스 학습:
+### YOLO 3클래스 학습
 ```powershell
 .\.venv\Scripts\python.exe -m vcp.tools.train_yolo_nano --data configs/datasets/yolo3cls_merged.yaml --model models/pretrained/yolov8n.pt --epochs 150 --final-epochs 20 --imgsz 640 --batch 16 --device 0 --optimizer Adam --patience 20 --project experiments/exp_011_yolo3cls_training/runs --name yolov8n_3cls_from_pretrained
 ```
 
-Temporal 학습:
+### Temporal 학습
 ```powershell
 .\.venv\Scripts\python.exe -m vcp.tools.train_temporal_gru --dataset-dir data/processed/<dataset_dir> --epochs 24 --batch-size 256 --hidden-dim 96 --cnn-channels 24 --device cuda:0 --project experiments/temporal_runs --name temporal_run
 ```
 
-## 6. 테스트
+## 테스트
 ```powershell
 cd C:\yolstm
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-## 7. 저장소 정책
+## 포함된 실행용 체크포인트
+| 파일 | 용도 |
+|---|---|
+| `models/checkpoints/yolo3cls_best.pt` | 3클래스 detector |
+| `models/checkpoints/temporal_final_best.pt` | 최종 temporal 모델 |
+| `models/checkpoints/literature_temporal_best.pt` | 비교용 문헌형 temporal 모델 |
+| `configs/hybrid_rule_params.json` | 하이브리드 룰 파라미터 |
+
+## 문서 인덱스
+추천 순서로 읽으면 된다.
+
+1. [프로젝트 개요](docs/00_프로젝트개요.md)
+2. [시스템 아키텍처](docs/01_시스템아키텍처.md)
+3. [모델 설계](docs/03_모델설계.md)
+4. [실험 방법](docs/05_실험방법.md)
+5. [브레이크 리뷰 UI](docs/17_브레이크리뷰UI.md)
+6. [최종 하이브리드 모델 UI](docs/20_최종하이브리드모델UI.md)
+
+## 저장소 정책
 - 대용량 데이터셋, 실험 산출물, 영상 파일은 저장소에 포함하지 않는다.
 - 실행에 필요한 최소 체크포인트만 `models/checkpoints/`에 포함한다.
 - 문서와 코드 주석은 한국어 기준으로 유지한다.
+- 학습 경로와 배포 경로는 분리 설계를 유지한다.
+
+## 변경 이력
+최근 변경 내용은 [CHANGELOG.md](CHANGELOG.md)에서 관리한다.

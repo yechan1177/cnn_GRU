@@ -1,0 +1,62 @@
+﻿<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="520" fill="#0B1020"/>
+  <rect x="40" y="40" width="1120" height="440" rx="24" fill="#11182D" stroke="#2A355C" stroke-width="2"/>
+  <text x="70" y="95" fill="#F5F7FF" font-size="34" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Vision-Context Pipeline for On-Device Driving Analysis</text>
+  <text x="70" y="128" fill="#A8B3D1" font-size="18" font-family="Segoe UI, Arial, sans-serif">YOLO detector + semantic feature vector + CNN-GRU temporal reasoning + hybrid rule gate</text>
+
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2F80ED"/>
+      <stop offset="100%" stop-color="#56CCF2"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#27AE60"/>
+      <stop offset="100%" stop-color="#6FCF97"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F2994A"/>
+      <stop offset="100%" stop-color="#F2C94C"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9B51E0"/>
+      <stop offset="100%" stop-color="#BB6BD9"/>
+    </linearGradient>
+    <linearGradient id="g5" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#EB5757"/>
+      <stop offset="100%" stop-color="#F299A2"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="70" y="190" width="180" height="140" rx="20" fill="url(#g1)"/>
+  <text x="92" y="232" fill="white" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">1. Input Stream</text>
+  <text x="92" y="268" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">MP4 video or webcam</text>
+  <text x="92" y="294" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">single entry runner</text>
+
+  <rect x="285" y="190" width="180" height="140" rx="20" fill="url(#g2)"/>
+  <text x="307" y="232" fill="white" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">2. YOLOv8n</text>
+  <text x="307" y="268" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">person / vehicle / bike</text>
+  <text x="307" y="294" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">real-time detection</text>
+
+  <rect x="500" y="190" width="180" height="140" rx="20" fill="url(#g3)"/>
+  <text x="522" y="232" fill="white" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">3. Features</text>
+  <text x="522" y="268" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">16 semantic signals</text>
+  <text x="522" y="294" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">ROI, looming, motion</text>
+
+  <rect x="715" y="190" width="180" height="140" rx="20" fill="url(#g4)"/>
+  <text x="737" y="232" fill="white" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">4. CNN-GRU</text>
+  <text x="737" y="268" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">8-frame temporal window</text>
+  <text x="737" y="294" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">context + boundary</text>
+
+  <rect x="930" y="190" width="180" height="140" rx="20" fill="url(#g5)"/>
+  <text x="952" y="232" fill="white" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">5. Hybrid Gate</text>
+  <text x="952" y="268" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">final label decision</text>
+  <text x="952" y="294" fill="white" font-size="16" font-family="Segoe UI, Arial, sans-serif">warning / hard brake</text>
+
+  <path d="M250 260H285" stroke="#D8E1FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M465 260H500" stroke="#D8E1FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M680 260H715" stroke="#D8E1FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M895 260H930" stroke="#D8E1FF" stroke-width="6" stroke-linecap="round"/>
+
+  <rect x="70" y="370" width="1040" height="70" rx="16" fill="#0F1528" stroke="#283252"/>
+  <text x="95" y="414" fill="#DCE6FF" font-size="20" font-family="Segoe UI, Arial, sans-serif">Outputs: pure model prediction, hybrid final tag, boundary score, brake probabilities, ROI / looming / motion diagnostics</text>
+</svg>
