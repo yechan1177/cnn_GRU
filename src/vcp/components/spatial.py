@@ -49,7 +49,15 @@ class MockSpatialEncoder(SpatialEncoder):
 
 
 class YOLOSpatialEncoder(SpatialEncoder):
-    """YOLO 검출 결과를 고정 길이 특징 벡터로 변환하는 spatial encoder."""
+    """YOLO 검출 결과를 고정 길이 특징 벡터로 변환하는 spatial encoder.
+
+    이 클래스는 제안 모델의 첫 단계이다.
+    - 입력: 현재 프레임 이미지
+    - 출력: 16차원 순간 특징 벡터
+
+    중요한 점은 이 벡터가 현재 프레임에서만 계산된다는 것이다.
+    시간 변화는 여기서 미리 만들지 않고, 뒤의 CNN-GRU가 최근 8프레임 시퀀스를 보고 학습한다.
+    """
 
     BASE_FEATURE_KEYS: list[str] = [
         "det_norm",
@@ -71,6 +79,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
     ]
 
     def __init__(self, cfg: SpatialConfig) -> None:
+        # YOLO 가중치는 실모델 실행에 필수이므로 없으면 즉시 실패시킨다.
         if not cfg.weights_path:
             raise ValueError("YOLOSpatialEncoder 사용 시 spatial.weights_path가 필요합니다.")
 
@@ -81,6 +90,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
                 "YOLOSpatialEncoder 사용 시 ultralytics 설치가 필요합니다."
             ) from exc
 
+        # 설정 파일 값을 안전한 범위로 정리해 내부 변수로 보관한다.
         self._feature_dim = max(8, int(cfg.feature_dim))
         self._device = str(cfg.device)
         self._conf_threshold = max(0.01, min(0.95, float(cfg.conf_threshold)))
@@ -91,6 +101,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
         if not self._weights_path.exists():
             raise FileNotFoundError(f"YOLO 가중치 파일을 찾을 수 없습니다: {self._weights_path}")
 
+        # 실제 YOLO 모델을 로드하고 클래스 이름도 함께 읽어 둔다.
         self._model = YOLO(str(self._weights_path))
         names = getattr(self._model.model, "names", None) or getattr(self._model, "names", None)
         if isinstance(names, dict):
@@ -100,9 +111,11 @@ class YOLOSpatialEncoder(SpatialEncoder):
         else:
             self._class_names = []
         self._class_count = len(self._class_names)
+        # 출력 feature 수는 BASE_FEATURE_KEYS와 요청 차원을 맞춰 결정한다.
         self._feature_keys = self._fit_feature_keys(self.BASE_FEATURE_KEYS)
         self._mock_fallback = MockSpatialEncoder(cfg)
         self._warning_issued = False
+        # 최근 검출 결과는 규칙 기반 모델과 UI에서 재사용하므로 별도로 저장한다.
         self._last_detection: dict[str, Any] = {
             "count": 0,
             "boxes": [],
@@ -119,6 +132,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
         )
 
     def encode(self, frame: FramePacket) -> list[float]:
+        # 입력은 파일 경로 또는 메모리 이미지 둘 다 가능하다.
         source: object | None = None
         if frame.raw_path:
             image_path = Path(frame.raw_path)
@@ -127,10 +141,12 @@ class YOLOSpatialEncoder(SpatialEncoder):
         if source is None and frame.image is not None:
             source = frame.image
         if source is None:
+            # 입력이 없으면 detector feature를 만들 수 없으므로 mock fallback으로 대체한다.
             self._reset_last_detection()
             return self._mock_fallback.encode(frame)
 
         try:
+            # YOLO 추론은 현재 프레임 1장만 대상으로 수행한다.
             results = self._model.predict(
                 source=source,
                 conf=self._conf_threshold,
@@ -140,6 +156,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
                 verbose=False,
             )
         except Exception as exc:  # pragma: no cover - 런타임 환경 의존
+            # 실환경에서 YOLO가 실패해도 전체 파이프라인이 즉시 중단되지 않게 fallback을 둔다.
             if not self._warning_issued:
                 logger.warning("YOLO 추론 실패로 mock fallback 사용: %s", exc)
                 self._warning_issued = True
@@ -163,6 +180,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
             }
             return [0.0] * self._feature_dim
 
+        # 클래스 수, confidence 합, ROI 내부 박스 통계를 각각 따로 모은다.
         counts = [0.0] * max(1, self._class_count)
         conf_sums = [0.0] * max(1, self._class_count)
         normalized_areas: list[float] = []
@@ -170,6 +188,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
         roi_center_scores: list[float] = []
         roi_vertical_scores: list[float] = []
 
+        # 화면 중앙을 기준으로 ROI를 정의해 전방 위험 영역 특징을 계산한다.
         h, w = result.orig_shape
         image_area = max(1.0, float(h * w))
         roi_x1 = 0.25 * float(w)
@@ -177,6 +196,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
         roi_y1 = 0.20 * float(h)
         roi_y2 = 0.90 * float(h)
 
+        # YOLO tensor 출력을 파이썬 리스트로 변환해 후처리를 단순화한다.
         cls_values = boxes.cls.detach().cpu().tolist()
         conf_values = boxes.conf.detach().cpu().tolist()
         xyxy_values = boxes.xyxy.detach().cpu().tolist()
@@ -187,11 +207,13 @@ class YOLOSpatialEncoder(SpatialEncoder):
             if cls_id < 0 or cls_id >= len(counts):
                 continue
 
+            # 클래스별 개수와 평균 confidence는 장면의 주된 객체 구성을 설명하는 값이다.
             confidence = float(conf_values[idx]) if idx < len(conf_values) else 0.0
             counts[cls_id] += 1.0
             conf_sums[cls_id] += confidence
 
             if idx < len(xyxy_values):
+                # 박스 면적과 중심점은 가장 기본이 되는 순간 상황 특징이다.
                 x1, y1, x2, y2 = xyxy_values[idx]
                 box_w = max(0.0, float(x2) - float(x1))
                 box_h = max(0.0, float(y2) - float(y1))
@@ -202,6 +224,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
 
                 in_roi = roi_x1 <= center_x <= roi_x2 and roi_y1 <= center_y <= roi_y2
                 if in_roi:
+                    # ROI 내부 객체만 따로 모으면 전방 위험 신호를 더 직접적으로 표현할 수 있다.
                     roi_area_ratios.append(area_ratio)
                     center_dx = abs(center_x - (float(w) * 0.5)) / max(1.0, float(w) * 0.5)
                     center_score = max(0.0, 1.0 - center_dx)
@@ -224,6 +247,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
                     }
                 )
 
+        # 아래 통계들은 최종 16차원 벡터의 원재료가 된다.
         det_count = float(sum(counts))
         mean_conf = float(sum(conf_values) / max(1, len(conf_values)))
         max_conf = float(max(conf_values)) if conf_values else 0.0
@@ -244,6 +268,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
         roi_risk = min(1.0, (0.55 * min(1.0, roi_mean_area * 6.0)) + (0.45 * roi_center_closeness))
         roi_count_norm = min(1.0, float(roi_count) / 3.0)
 
+        # 최종 16차원 feature는 현재 프레임 상황을 숫자로 요약한 벡터다.
         base_vector = [
             min(1.0, det_count / max(1.0, float(self._max_det))),
             mean_conf,

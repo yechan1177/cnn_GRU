@@ -1,6 +1,10 @@
 ﻿from __future__ import annotations
 
-"""최종 CNN-GRU + raw detection rule 보정 모델 실행 파일."""
+"""최종 CNN-GRU + 규칙 보정 모델을 즉시 실행하는 루트 스크립트.
+
+이 파일은 저장소를 처음 받은 사람이 가장 먼저 실행하게 되는 진입점이다.
+논문 기준 3번 모델(`CNN-GRU + 규칙`)의 실제 동작을 화면에서 바로 확인할 수 있다.
+"""
 
 import time
 from collections import deque
@@ -20,14 +24,17 @@ from vcp.schemas import FramePacket
 from vcp.tools.final_hybrid_model_ui import draw_series, draw_text, load_hybrid_params, load_model, predict_sequence
 
 
+# 입력 소스는 비디오 파일 또는 웹캠 중 하나를 선택해 사용한다.
 USE_WEBCAM = False
 WEBCAM_INDEX = 0
 VIDEO_SOURCE = str(ROOT_DIR / "data" / "raw" / "videos" / "people_braking.mp4")
 
+# 아래 세 파일만 있으면 논문 재현 브랜치에서 최종 모델을 바로 실행할 수 있다.
 YOLO_WEIGHTS = str(ROOT_DIR / "models" / "checkpoints" / "yolo3cls_best.pt")
 TEMPORAL_CKPT = str(ROOT_DIR / "models" / "checkpoints" / "temporal_final_best.pt")
 HYBRID_MANIFEST = str(ROOT_DIR / "configs" / "hybrid_rule_params.json")
 
+# detector와 temporal 모델이 공통으로 사용하는 실행 설정이다.
 DEVICE = "cuda:0"
 CONF_THRESHOLD = 0.65
 INPUT_SIZE = 640
@@ -39,6 +46,10 @@ SCREENSHOT_PATH = str(ROOT_DIR / "artifacts" / "screenshots" / "run_final_model_
 
 
 def _import_cv2_np():
+    """opencv와 numpy를 지연 로드한다.
+
+    패키지가 없을 때는 필요한 라이브러리를 바로 알 수 있도록 오류 메시지를 바꿔 준다.
+    """
     try:
         import cv2
         import numpy as np
@@ -48,6 +59,7 @@ def _import_cv2_np():
 
 
 def _open_capture(cv2_module):
+    """비디오 파일 또는 웹캠 입력을 열고 실제 사용된 입력 이름을 함께 돌려준다."""
     if USE_WEBCAM:
         capture = cv2_module.VideoCapture(WEBCAM_INDEX)
         source_name = f"webcam:{WEBCAM_INDEX}"
@@ -66,6 +78,7 @@ def _open_capture(cv2_module):
 
 
 def _make_spatial_encoder() -> YOLOSpatialEncoder:
+    """최종 모델이 공통으로 사용하는 YOLO spatial encoder를 생성한다."""
     cfg = SpatialConfig(
         model_name="yolo_nano",
         feature_dim=FEATURE_DIM,
@@ -80,6 +93,7 @@ def _make_spatial_encoder() -> YOLOSpatialEncoder:
 
 
 def _draw_detection_boxes(cv2_module, frame, detections: dict):
+    """YOLO가 검출한 박스를 원본 프레임 위에 그린다."""
     boxes = detections.get("boxes", []) if isinstance(detections, dict) else []
     palette = [(80, 220, 80), (60, 180, 255), (255, 180, 60), (200, 120, 255)]
     for box in boxes:
@@ -95,6 +109,15 @@ def _draw_detection_boxes(cv2_module, frame, detections: dict):
 
 
 def main() -> None:
+    """최종 하이브리드 모델을 실시간으로 실행한다.
+
+    전체 흐름:
+    1. 현재 프레임을 읽는다.
+    2. YOLO로 박스와 16차원 순간 feature를 만든다.
+    3. 최근 8프레임 시퀀스를 CNN-GRU에 넣는다.
+    4. 순간 규칙으로 최종 태그를 보정한다.
+    5. 결과를 오른쪽 정보 패널과 함께 보여 준다.
+    """
     cv2, np = _import_cv2_np()
     spatial = _make_spatial_encoder()
     packer = SimpleFeaturePacker()
@@ -107,6 +130,7 @@ def main() -> None:
     if fps <= 0:
         fps = 15.0
 
+    # feature_buffer는 최근 8프레임 feature를 유지하는 핵심 버퍼다.
     feature_buffer: deque[list[float]] = deque(maxlen=window_size)
     pred_history: deque[dict] = deque(maxlen=120)
     paused = False
@@ -122,6 +146,7 @@ def main() -> None:
                 if not ok:
                     break
 
+                # detector와 packer가 공통으로 쓰는 입력 프레임 래퍼를 만든다.
                 packet = FramePacket(
                     frame_id=frame_id,
                     sensor_timestamp=frame_id / max(1.0, fps),
@@ -131,17 +156,26 @@ def main() -> None:
                     image=frame_bgr,
                 )
 
+                # 1) 현재 프레임 YOLO 검출 + 16차원 순간 feature 생성
                 spatial_vector = spatial.encode(packet)
                 detection = spatial.get_last_detection()
+
+                # 2) 현재 프레임만으로 계산하는 순간 규칙 결과
                 rule_result = predict_instant_rule(detection, rule_params)
+
+                # 3) 이후 temporal 모델 입력으로 쓰기 위해 feature를 고정 형식으로 묶는다.
                 packed = packer.pack(packet, spatial_vector)
                 feature_buffer.append(list(packed.spatial_vector))
+
+                # 초반 프레임은 길이가 부족하므로 0 벡터로 왼쪽 padding을 채운다.
                 while len(feature_buffer) < window_size:
                     feature_buffer.appendleft([0.0] * len(spatial_vector))
 
+                # 4) CNN-GRU 출력과 규칙 결과를 결합해 최종 라벨을 얻는다.
                 pred = predict_sequence(model, labels, list(feature_buffer), params, rule_result=rule_result)
                 pred_history.append(pred)
 
+                # 5) 왼쪽은 원본 프레임, 오른쪽은 분석 패널로 렌더링한다.
                 canvas = frame_bgr.copy()
                 _draw_detection_boxes(cv2, canvas, detection)
 
@@ -168,6 +202,7 @@ def main() -> None:
                 draw_text(cv2, panel, 18, 428, f"warn_reason: {pred['warn_reason']}", (255, 220, 150), 0.48)
                 draw_text(cv2, panel, 18, 452, f"hard_reason: {pred['hard_reason']}", (255, 170, 150), 0.48)
 
+                # 최근 예측 추이를 그래프로 그리면 모델이 언제 반응했는지 바로 볼 수 있다.
                 boundary_series = [item["boundary"] for item in pred_history]
                 warn_series = [item["warn_prob"] for item in pred_history]
                 hard_series = [item["hard_prob"] for item in pred_history]

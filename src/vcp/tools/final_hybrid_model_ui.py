@@ -130,6 +130,10 @@ def infer_video_path(frame_rows: list[dict[str, Any]], explicit_video: Path | No
 
 
 def load_hybrid_params(manifest_path: Path) -> HybridParams:
+    """하이브리드 보정에 사용할 임계값 세트를 읽어 온다.
+
+    파일이 없더라도 UI와 실행기가 바로 동작할 수 있도록 기본값을 항상 준비한다.
+    """
     default = HybridParams(
         boundary_thr=0.50,
         warn_boundary_thr=0.82,
@@ -161,6 +165,7 @@ def load_hybrid_params(manifest_path: Path) -> HybridParams:
 
 
 def load_model(checkpoint_path: Path) -> tuple[TemporalGRUNet, list[str], int]:
+    """학습된 temporal 체크포인트를 읽어 모델과 라벨 정보를 복원한다."""
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"checkpoint를 찾을 수 없습니다: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
@@ -198,6 +203,7 @@ def draw_text(
     color: tuple[int, int, int] = (235, 235, 235),
     scale: float = 0.56,
 ) -> None:
+    """자주 쓰는 텍스트 오버레이 호출을 짧게 감싼다."""
     cv2_module.putText(
         image,
         text,
@@ -226,6 +232,7 @@ def draw_series(
     vmax: float,
     ref_line: float | None = None,
 ) -> None:
+    """UI 오른쪽 패널에 확률/경계값 변화를 작은 시계열 그래프로 그린다."""
     cv2_module.rectangle(canvas, (x, y), (x + w, y + h), (80, 80, 80), 1)
     draw_text(cv2_module, canvas, x + 4, y - 8, label, (200, 200, 200), 0.45)
     if ref_line is not None and vmax > vmin:
@@ -251,18 +258,27 @@ def predict_sequence(
     params: HybridParams,
     rule_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """CNN-GRU 출력과 순간 규칙을 결합해 최종 상황 태그를 만든다.
+
+    이 함수가 3번 모델(`CNN-GRU + 규칙`)의 핵심이다.
+    - 먼저 temporal 모델이 순수 확률을 낸다.
+    - 그다음 현재 프레임 규칙 결과를 읽는다.
+    - 마지막으로 승격/강등 규칙을 적용해 최종 라벨을 정한다.
+    """
     x = torch.tensor([feature_window], dtype=torch.float32)
     with torch.no_grad():
         output = model(x)
         probs_tensor = torch.softmax(output["context_logits"], dim=-1)[0]
         boundary = float(torch.sigmoid(output["boundary_logit"])[0].item())
 
+    # 라벨별 확률을 파이썬 리스트로 변환해 후속 규칙 계산을 단순하게 만든다.
     probs = [float(value) for value in probs_tensor.tolist()]
     label_to_index = {name: idx for idx, name in enumerate(labels)}
     follow_idx = label_to_index.get("front_vehicle_follow", 0)
     warn_idx = label_to_index.get("brake_warning", 0)
     hard_idx = label_to_index.get("hard_brake_risk", 0)
 
+    # 최근 프레임의 ROI 특징을 별도로 꺼내 두면 규칙 설명을 만들기 쉽다.
     last = feature_window[-1]
     roi_risk = float(last[11]) if len(last) > 11 else 0.0
     center = float(last[12]) if len(last) > 12 else 0.0
@@ -286,6 +302,7 @@ def predict_sequence(
     if probs[warn_idx] >= params.warn_prob_thr:
         warn_signal_reasons.append("warn_prob")
 
+    # hard brake는 warning보다 더 강한 boundary/확률 조건을 사용한다.
     hard_rule_signal = (
         boundary >= params.hard_boundary_thr
         and (
@@ -308,6 +325,7 @@ def predict_sequence(
     rule_hard_score = float((rule_result or {}).get("hard_score", 0.0))
     rule_reason = str((rule_result or {}).get("reason", "none"))
 
+    # rule_label이 이벤트를 강하게 가리키면 temporal 예측을 승격시킬 수 있다.
     warn_rule = (
         rule_label in {"brake_warning", "hard_brake_risk"}
         and rule_warn_score >= params.rule_warn_score_thr
@@ -321,6 +339,7 @@ def predict_sequence(
     final_idx = pure_idx
     decision_reason = f"pure:{labels[pure_idx]}"
 
+    # warning 확률이 약한데 규칙 근거도 약하면 원래의 normal/follow 쪽으로 되돌린다.
     weak_warn_prediction = (
         pure_idx == warn_idx
         and not warn_rule
@@ -335,6 +354,7 @@ def predict_sequence(
             final_idx = 0
             decision_reason = "demote:weak_warn->normal"
 
+    # 반대로 hard/warn 조건이 충분히 강하면 현재 프레임 규칙 또는 boundary를 근거로 승격한다.
     if pure_idx != hard_idx and hard_rule and (
         probs[hard_idx] >= params.hard_prob_thr or boundary >= params.hard_boundary_thr
     ):
@@ -363,6 +383,7 @@ def predict_sequence(
     elif hard_rule_signal:
         hard_reason = f"signal:{'+'.join(hard_signal_reasons)}"
 
+    # UI와 비교 스크립트에서 그대로 재사용할 수 있도록 모든 보조값을 함께 반환한다.
     return {
         "pure_label": labels[pure_idx],
         "pure_prob": probs[pure_idx],
