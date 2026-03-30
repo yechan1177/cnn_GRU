@@ -1,9 +1,8 @@
 ﻿from __future__ import annotations
 
-"""최종 CNN-GRU + raw detection rule 보정 모델 실행 파일."""
+"""YOLO raw detection + 순간 규칙형 baseline 실행 파일."""
 
 import time
-from collections import deque
 from pathlib import Path
 import sys
 
@@ -14,10 +13,9 @@ if str(SRC_DIR) not in sys.path:
 
 from vcp.components.event_rules import InstantRuleParams, predict_instant_rule
 from vcp.config import SpatialConfig
-from vcp.components.feature_packer import SimpleFeaturePacker
 from vcp.components.spatial import YOLOSpatialEncoder
 from vcp.schemas import FramePacket
-from vcp.tools.final_hybrid_model_ui import draw_series, draw_text, load_hybrid_params, load_model, predict_sequence
+from vcp.tools.final_hybrid_model_ui import draw_series, draw_text
 
 
 USE_WEBCAM = False
@@ -25,17 +23,14 @@ WEBCAM_INDEX = 0
 VIDEO_SOURCE = str(ROOT_DIR / "data" / "raw" / "videos" / "people_braking.mp4")
 
 YOLO_WEIGHTS = str(ROOT_DIR / "models" / "checkpoints" / "yolo3cls_best.pt")
-TEMPORAL_CKPT = str(ROOT_DIR / "models" / "checkpoints" / "temporal_final_best.pt")
-HYBRID_MANIFEST = str(ROOT_DIR / "configs" / "hybrid_rule_params.json")
-
 DEVICE = "cuda:0"
 CONF_THRESHOLD = 0.65
 INPUT_SIZE = 640
 MAX_DET = 30
 FEATURE_DIM = 16
 
-WINDOW_NAME = "Final Model Live Runner"
-SCREENSHOT_PATH = str(ROOT_DIR / "artifacts" / "screenshots" / "run_final_model_capture.jpg")
+WINDOW_NAME = "YOLO + Instant Rule Runner"
+SCREENSHOT_PATH = str(ROOT_DIR / "artifacts" / "screenshots" / "run_yolo_rule_model_capture.jpg")
 
 
 def _import_cv2_np():
@@ -59,7 +54,7 @@ def _open_capture(cv2_module):
         else:
             capture = cv2_module.VideoCapture(WEBCAM_INDEX)
             source_name = f"webcam:{WEBCAM_INDEX}"
-            print(f"[run_final_model] 영상 파일이 없어 웹캠으로 대체합니다: {video_path}")
+            print(f"[run_yolo_rule_model] 영상 파일이 없어 웹캠으로 대체합니다: {video_path}")
     if not capture.isOpened():
         raise RuntimeError(f"입력을 열 수 없습니다: {source_name}")
     return capture, source_name
@@ -97,9 +92,6 @@ def _draw_detection_boxes(cv2_module, frame, detections: dict):
 def main() -> None:
     cv2, np = _import_cv2_np()
     spatial = _make_spatial_encoder()
-    packer = SimpleFeaturePacker()
-    model, labels, window_size = load_model(Path(TEMPORAL_CKPT))
-    params = load_hybrid_params(Path(HYBRID_MANIFEST))
     rule_params = InstantRuleParams()
     capture, source_name = _open_capture(cv2)
 
@@ -107,8 +99,8 @@ def main() -> None:
     if fps <= 0:
         fps = 15.0
 
-    feature_buffer: deque[list[float]] = deque(maxlen=window_size)
-    pred_history: deque[dict] = deque(maxlen=120)
+    warn_history = []
+    hard_history = []
     paused = False
     frame_id = 0
     last_render = None
@@ -130,17 +122,13 @@ def main() -> None:
                     raw_path=f"{source_name}#frame={frame_id}",
                     image=frame_bgr,
                 )
-
-                spatial_vector = spatial.encode(packet)
+                _ = spatial.encode(packet)
                 detection = spatial.get_last_detection()
-                rule_result = predict_instant_rule(detection, rule_params)
-                packed = packer.pack(packet, spatial_vector)
-                feature_buffer.append(list(packed.spatial_vector))
-                while len(feature_buffer) < window_size:
-                    feature_buffer.appendleft([0.0] * len(spatial_vector))
-
-                pred = predict_sequence(model, labels, list(feature_buffer), params, rule_result=rule_result)
-                pred_history.append(pred)
+                pred = predict_instant_rule(detection, rule_params)
+                warn_history.append(float(pred["warn_score"]))
+                hard_history.append(float(pred["hard_score"]))
+                warn_history = warn_history[-120:]
+                hard_history = hard_history[-120:]
 
                 canvas = frame_bgr.copy()
                 _draw_detection_boxes(cv2, canvas, detection)
@@ -152,29 +140,20 @@ def main() -> None:
 
                 draw_text(cv2, panel, 18, 30, f"source: {source_name}", (200, 230, 255), 0.5)
                 draw_text(cv2, panel, 18, 58, f"frame: {frame_id}", (230, 230, 230), 0.55)
-                draw_text(cv2, panel, 18, 90, f"pure model: {pred['pure_label']} ({pred['pure_prob']:.3f})", (120, 255, 160), 0.62)
-                final_color = (70, 220, 255) if pred["final_label"] != pred["pure_label"] else (255, 220, 120)
-                draw_text(cv2, panel, 18, 120, f"hybrid final: {pred['final_label']} ({pred['final_prob']:.3f})", final_color, 0.72)
-                draw_text(cv2, panel, 18, 146, f"decision: {pred['decision_reason']}", (220, 220, 220), 0.48)
-                draw_text(cv2, panel, 18, 176, f"rule label: {pred['rule_label']}", (200, 255, 180), 0.55)
-                draw_text(cv2, panel, 18, 204, f"rule warn={pred['rule_warn_score']:.3f} hard={pred['rule_hard_score']:.3f}", (200, 255, 180), 0.52)
-                draw_text(cv2, panel, 18, 232, f"boundary: {pred['boundary']:.3f}", (240, 240, 240), 0.55)
-                draw_text(cv2, panel, 18, 260, f"warn_prob: {pred['warn_prob']:.3f}", (255, 210, 80), 0.55)
-                draw_text(cv2, panel, 18, 288, f"hard_prob: {pred['hard_prob']:.3f}", (255, 140, 110), 0.55)
-                draw_text(cv2, panel, 18, 316, f"follow_prob: {pred['follow_prob']:.3f}", (150, 220, 255), 0.55)
-                draw_text(cv2, panel, 18, 348, f"roi={pred['roi_risk']:.3f} center={pred['center']:.3f}", (220, 220, 220), 0.5)
-                draw_text(cv2, panel, 18, 374, f"roi_mean_area={pred['roi_mean_area']:.3f}", (220, 220, 220), 0.5)
-                draw_text(cv2, panel, 18, 400, f"roi_count_norm={pred['roi_count_norm']:.3f} roi_y={pred['roi_vertical_bias']:.3f}", (220, 220, 220), 0.5)
-                draw_text(cv2, panel, 18, 428, f"warn_reason: {pred['warn_reason']}", (255, 220, 150), 0.48)
-                draw_text(cv2, panel, 18, 452, f"hard_reason: {pred['hard_reason']}", (255, 170, 150), 0.48)
+                draw_text(cv2, panel, 18, 90, "model: YOLO + instant rule", (200, 220, 255), 0.58)
+                draw_text(cv2, panel, 18, 120, f"final label: {pred['label']}", (255, 220, 120), 0.72)
+                draw_text(cv2, panel, 18, 148, f"reason: {pred['reason']}", (220, 220, 220), 0.5)
+                draw_text(cv2, panel, 18, 176, f"warn_score: {float(pred['warn_score']):.3f}", (255, 210, 80), 0.55)
+                draw_text(cv2, panel, 18, 204, f"hard_score: {float(pred['hard_score']):.3f}", (255, 140, 110), 0.55)
+                draw_text(cv2, panel, 18, 232, f"vehicle_count: {int(pred['vehicle_count'])}", (220, 220, 220), 0.52)
+                draw_text(cv2, panel, 18, 258, f"person_count: {int(pred['person_count'])}", (220, 220, 220), 0.52)
+                draw_text(cv2, panel, 18, 284, f"bike_count: {int(pred['bike_count'])}", (220, 220, 220), 0.52)
+                draw_text(cv2, panel, 18, 312, f"max_vehicle_score: {float(pred['max_vehicle_score']):.3f}", (220, 220, 220), 0.5)
+                draw_text(cv2, panel, 18, 338, f"max_person_score: {float(pred['max_person_score']):.3f}", (220, 220, 220), 0.5)
+                draw_text(cv2, panel, 18, 364, f"max_bike_score: {float(pred['max_bike_score']):.3f}", (220, 220, 220), 0.5)
 
-                boundary_series = [item["boundary"] for item in pred_history]
-                warn_series = [item["warn_prob"] for item in pred_history]
-                hard_series = [item["hard_prob"] for item in pred_history]
-
-                draw_series(cv2, np, panel, x=18, y=500, w=460, h=80, values=boundary_series, color=(100, 200, 255), label="boundary", vmin=0.0, vmax=1.0, ref_line=params.warn_boundary_thr)
-                draw_series(cv2, np, panel, x=18, y=610, w=460, h=65, values=warn_series, color=(255, 210, 80), label="brake_warning prob", vmin=0.0, vmax=1.0, ref_line=params.warn_prob_thr)
-                draw_series(cv2, np, panel, x=18, y=700, w=460, h=65, values=hard_series, color=(255, 140, 110), label="hard_brake_risk prob", vmin=0.0, vmax=1.0, ref_line=params.hard_prob_thr)
+                draw_series(cv2, np, panel, x=18, y=470, w=460, h=80, values=warn_history, color=(255, 210, 80), label="warn score", vmin=0.0, vmax=1.0, ref_line=0.5)
+                draw_series(cv2, np, panel, x=18, y=580, w=460, h=65, values=hard_history, color=(255, 140, 110), label="hard score", vmin=0.0, vmax=1.0, ref_line=0.65)
                 draw_text(cv2, panel, 18, h - 28, "space:pause  s:screenshot  q:quit", (180, 180, 180), 0.48)
 
                 last_render = np.concatenate([canvas, panel], axis=1)

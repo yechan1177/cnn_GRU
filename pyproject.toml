@@ -25,6 +25,7 @@ dev = [
 [project.scripts]
 vcp-run = "vcp.main:main"
 vcp-build-context-dataset = "vcp.tools.build_context_dataset:main"
+vcp-build-rule-context-dataset = "vcp.tools.build_rule_context_dataset:main"
 vcp-brake-review = "vcp.tools.brake_review_ui:main"
 vcp-remap-yolo-3cls = "vcp.tools.remap_yolo_dataset_to_3cls:main"
 vcp-train-yolo = "vcp.tools.train_yolo_nano:main"

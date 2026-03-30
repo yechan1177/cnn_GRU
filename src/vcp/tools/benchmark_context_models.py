@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import random
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,7 @@ class BenchmarkArgs:
     project: Path
     name: str
     proposed_ckpt: Path | None
+    show_plots: bool
 
 
 def parse_args() -> BenchmarkArgs:
@@ -61,6 +63,11 @@ def parse_args() -> BenchmarkArgs:
         type=str,
         default="experiments/exp_015_temporal_braking_expanded_feat16/runs/mcnn_gru_braking_expanded_feat16_t045_e40_h96_c24/checkpoints/best.pt",
     )
+    parser.add_argument(
+        "--no-show-plots",
+        action="store_true",
+        help="그래프 창 표시를 끄고 파일만 저장한다.",
+    )
     args = parser.parse_args()
     ckpt = Path(args.proposed_ckpt) if args.proposed_ckpt else None
     return BenchmarkArgs(
@@ -76,7 +83,15 @@ def parse_args() -> BenchmarkArgs:
         project=Path(args.project),
         name=str(args.name),
         proposed_ckpt=ckpt,
+        show_plots=not bool(args.no_show_plots),
     )
+
+
+def configure_console_encoding() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
 
 
 def set_seed(seed: int) -> None:
@@ -84,6 +99,13 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def log_step(message: str) -> None:
+    """단계 진행 상황을 콘솔에 출력한다."""
+
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[benchmark {timestamp}] {message}", flush=True)
 
 
 def ensure_device(device_text: str) -> torch.device:
@@ -460,10 +482,12 @@ def tune_hybrid_rule_gate(
     loader: DataLoader,
     device: torch.device,
     label_map: dict[str, int],
-) -> tuple[dict[str, float], dict[str, float]]:
+) -> tuple[dict[str, float], dict[str, float], list[dict[str, float]]]:
     best_metrics: dict[str, float] | None = None
     best_params: dict[str, float] | None = None
     best_score = -1.0
+    history: list[dict[str, float]] = []
+    iteration = 0
 
     roi_candidates = [0.30, 0.34]
     center_candidates = [0.72, 0.74]
@@ -484,6 +508,7 @@ def tune_hybrid_rule_gate(
                             for boundary_thr in boundary_candidates:
                                 for warn_boundary_thr in warn_boundary_candidates:
                                     for hard_boundary_thr in hard_boundary_candidates:
+                                        iteration += 1
                                         params = {
                                             "roi_thr": roi_thr,
                                             "center_thr": center_thr,
@@ -513,16 +538,32 @@ def tune_hybrid_rule_gate(
                                             + 0.20 * metrics["boundary_f1"]
                                             + 0.35 * metrics["brake_critical_recall"]
                                         )
+                                        history.append(
+                                            {
+                                                "iteration": float(iteration),
+                                                "context_acc": float(metrics["context_acc"]),
+                                                "context_macro_f1": float(metrics["context_macro_f1"]),
+                                                "boundary_f1": float(metrics["boundary_f1"]),
+                                                "brake_critical_recall": float(metrics["brake_critical_recall"]),
+                                                "composite": float(composite),
+                                            }
+                                        )
                                         if composite > best_score:
                                             best_score = composite
                                             best_metrics = metrics
                                             best_params = params
+                                            log_step(
+                                                "hybrid gate best update "
+                                                f"(iter={iteration}, composite={composite:.4f}, "
+                                                f"context_acc={metrics['context_acc']:.4f}, "
+                                                f"brake_recall={metrics['brake_critical_recall']:.4f})"
+                                            )
 
     if best_metrics is None or best_params is None:
-        raise RuntimeError("hybrid rule gate tuning 결과가 없습니다.")
+        raise RuntimeError("hybrid rule gate tuning returned no result")
     best_metrics = dict(best_metrics)
     best_metrics["composite"] = best_score
-    return best_metrics, best_params
+    return best_metrics, best_params, history
 
 
 def train_literature_model(
@@ -603,21 +644,97 @@ def save_markdown_table(path: Path, rows: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def create_comparison_figure(
+    comparison_rows: list[dict[str, Any]],
+    metric_names: list[str],
+) -> tuple[Any, Any]:
+    labels = [row["model"] for row in comparison_rows]
+    x = range(len(labels))
+    width = 0.18
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for offset, metric_name in enumerate(metric_names):
+        values = [row[metric_name] for row in comparison_rows]
+        ax.bar([idx + ((offset - 1.5) * width) for idx in x], values, width=width, label=metric_name)
+    ax.set_xticks(list(x), labels, rotation=10)
+    ax.set_ylim(0.0, 1.0)
+    ax.set_ylabel("score")
+    ax.set_title("Context Model Benchmark")
+    ax.legend()
+    fig.tight_layout()
+    return fig, ax
+
+
+def create_literature_history_figure(history: list[dict[str, Any]]) -> tuple[Any, Any]:
+    epochs = [int(item["epoch"]) for item in history]
+    train_loss = [float(item["train_loss"]) for item in history]
+    context_acc = [float(item["context_acc"]) for item in history]
+    brake_recall = [float(item["brake_critical_recall"]) for item in history]
+    boundary_f1 = [float(item["boundary_f1"]) for item in history]
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    axes[0].plot(epochs, train_loss, marker="o", label="train_loss")
+    axes[0].set_ylabel("loss")
+    axes[0].set_title("Literature Baseline Training History")
+    axes[0].grid(alpha=0.3)
+    axes[0].legend()
+
+    axes[1].plot(epochs, context_acc, marker="o", label="context_acc")
+    axes[1].plot(epochs, brake_recall, marker="s", label="brake_recall")
+    axes[1].plot(epochs, boundary_f1, marker="^", label="boundary_f1")
+    axes[1].set_xlabel("epoch")
+    axes[1].set_ylabel("score")
+    axes[1].set_ylim(0.0, 1.0)
+    axes[1].grid(alpha=0.3)
+    axes[1].legend()
+    fig.tight_layout()
+    return fig, axes
+
+
+def create_hybrid_tuning_figure(history: list[dict[str, float]]) -> tuple[Any, Any]:
+    iterations = [int(item["iteration"]) for item in history]
+    composite = [float(item["composite"]) for item in history]
+    context_acc = [float(item["context_acc"]) for item in history]
+    brake_recall = [float(item["brake_critical_recall"]) for item in history]
+
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    axes[0].plot(iterations, composite, color="tab:blue", label="composite")
+    axes[0].set_ylabel("score")
+    axes[0].set_title("Hybrid Rule Gate Tuning History")
+    axes[0].grid(alpha=0.3)
+    axes[0].legend()
+
+    axes[1].plot(iterations, context_acc, color="tab:orange", label="context_acc")
+    axes[1].plot(iterations, brake_recall, color="tab:green", label="brake_recall")
+    axes[1].set_xlabel("iteration")
+    axes[1].set_ylabel("score")
+    axes[1].set_ylim(0.0, 1.0)
+    axes[1].grid(alpha=0.3)
+    axes[1].legend()
+    fig.tight_layout()
+    return fig, axes
+
+
 def main() -> None:
+    configure_console_encoding()
     args = parse_args()
     set_seed(args.seed)
 
     run_dir = args.project / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
+    log_step(f"benchmark start: dataset={args.dataset_dir}, run_dir={run_dir}")
 
     train_rows = read_jsonl(args.dataset_dir / "train.jsonl")
     val_rows = read_jsonl(args.dataset_dir / "val.jsonl")
     label_map = json.loads((args.dataset_dir / "label_map.json").read_text(encoding="utf-8"))
-    inverse_label_map = {value: key for key, value in label_map.items()}
 
     feature_dim = infer_feature_dim(train_rows + val_rows)
     window_size = infer_window_size(train_rows + val_rows)
     feature_keys = train_rows[0].get("features", {}).get("feature_keys", [])
+    log_step(
+        f"dataset loaded: train={len(train_rows)}, val={len(val_rows)}, "
+        f"feature_dim={feature_dim}, window_size={window_size}"
+    )
 
     train_dataset = SequenceDataset(train_rows, feature_dim=feature_dim, window_size=window_size)
     val_dataset = SequenceDataset(val_rows, feature_dim=feature_dim, window_size=window_size)
@@ -638,11 +755,16 @@ def main() -> None:
     )
 
     device = ensure_device(args.device)
+    log_step(f"device: {device}")
 
-    # 비교군 1: 기본 YOLO 규칙형 baseline
+    log_step("stage 1/3 start: basic_yolo_rule")
     rule_metrics = evaluate_rule_baseline(val_rows, label_map)
+    log_step(
+        f"stage 1 complete: context_acc={rule_metrics['context_acc']:.4f}, "
+        f"brake_recall={rule_metrics['brake_critical_recall']:.4f}"
+    )
 
-    # 비교군 2: 문헌형 단일채널 CNN-GRU baseline
+    log_step("stage 2/3 start: literature_cnn_temporal")
     literature_model = LiteratureCNNGRUNet(
         input_dim=feature_dim,
         hidden_dim=args.hidden_dim,
@@ -651,13 +773,9 @@ def main() -> None:
         cnn_channels=args.cnn_channels,
     ).to(device)
 
-    # evaluate_torch_model 내부 label_map 필요해서 임시 wrapper를 둔다.
-    original_evaluate = evaluate_torch_model
-
     def literature_eval(model_obj: nn.Module, loader_obj: DataLoader) -> dict[str, float]:
-        return original_evaluate(model_obj, loader_obj, device, label_map)
+        return evaluate_torch_model(model_obj, loader_obj, device, label_map)
 
-    # monkey patch 없이 수동 루프
     context_loss_fn = nn.CrossEntropyLoss()
     positives = sum(int(row.get("target", {}).get("boundary_label", 0)) for row in train_rows)
     negatives = len(train_rows) - positives
@@ -692,26 +810,35 @@ def main() -> None:
 
         val_metrics = literature_eval(literature_model, val_loader)
         composite = (0.6 * val_metrics["context_macro_f1"]) + (0.4 * val_metrics["brake_critical_recall"])
-        literature_history.append(
-            {
-                "epoch": epoch,
-                "train_loss": round(train_loss_sum / max(1, train_count), 6),
-                "context_acc": round(val_metrics["context_acc"], 6),
-                "context_macro_f1": round(val_metrics["context_macro_f1"], 6),
-                "boundary_f1": round(val_metrics["boundary_f1"], 6),
-                "brake_critical_recall": round(val_metrics["brake_critical_recall"], 6),
-                "composite": round(composite, 6),
-            }
+        history_row = {
+            "epoch": epoch,
+            "train_loss": round(train_loss_sum / max(1, train_count), 6),
+            "context_acc": round(val_metrics["context_acc"], 6),
+            "context_macro_f1": round(val_metrics["context_macro_f1"], 6),
+            "boundary_f1": round(val_metrics["boundary_f1"], 6),
+            "brake_critical_recall": round(val_metrics["brake_critical_recall"], 6),
+            "composite": round(composite, 6),
+        }
+        literature_history.append(history_row)
+        log_step(
+            f"literature epoch {epoch}/{args.epochs}: train_loss={history_row['train_loss']:.4f}, "
+            f"context_acc={history_row['context_acc']:.4f}, boundary_f1={history_row['boundary_f1']:.4f}, "
+            f"brake_recall={history_row['brake_critical_recall']:.4f}"
         )
         if composite > best_composite:
             best_composite = composite
             best_state = {key: value.detach().cpu() for key, value in literature_model.state_dict().items()}
+            log_step(f"literature best update: epoch={epoch}, composite={composite:.4f}")
 
     if best_state is None:
-        raise RuntimeError("문헌형 baseline 학습 중 best state를 찾지 못했습니다.")
+        raise RuntimeError("failed to find best state during literature baseline training")
 
     literature_model.load_state_dict(best_state)
     literature_metrics = literature_eval(literature_model, val_loader)
+    log_step(
+        f"stage 2 complete: context_acc={literature_metrics['context_acc']:.4f}, "
+        f"brake_recall={literature_metrics['brake_critical_recall']:.4f}"
+    )
     torch.save(
         {
             "state_dict": literature_model.state_dict(),
@@ -731,9 +858,9 @@ def main() -> None:
         run_dir / "literature_single_channel_cnn_gru_best.pt",
     )
 
-    # 비교군 3: 제안 멀티채널 CNN-GRU
+    log_step("stage 3/3 start: proposed_multichannel_cnn_gru")
     if args.proposed_ckpt is None or not args.proposed_ckpt.exists():
-        raise FileNotFoundError(f"제안 모델 체크포인트가 없습니다: {args.proposed_ckpt}")
+        raise FileNotFoundError(f"missing proposed checkpoint: {args.proposed_ckpt}")
 
     proposed_checkpoint = torch.load(args.proposed_ckpt, map_location=device)
     proposed_config = proposed_checkpoint.get("model_config", {})
@@ -750,7 +877,17 @@ def main() -> None:
     ).to(device)
     proposed_model.load_state_dict(proposed_checkpoint["state_dict"])
     proposed_metrics = evaluate_torch_model(proposed_model, val_loader, device, label_map)
-    hybrid_metrics, hybrid_params = tune_hybrid_rule_gate(proposed_model, val_loader, device, label_map)
+    log_step(
+        f"proposed model evaluated: context_acc={proposed_metrics['context_acc']:.4f}, "
+        f"brake_recall={proposed_metrics['brake_critical_recall']:.4f}"
+    )
+
+    log_step("hybrid rule gate tuning start")
+    hybrid_metrics, hybrid_params, hybrid_history = tune_hybrid_rule_gate(proposed_model, val_loader, device, label_map)
+    log_step(
+        f"hybrid tuning complete: context_acc={hybrid_metrics['context_acc']:.4f}, "
+        f"brake_recall={hybrid_metrics['brake_critical_recall']:.4f}, composite={hybrid_metrics['composite']:.4f}"
+    )
 
     comparison_rows = [
         {
@@ -793,37 +930,45 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(comparison_rows)
 
-    save_markdown_table(run_dir / "context_model_benchmark.md", comparison_rows)
+    markdown_path = run_dir / "context_model_benchmark.md"
+    save_markdown_table(markdown_path, comparison_rows)
     (run_dir / "literature_history.json").write_text(
         json.dumps(literature_history, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    (run_dir / "hybrid_tuning_history.json").write_text(
+        json.dumps(hybrid_history, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
-    # 루트 산출물 저장
     root_csv = Path("context_model_benchmark_actual_table.csv")
     root_md = Path("context_model_benchmark_actual_table.md")
     root_png = Path("context_model_benchmark_metrics.png")
+    run_png = run_dir / "context_model_benchmark_metrics.png"
+    literature_png = run_dir / "literature_training_curves.png"
+    hybrid_png = run_dir / "hybrid_tuning_curves.png"
 
     root_csv.write_text(csv_path.read_text(encoding="utf-8"), encoding="utf-8")
-    root_md.write_text((run_dir / "context_model_benchmark.md").read_text(encoding="utf-8"), encoding="utf-8")
+    root_md.write_text(markdown_path.read_text(encoding="utf-8"), encoding="utf-8")
 
     metric_names = ["context_acc", "context_macro_f1", "boundary_f1", "brake_critical_recall"]
-    labels = [row["model"] for row in comparison_rows]
-    x = range(len(labels))
-    width = 0.18
+    comparison_fig, _ = create_comparison_figure(comparison_rows, metric_names)
+    comparison_fig.savefig(run_png, dpi=160)
+    comparison_fig.savefig(root_png, dpi=160)
 
-    plt.figure(figsize=(10, 5))
-    for offset, metric_name in enumerate(metric_names):
-        values = [row[metric_name] for row in comparison_rows]
-        plt.bar([idx + ((offset - 1.5) * width) for idx in x], values, width=width, label=metric_name)
-    plt.xticks(list(x), labels, rotation=10)
-    plt.ylim(0.0, 1.0)
-    plt.ylabel("score")
-    plt.title("Context Model Benchmark")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(root_png, dpi=160)
-    plt.close()
+    literature_fig, _ = create_literature_history_figure(literature_history)
+    literature_fig.savefig(literature_png, dpi=160)
+
+    hybrid_fig, _ = create_hybrid_tuning_figure(hybrid_history)
+    hybrid_fig.savefig(hybrid_png, dpi=160)
+
+    figures = [comparison_fig, literature_fig, hybrid_fig]
+    if args.show_plots:
+        log_step("showing matplotlib windows")
+        plt.show()
+    else:
+        for fig in figures:
+            plt.close(fig)
 
     manifest = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -837,24 +982,26 @@ def main() -> None:
             "markdown": str(root_md.resolve()),
             "figure": str(root_png.resolve()),
         },
+        "run_outputs": {
+            "comparison_figure": str(run_png.resolve()),
+            "literature_training_figure": str(literature_png.resolve()),
+            "hybrid_tuning_figure": str(hybrid_png.resolve()),
+            "literature_history": str((run_dir / "literature_history.json").resolve()),
+            "hybrid_tuning_history": str((run_dir / "hybrid_tuning_history.json").resolve()),
+        },
         "notes": {
-            "basic_baseline": "YOLO 출력 기반 규칙형 baseline",
-            "literature_style": "문헌형 단일채널 CNN-GRU",
-            "proposed": "멀티채널 CNN-GRU 제안모델",
-            "proposed_plus_rule": "제안모델 뒤에 ROI/looming/occlusion 규칙 게이트 추가",
-            "tuning_warning": "hybrid rule gate는 동일 validation split에서 exploratory tuning한 결과이므로 낙관적으로 보일 수 있음",
+            "basic_baseline": "YOLO output rule-based baseline",
+            "literature_style": "literature-style single-channel CNN-GRU",
+            "proposed": "proposed multichannel CNN-GRU",
+            "proposed_plus_rule": "proposed model with ROI/looming/occlusion rule gate",
+            "tuning_warning": "hybrid rule gate was tuned on the same validation split for exploratory analysis.",
         },
         "hybrid_rule_params": hybrid_params,
     }
-    (run_dir / "benchmark_manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    Path("context_model_benchmark_manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    manifest_path = run_dir / "benchmark_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    log_step(f"outputs saved: csv={csv_path}, comparison_figure={run_png}")
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

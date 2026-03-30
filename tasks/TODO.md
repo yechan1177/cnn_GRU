@@ -43,7 +43,21 @@
 - [x] TASK_044 people_braking 영상 기준 3모델 실측 비교
 - [x] TASK_045 브레이크 positive feature 합성 증강
 - [x] TASK_046 논문용 실험환경/평가지표 표 및 모델 구조 그림 산출
-- [ ] TASK_048 GitHub 문서/README 고도화
+- [x] TASK_048 GitHub 문서/README 고도화
+- [x] TASK_050 benchmark_context_models ?? ?? ? ??? ?? ??
+- [x] TASK_051 rule pseudo-label GRU ??? ? ?? ????? ??
+- [x] TASK_052 최종 UI rule reason 표시 및 stopcar brake_warning 임계값 재조정
+- [x] TASK_053 루트 baseline UI 실행 파일 추가
+- [x] TASK_054 세 모델 동시 비교 실행 및 그래프 저장 스크립트 추가
+- [x] TASK_055 세 모델 비교 감지 이벤트 클립/스크린샷 저장 추가
+- [x] TASK_056 세 모델 정의 재정렬 및 동일 데이터셋 재학습
+- [x] TASK_057 세 모델 클래스별 개수 비교 그래프 산출
+- [x] TASK_058 수동 하드 브레이크 범위 반영 비교표/그래프 산출
+- [x] TASK_059 브레이크 이벤트 통합 지표 비교 산출
+- [x] TASK_060 엔드투엔드 지연시간 재측정 및 표 갱신
+- [x] TASK_061 논문용 모델 구조 그림 재생성
+- [x] TASK_062 논문용 3개 상황 막대그래프 재생성
+- [x] TASK_063 논문 재현 브랜치 구성 및 GitHub 배포
 
 ## 현재 스프린트: 발표자료 제작
 - [x] TASK_008 문서 생성
@@ -226,6 +240,18 @@
 - 2026-03-24: 최종 제안모델/하이브리드 룰 게이트 확인 UI 및 실행 배치 추가 (TASK_041)
 - 2026-03-24: 루트 단일 실행 파일 `run_final_model.py` 추가 및 mp4/webcam 전환 단순화 (TASK_042)
 - 2026-03-24: 최종 UI 모델 / YOLO+rule / 문헌형 CNN+시계열 3모델 비교표 및 그래프 재산출 (TASK_043)
+- 2026-03-27: 세 모델 정의를 raw detection 규칙 / CNN-GRU 단독 / CNN-GRU+규칙 보정으로 재정렬하고 동일 순간 feature dataset으로 재학습 완료 (TASK_056)
+- 2026-03-27: people_braking 기준 세 모델 클래스별 예측 개수 비교 그래프 및 CSV/Markdown 산출 완료 (TASK_057)
+- 2026-03-27: people_braking 수동 하드 브레이크 범위(20~30프레임) 반영 종합 비교표 및 그래프 산출 완료 (TASK_058)
+- 2026-03-27: hard_brake를 brake_warning로 통합한 클래스 분포와 논문용 핵심 지표(A_det, T_inf, N_param, S_evt) 비교 산출 완료 (TASK_059)
+- 2026-03-28: 세 모델 비교의 시간 지표를 엔드투엔드 기준으로 재측정하고 논문용 표를 갱신함 (TASK_060)
+- 2026-03-28: 논문용 모델 구조 그림을 블록도 대신 일러스트형으로 재생성함 (TASK_061)
+- 2026-03-28: 주요 3개 상황만 남긴 논문용 막대그래프를 한글/영문 라벨로 재생성함 (TASK_062)
+
+
+
+
+
 
 
 

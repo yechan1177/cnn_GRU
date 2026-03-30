@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-"""최종 CNN-GRU + raw detection rule 보정 모델 실행 파일."""
+"""CNN-GRU 단독 baseline 실행 파일."""
 
 import time
 from collections import deque
@@ -12,12 +12,11 @@ SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from vcp.components.event_rules import InstantRuleParams, predict_instant_rule
 from vcp.config import SpatialConfig
 from vcp.components.feature_packer import SimpleFeaturePacker
 from vcp.components.spatial import YOLOSpatialEncoder
 from vcp.schemas import FramePacket
-from vcp.tools.final_hybrid_model_ui import draw_series, draw_text, load_hybrid_params, load_model, predict_sequence
+from vcp.tools.final_hybrid_model_ui import draw_series, draw_text, load_model, predict_sequence, load_hybrid_params
 
 
 USE_WEBCAM = False
@@ -25,17 +24,16 @@ WEBCAM_INDEX = 0
 VIDEO_SOURCE = str(ROOT_DIR / "data" / "raw" / "videos" / "people_braking.mp4")
 
 YOLO_WEIGHTS = str(ROOT_DIR / "models" / "checkpoints" / "yolo3cls_best.pt")
-TEMPORAL_CKPT = str(ROOT_DIR / "models" / "checkpoints" / "temporal_final_best.pt")
+TEMPORAL_CKPT = str(ROOT_DIR / "models" / "checkpoints" / "temporal_shared_best.pt")
 HYBRID_MANIFEST = str(ROOT_DIR / "configs" / "hybrid_rule_params.json")
-
 DEVICE = "cuda:0"
 CONF_THRESHOLD = 0.65
 INPUT_SIZE = 640
 MAX_DET = 30
 FEATURE_DIM = 16
 
-WINDOW_NAME = "Final Model Live Runner"
-SCREENSHOT_PATH = str(ROOT_DIR / "artifacts" / "screenshots" / "run_final_model_capture.jpg")
+WINDOW_NAME = "CNN-GRU Baseline Runner"
+SCREENSHOT_PATH = str(ROOT_DIR / "artifacts" / "screenshots" / "run_baseline_cnn_gru_model_capture.jpg")
 
 
 def _import_cv2_np():
@@ -59,7 +57,7 @@ def _open_capture(cv2_module):
         else:
             capture = cv2_module.VideoCapture(WEBCAM_INDEX)
             source_name = f"webcam:{WEBCAM_INDEX}"
-            print(f"[run_final_model] 영상 파일이 없어 웹캠으로 대체합니다: {video_path}")
+            print(f"[run_baseline_cnn_gru_model] 영상 파일이 없어 웹캠으로 대체합니다: {video_path}")
     if not capture.isOpened():
         raise RuntimeError(f"입력을 열 수 없습니다: {source_name}")
     return capture, source_name
@@ -100,7 +98,6 @@ def main() -> None:
     packer = SimpleFeaturePacker()
     model, labels, window_size = load_model(Path(TEMPORAL_CKPT))
     params = load_hybrid_params(Path(HYBRID_MANIFEST))
-    rule_params = InstantRuleParams()
     capture, source_name = _open_capture(cv2)
 
     fps = float(capture.get(cv2.CAP_PROP_FPS))
@@ -130,17 +127,15 @@ def main() -> None:
                     raw_path=f"{source_name}#frame={frame_id}",
                     image=frame_bgr,
                 )
-
                 spatial_vector = spatial.encode(packet)
-                detection = spatial.get_last_detection()
-                rule_result = predict_instant_rule(detection, rule_params)
                 packed = packer.pack(packet, spatial_vector)
                 feature_buffer.append(list(packed.spatial_vector))
                 while len(feature_buffer) < window_size:
                     feature_buffer.appendleft([0.0] * len(spatial_vector))
 
-                pred = predict_sequence(model, labels, list(feature_buffer), params, rule_result=rule_result)
+                pred = predict_sequence(model, labels, list(feature_buffer), params, rule_result=None)
                 pred_history.append(pred)
+                detection = spatial.get_last_detection()
 
                 canvas = frame_bgr.copy()
                 _draw_detection_boxes(cv2, canvas, detection)
@@ -152,29 +147,23 @@ def main() -> None:
 
                 draw_text(cv2, panel, 18, 30, f"source: {source_name}", (200, 230, 255), 0.5)
                 draw_text(cv2, panel, 18, 58, f"frame: {frame_id}", (230, 230, 230), 0.55)
-                draw_text(cv2, panel, 18, 90, f"pure model: {pred['pure_label']} ({pred['pure_prob']:.3f})", (120, 255, 160), 0.62)
-                final_color = (70, 220, 255) if pred["final_label"] != pred["pure_label"] else (255, 220, 120)
-                draw_text(cv2, panel, 18, 120, f"hybrid final: {pred['final_label']} ({pred['final_prob']:.3f})", final_color, 0.72)
-                draw_text(cv2, panel, 18, 146, f"decision: {pred['decision_reason']}", (220, 220, 220), 0.48)
-                draw_text(cv2, panel, 18, 176, f"rule label: {pred['rule_label']}", (200, 255, 180), 0.55)
-                draw_text(cv2, panel, 18, 204, f"rule warn={pred['rule_warn_score']:.3f} hard={pred['rule_hard_score']:.3f}", (200, 255, 180), 0.52)
-                draw_text(cv2, panel, 18, 232, f"boundary: {pred['boundary']:.3f}", (240, 240, 240), 0.55)
-                draw_text(cv2, panel, 18, 260, f"warn_prob: {pred['warn_prob']:.3f}", (255, 210, 80), 0.55)
-                draw_text(cv2, panel, 18, 288, f"hard_prob: {pred['hard_prob']:.3f}", (255, 140, 110), 0.55)
-                draw_text(cv2, panel, 18, 316, f"follow_prob: {pred['follow_prob']:.3f}", (150, 220, 255), 0.55)
-                draw_text(cv2, panel, 18, 348, f"roi={pred['roi_risk']:.3f} center={pred['center']:.3f}", (220, 220, 220), 0.5)
-                draw_text(cv2, panel, 18, 374, f"roi_mean_area={pred['roi_mean_area']:.3f}", (220, 220, 220), 0.5)
-                draw_text(cv2, panel, 18, 400, f"roi_count_norm={pred['roi_count_norm']:.3f} roi_y={pred['roi_vertical_bias']:.3f}", (220, 220, 220), 0.5)
-                draw_text(cv2, panel, 18, 428, f"warn_reason: {pred['warn_reason']}", (255, 220, 150), 0.48)
-                draw_text(cv2, panel, 18, 452, f"hard_reason: {pred['hard_reason']}", (255, 170, 150), 0.48)
+                draw_text(cv2, panel, 18, 90, "model: CNN-GRU only", (200, 220, 255), 0.58)
+                draw_text(cv2, panel, 18, 120, f"final label: {pred['pure_label']} ({pred['pure_prob']:.3f})", (255, 220, 120), 0.72)
+                draw_text(cv2, panel, 18, 176, f"boundary: {pred['boundary']:.3f}", (240, 240, 240), 0.55)
+                draw_text(cv2, panel, 18, 204, f"warn_prob: {pred['warn_prob']:.3f}", (255, 210, 80), 0.55)
+                draw_text(cv2, panel, 18, 232, f"hard_prob: {pred['hard_prob']:.3f}", (255, 140, 110), 0.55)
+                draw_text(cv2, panel, 18, 260, f"follow_prob: {pred['follow_prob']:.3f}", (150, 220, 255), 0.55)
+                draw_text(cv2, panel, 18, 302, f"roi={pred['roi_risk']:.3f} center={pred['center']:.3f}", (220, 220, 220), 0.5)
+                draw_text(cv2, panel, 18, 328, f"roi_mean_area={pred['roi_mean_area']:.3f}", (220, 220, 220), 0.5)
+                draw_text(cv2, panel, 18, 354, f"roi_count_norm={pred['roi_count_norm']:.3f} roi_y={pred['roi_vertical_bias']:.3f}", (220, 220, 220), 0.5)
 
-                boundary_series = [item["boundary"] for item in pred_history]
-                warn_series = [item["warn_prob"] for item in pred_history]
-                hard_series = [item["hard_prob"] for item in pred_history]
+                boundary_series = [float(item["boundary"]) for item in pred_history]
+                warn_series = [float(item["warn_prob"]) for item in pred_history]
+                hard_series = [float(item["hard_prob"]) for item in pred_history]
 
-                draw_series(cv2, np, panel, x=18, y=500, w=460, h=80, values=boundary_series, color=(100, 200, 255), label="boundary", vmin=0.0, vmax=1.0, ref_line=params.warn_boundary_thr)
-                draw_series(cv2, np, panel, x=18, y=610, w=460, h=65, values=warn_series, color=(255, 210, 80), label="brake_warning prob", vmin=0.0, vmax=1.0, ref_line=params.warn_prob_thr)
-                draw_series(cv2, np, panel, x=18, y=700, w=460, h=65, values=hard_series, color=(255, 140, 110), label="hard_brake_risk prob", vmin=0.0, vmax=1.0, ref_line=params.hard_prob_thr)
+                draw_series(cv2, np, panel, x=18, y=470, w=460, h=80, values=boundary_series, color=(100, 200, 255), label="boundary", vmin=0.0, vmax=1.0, ref_line=params.warn_boundary_thr)
+                draw_series(cv2, np, panel, x=18, y=580, w=460, h=65, values=warn_series, color=(255, 210, 80), label="brake_warning prob", vmin=0.0, vmax=1.0, ref_line=params.warn_prob_thr)
+                draw_series(cv2, np, panel, x=18, y=670, w=460, h=65, values=hard_series, color=(255, 140, 110), label="hard_brake_risk prob", vmin=0.0, vmax=1.0, ref_line=params.hard_prob_thr)
                 draw_text(cv2, panel, 18, h - 28, "space:pause  s:screenshot  q:quit", (180, 180, 180), 0.48)
 
                 last_render = np.concatenate([canvas, panel], axis=1)

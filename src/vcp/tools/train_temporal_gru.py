@@ -26,6 +26,8 @@ class TrainArgs:
     lr: float
     hidden_dim: int
     cnn_channels: int
+    gru_layers: int
+    head_hidden_dim: int
     dropout: float
     device: str
     num_workers: int
@@ -47,6 +49,8 @@ def parse_args() -> TrainArgs:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--hidden-dim", type=int, default=64)
     parser.add_argument("--cnn-channels", type=int, default=16)
+    parser.add_argument("--gru-layers", type=int, default=1)
+    parser.add_argument("--head-hidden-dim", type=int, default=0)
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--num-workers", type=int, default=0)
@@ -66,6 +70,8 @@ def parse_args() -> TrainArgs:
         lr=max(1e-6, float(args.lr)),
         hidden_dim=max(4, int(args.hidden_dim)),
         cnn_channels=max(4, int(args.cnn_channels)),
+        gru_layers=max(1, int(args.gru_layers)),
+        head_hidden_dim=max(0, int(args.head_hidden_dim)),
         dropout=max(0.0, min(0.5, float(args.dropout))),
         device=str(args.device),
         num_workers=max(0, int(args.num_workers)),
@@ -307,6 +313,8 @@ def main() -> None:
         dropout=args.dropout,
         cnn_channels=args.cnn_channels,
         channel_groups=channel_groups,
+        gru_layers=args.gru_layers,
+        head_hidden_dim=args.head_hidden_dim,
     ).to(device)
 
     context_loss_fn = nn.CrossEntropyLoss()
@@ -389,6 +397,8 @@ def main() -> None:
                 "dropout": args.dropout,
                 "window_size": window_size,
                 "cnn_channels": args.cnn_channels,
+                "gru_layers": args.gru_layers,
+                "head_hidden_dim": args.head_hidden_dim,
                 "channel_groups": channel_groups,
             },
             "train_config": {
@@ -420,6 +430,8 @@ def main() -> None:
         "window_size": window_size,
         "num_contexts": num_contexts,
         "cnn_channels": args.cnn_channels,
+        "gru_layers": args.gru_layers,
+        "head_hidden_dim": args.head_hidden_dim,
         "channel_groups": channel_groups,
         "device": str(device),
         "best_epoch": int(best_row["epoch"]),
@@ -446,6 +458,8 @@ def main() -> None:
                 f"- feature_dim: `{feature_dim}`",
                 f"- window_size: `{window_size}`",
                 f"- cnn_channels: `{args.cnn_channels}`",
+                f"- gru_layers: `{args.gru_layers}`",
+                f"- head_hidden_dim: `{args.head_hidden_dim}`",
                 f"- channel_groups: `{channel_groups}`",
                 f"- best_epoch: `{best_row['epoch']}`",
                 f"- val_loss: `{best_row['val_loss']}`",

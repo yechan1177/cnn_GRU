@@ -198,24 +198,38 @@ if nn is not None:  # pragma: no branch
             hidden_dim: int,
             num_contexts: int,
             dropout: float = 0.1,
+            gru_layers: int = 1,
+            head_hidden_dim: int = 0,
         ) -> None:
             super().__init__()
             self.input_proj = nn.Linear(int(input_dim), int(hidden_dim))
             self.gru = nn.GRU(
                 input_size=int(hidden_dim),
                 hidden_size=int(hidden_dim),
-                num_layers=1,
+                num_layers=max(1, int(gru_layers)),
                 batch_first=True,
+                dropout=float(dropout) if int(gru_layers) > 1 else 0.0,
             )
             self.dropout = nn.Dropout(p=max(0.0, min(0.5, float(dropout))))
-            self.context_head = nn.Linear(int(hidden_dim), int(num_contexts))
-            self.boundary_head = nn.Linear(int(hidden_dim), 1)
-            self.uncertainty_head = nn.Linear(int(hidden_dim), 1)
+            effective_head_hidden = max(0, int(head_hidden_dim))
+            if effective_head_hidden > 0:
+                self.head_proj = nn.Sequential(
+                    nn.Linear(int(hidden_dim), effective_head_hidden),
+                    nn.ReLU(),
+                    nn.Dropout(p=max(0.0, min(0.5, float(dropout)))),
+                )
+                head_input_dim = effective_head_hidden
+            else:
+                self.head_proj = nn.Identity()
+                head_input_dim = int(hidden_dim)
+            self.context_head = nn.Linear(head_input_dim, int(num_contexts))
+            self.boundary_head = nn.Linear(head_input_dim, 1)
+            self.uncertainty_head = nn.Linear(head_input_dim, 1)
 
         def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
             hidden = torch.relu(self.input_proj(x))
             gru_out, _ = self.gru(hidden)
-            pooled = self.dropout(gru_out[:, -1, :])
+            pooled = self.head_proj(self.dropout(gru_out[:, -1, :]))
             return {
                 "context_logits": self.context_head(pooled),
                 "boundary_logit": self.boundary_head(pooled).squeeze(-1),
@@ -238,6 +252,8 @@ if nn is not None:  # pragma: no branch
             dropout: float = 0.1,
             cnn_channels: int = 16,
             channel_groups: list[list[int]] | None = None,
+            gru_layers: int = 1,
+            head_hidden_dim: int = 0,
         ) -> None:
             super().__init__()
             self.input_dim = int(input_dim)
@@ -264,13 +280,25 @@ if nn is not None:  # pragma: no branch
             self.gru = nn.GRU(
                 input_size=self.fused_dim,
                 hidden_size=self.hidden_dim,
-                num_layers=1,
+                num_layers=max(1, int(gru_layers)),
                 batch_first=True,
+                dropout=float(dropout) if int(gru_layers) > 1 else 0.0,
             )
             self.dropout = nn.Dropout(p=max(0.0, min(0.5, float(dropout))))
-            self.context_head = nn.Linear(self.hidden_dim, self.num_contexts)
-            self.boundary_head = nn.Linear(self.hidden_dim, 1)
-            self.uncertainty_head = nn.Linear(self.hidden_dim, 1)
+            effective_head_hidden = max(0, int(head_hidden_dim))
+            if effective_head_hidden > 0:
+                self.head_proj = nn.Sequential(
+                    nn.Linear(self.hidden_dim, effective_head_hidden),
+                    nn.ReLU(),
+                    nn.Dropout(p=max(0.0, min(0.5, float(dropout)))),
+                )
+                head_input_dim = effective_head_hidden
+            else:
+                self.head_proj = nn.Identity()
+                head_input_dim = self.hidden_dim
+            self.context_head = nn.Linear(head_input_dim, self.num_contexts)
+            self.boundary_head = nn.Linear(head_input_dim, 1)
+            self.uncertainty_head = nn.Linear(head_input_dim, 1)
 
         def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
             # x: [B, T, D]
@@ -282,7 +310,7 @@ if nn is not None:  # pragma: no branch
 
             fused = torch.cat(channel_features, dim=-1)
             gru_out, _ = self.gru(fused)
-            pooled = self.dropout(gru_out.mean(dim=1))
+            pooled = self.head_proj(self.dropout(gru_out.mean(dim=1)))
             context_logits = self.context_head(pooled)
             boundary_logit = self.boundary_head(pooled).squeeze(-1)
             uncertainty_logit = self.uncertainty_head(pooled).squeeze(-1)
@@ -332,6 +360,8 @@ def build_temporal_model(
     dropout: float,
     cnn_channels: int = 16,
     channel_groups: list[list[int]] | None = None,
+    gru_layers: int = 1,
+    head_hidden_dim: int = 0,
 ) -> Any:
     arch = architecture.strip().lower()
     if arch in {"gru", "gru_baseline", "baseline_gru"}:
@@ -340,6 +370,8 @@ def build_temporal_model(
             hidden_dim=hidden_dim,
             num_contexts=num_contexts,
             dropout=dropout,
+            gru_layers=gru_layers,
+            head_hidden_dim=head_hidden_dim,
         )
     if arch in {"single_cnn_gru", "cnn_gru_single"}:
         return TemporalGRUNet(
@@ -349,6 +381,8 @@ def build_temporal_model(
             dropout=dropout,
             cnn_channels=cnn_channels,
             channel_groups=[list(range(max(1, int(input_dim))))],
+            gru_layers=gru_layers,
+            head_hidden_dim=head_hidden_dim,
         )
     return TemporalGRUNet(
         input_dim=input_dim,
@@ -357,6 +391,8 @@ def build_temporal_model(
         dropout=dropout,
         cnn_channels=cnn_channels,
         channel_groups=channel_groups,
+        gru_layers=gru_layers,
+        head_hidden_dim=head_hidden_dim,
     )
 
 
@@ -408,6 +444,8 @@ class GRUTemporalEncoderTorch(TemporalEncoder):
         ckpt_num_contexts = int(model_cfg.get("num_contexts", inferred_num_contexts))
         ckpt_dropout = float(model_cfg.get("dropout", cfg.dropout))
         ckpt_cnn_channels = int(model_cfg.get("cnn_channels", 16))
+        ckpt_gru_layers = int(model_cfg.get("gru_layers", 1))
+        ckpt_head_hidden_dim = int(model_cfg.get("head_hidden_dim", 0))
         raw_channel_groups = model_cfg.get("channel_groups", build_temporal_channel_groups(ckpt_input_dim))
         architecture = inferred_architecture
 
@@ -431,6 +469,8 @@ class GRUTemporalEncoderTorch(TemporalEncoder):
             dropout=ckpt_dropout,
             cnn_channels=ckpt_cnn_channels,
             channel_groups=self._channel_groups,
+            gru_layers=ckpt_gru_layers,
+            head_hidden_dim=ckpt_head_hidden_dim,
         )
         self._model.load_state_dict(state_dict)
         self._model.to(self._device)

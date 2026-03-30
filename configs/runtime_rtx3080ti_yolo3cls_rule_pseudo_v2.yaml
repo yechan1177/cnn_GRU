@@ -48,5 +48,5 @@ curation:
   post_event_frames: 8
 storage:
   base_dir: outputs
-  run_name: rtx3080ti_yolo3cls_braking_expanded_runtime
+  run_name: rtx3080ti_yolo3cls_rule_pseudo_v2_runtime
   save_raw_frames: false

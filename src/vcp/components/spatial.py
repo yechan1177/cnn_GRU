@@ -64,10 +64,10 @@ class YOLOSpatialEncoder(SpatialEncoder):
         "person_conf",
         "bike_conf",
         "roi_risk",
-        "motion_delta",
         "center_closeness",
-        "looming_score",
-        "occlusion_score",
+        "roi_mean_area",
+        "roi_count_norm",
+        "roi_vertical_bias",
     ]
 
     def __init__(self, cfg: SpatialConfig) -> None:
@@ -101,11 +101,6 @@ class YOLOSpatialEncoder(SpatialEncoder):
             self._class_names = []
         self._class_count = len(self._class_names)
         self._feature_keys = self._fit_feature_keys(self.BASE_FEATURE_KEYS)
-        self._prev_roi_mean_area = 0.0
-        self._prev_roi_center_y = 0.0
-        self._prev_roi_count = 0
-        self._prev_det_count = 0
-
         self._mock_fallback = MockSpatialEncoder(cfg)
         self._warning_issued = False
         self._last_detection: dict[str, Any] = {
@@ -247,19 +242,7 @@ class YOLOSpatialEncoder(SpatialEncoder):
         roi_center_closeness = float(sum(roi_center_scores) / max(1, roi_count))
         roi_vertical_bias = float(sum(roi_vertical_scores) / max(1, roi_count))
         roi_risk = min(1.0, (0.55 * min(1.0, roi_mean_area * 6.0)) + (0.45 * roi_center_closeness))
-
-        looming_raw = max(0.0, roi_mean_area - self._prev_roi_mean_area)
-        looming_score = min(1.0, looming_raw * 20.0)
-
-        det_delta = abs(det_count - self._prev_det_count) / max(1.0, float(self._max_det))
-        roi_center_y_shift = abs(roi_vertical_bias - self._prev_roi_center_y)
-        motion_delta = min(1.0, (looming_raw * 14.0) + (0.5 * roi_center_y_shift) + (0.3 * det_delta))
-
-        # 중앙 ROI 물체가 급히 커진 뒤 변화량이 거의 멈추면 hard brake 후보로 쓰기 쉽도록 정지 신호를 구성한다.
-        stop_motion_signal = 0.0
-        if roi_count > 0 and self._prev_roi_count > 0:
-            stop_motion_signal = max(0.0, min(1.0, (roi_risk * (1.0 - min(1.0, motion_delta * 1.8)))))
-        occlusion_score = min(1.0, (0.6 * stop_motion_signal) + (0.4 * min(1.0, roi_count / 3.0)))
+        roi_count_norm = min(1.0, float(roi_count) / 3.0)
 
         base_vector = [
             min(1.0, det_count / max(1.0, float(self._max_det))),
@@ -269,16 +252,11 @@ class YOLOSpatialEncoder(SpatialEncoder):
             min(1.0, area_var * 10.0),
         ] + count_ratios + class_mean_conf + [
             roi_risk,
-            motion_delta,
             roi_center_closeness,
-            looming_score,
-            occlusion_score,
+            roi_mean_area,
+            roi_count_norm,
+            roi_vertical_bias,
         ]
-
-        self._prev_roi_mean_area = roi_mean_area
-        self._prev_roi_center_y = roi_vertical_bias
-        self._prev_roi_count = roi_count
-        self._prev_det_count = int(det_count)
 
         self._last_detection = {
             "count": int(len(box_items)),

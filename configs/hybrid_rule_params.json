@@ -1,18 +1,14 @@
 ﻿{
-    "hybrid_rule_params":  {
-                               "roi_thr":  0.3,
-                               "center_thr":  0.72,
-                               "looming_warn_thr":  0.006,
-                               "looming_hard_thr":  0.014,
-                               "occlusion_thr":  0.58,
-                               "motion_stop_thr":  0.01,
-                               "boundary_thr":  0.5,
-                               "warn_boundary_thr":  0.82,
-                               "hard_boundary_thr":  0.93,
-                               "warn_prob_thr":  0.05,
-                               "hard_prob_thr":  0.03,
-                               "follow_prob_thr":  0.2,
-                               "warn_boost":  0.22,
-                               "hard_boost":  0.3
-                           }
+  "hybrid_rule_params": {
+    "boundary_thr": 0.50,
+    "warn_boundary_thr": 0.82,
+    "hard_boundary_thr": 0.93,
+    "warn_prob_thr": 0.08,
+    "hard_prob_thr": 0.03,
+    "follow_prob_thr": 0.24,
+    "rule_warn_score_thr": 0.50,
+    "rule_hard_score_thr": 0.65,
+    "warn_boost": 0.22,
+    "hard_boost": 0.30
+  }
 }

@@ -63,6 +63,7 @@ models/pretrained/
 models/checkpoints/*
 !models/checkpoints/
 !models/checkpoints/yolo3cls_best.pt
+!models/checkpoints/temporal_shared_best.pt
 !models/checkpoints/temporal_final_best.pt
 !models/checkpoints/literature_temporal_best.pt
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import torch
 
+from vcp.components.event_rules import InstantRuleParams, predict_instant_rule
 from vcp.components.temporal import TemporalGRUNet, build_temporal_channel_groups
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -41,18 +42,14 @@ class UIArgs:
 class HybridParams:
     """하이브리드 승격 규칙 파라미터."""
 
-    roi_thr: float
-    center_thr: float
-    looming_warn_thr: float
-    looming_hard_thr: float
-    occlusion_thr: float
-    motion_stop_thr: float
     boundary_thr: float
     warn_boundary_thr: float
     hard_boundary_thr: float
     warn_prob_thr: float
     hard_prob_thr: float
     follow_prob_thr: float
+    rule_warn_score_thr: float
+    rule_hard_score_thr: float
     warn_boost: float
     hard_boost: float
 
@@ -134,18 +131,14 @@ def infer_video_path(frame_rows: list[dict[str, Any]], explicit_video: Path | No
 
 def load_hybrid_params(manifest_path: Path) -> HybridParams:
     default = HybridParams(
-        roi_thr=0.30,
-        center_thr=0.72,
-        looming_warn_thr=0.006,
-        looming_hard_thr=0.014,
-        occlusion_thr=0.58,
-        motion_stop_thr=0.01,
         boundary_thr=0.50,
         warn_boundary_thr=0.82,
         hard_boundary_thr=0.93,
         warn_prob_thr=0.05,
         hard_prob_thr=0.03,
         follow_prob_thr=0.20,
+        rule_warn_score_thr=0.50,
+        rule_hard_score_thr=0.65,
         warn_boost=0.22,
         hard_boost=0.30,
     )
@@ -154,18 +147,14 @@ def load_hybrid_params(manifest_path: Path) -> HybridParams:
     data = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     params = data.get("hybrid_rule_params", {})
     return HybridParams(
-        roi_thr=float(params.get("roi_thr", default.roi_thr)),
-        center_thr=float(params.get("center_thr", default.center_thr)),
-        looming_warn_thr=float(params.get("looming_warn_thr", default.looming_warn_thr)),
-        looming_hard_thr=float(params.get("looming_hard_thr", default.looming_hard_thr)),
-        occlusion_thr=float(params.get("occlusion_thr", default.occlusion_thr)),
-        motion_stop_thr=float(params.get("motion_stop_thr", default.motion_stop_thr)),
         boundary_thr=float(params.get("boundary_thr", default.boundary_thr)),
         warn_boundary_thr=float(params.get("warn_boundary_thr", default.warn_boundary_thr)),
         hard_boundary_thr=float(params.get("hard_boundary_thr", default.hard_boundary_thr)),
         warn_prob_thr=float(params.get("warn_prob_thr", default.warn_prob_thr)),
         hard_prob_thr=float(params.get("hard_prob_thr", default.hard_prob_thr)),
         follow_prob_thr=float(params.get("follow_prob_thr", default.follow_prob_thr)),
+        rule_warn_score_thr=float(params.get("rule_warn_score_thr", default.rule_warn_score_thr)),
+        rule_hard_score_thr=float(params.get("rule_hard_score_thr", default.rule_hard_score_thr)),
         warn_boost=float(params.get("warn_boost", default.warn_boost)),
         hard_boost=float(params.get("hard_boost", default.hard_boost)),
     )
@@ -191,6 +180,8 @@ def load_model(checkpoint_path: Path) -> tuple[TemporalGRUNet, list[str], int]:
             "channel_groups",
             build_temporal_channel_groups(input_dim),
         ),
+        gru_layers=int(model_config.get("gru_layers", 1)),
+        head_hidden_dim=int(model_config.get("head_hidden_dim", 0)),
     )
     model.load_state_dict(checkpoint["state_dict"])
     model.eval()
@@ -258,6 +249,7 @@ def predict_sequence(
     labels: list[str],
     feature_window: list[list[float]],
     params: HybridParams,
+    rule_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     x = torch.tensor([feature_window], dtype=torch.float32)
     with torch.no_grad():
@@ -273,21 +265,12 @@ def predict_sequence(
 
     last = feature_window[-1]
     roi_risk = float(last[11]) if len(last) > 11 else 0.0
-    motion_delta = float(last[12]) if len(last) > 12 else 0.0
-    center = float(last[13]) if len(last) > 13 else 0.0
-    looming = float(last[14]) if len(last) > 14 else 0.0
-    occlusion = float(last[15]) if len(last) > 15 else 0.0
-
-    warn_rule_feat = (
-        roi_risk >= params.roi_thr
-        and center >= params.center_thr
-        and looming >= params.looming_warn_thr
-    )
-    hard_rule_feat = (
-        warn_rule_feat
-        and looming >= params.looming_hard_thr
-        and (occlusion >= params.occlusion_thr or motion_delta <= params.motion_stop_thr)
-    )
+    center = float(last[12]) if len(last) > 12 else 0.0
+    roi_mean_area = float(last[13]) if len(last) > 13 else 0.0
+    roi_count_norm = float(last[14]) if len(last) > 14 else 0.0
+    roi_vertical_bias = float(last[15]) if len(last) > 15 else 0.0
+    warn_signal_reasons: list[str] = []
+    hard_signal_reasons: list[str] = []
 
     warn_rule_signal = (
         boundary >= params.warn_boundary_thr
@@ -296,6 +279,13 @@ def predict_sequence(
             or probs[warn_idx] >= params.warn_prob_thr
         )
     )
+    if boundary >= params.warn_boundary_thr:
+        warn_signal_reasons.append("boundary")
+    if probs[follow_idx] >= params.follow_prob_thr:
+        warn_signal_reasons.append("follow_prob")
+    if probs[warn_idx] >= params.warn_prob_thr:
+        warn_signal_reasons.append("warn_prob")
+
     hard_rule_signal = (
         boundary >= params.hard_boundary_thr
         and (
@@ -304,39 +294,97 @@ def predict_sequence(
             or probs[hard_idx] >= params.hard_prob_thr
         )
     )
+    if boundary >= params.hard_boundary_thr:
+        hard_signal_reasons.append("boundary")
+    if probs[follow_idx] >= params.follow_prob_thr:
+        hard_signal_reasons.append("follow_prob")
+    if probs[warn_idx] >= params.warn_prob_thr:
+        hard_signal_reasons.append("warn_prob")
+    if probs[hard_idx] >= params.hard_prob_thr:
+        hard_signal_reasons.append("hard_prob")
 
-    warn_rule = warn_rule_feat or warn_rule_signal
-    hard_rule = hard_rule_feat or hard_rule_signal
+    rule_label = str((rule_result or {}).get("label", "normal_drive"))
+    rule_warn_score = float((rule_result or {}).get("warn_score", 0.0))
+    rule_hard_score = float((rule_result or {}).get("hard_score", 0.0))
+    rule_reason = str((rule_result or {}).get("reason", "none"))
 
-    boosted = probs[:]
-    boosted[warn_idx] += params.warn_boost if warn_rule else 0.0
-    boosted[hard_idx] += params.hard_boost if hard_rule else 0.0
+    warn_rule = (
+        rule_label in {"brake_warning", "hard_brake_risk"}
+        and rule_warn_score >= params.rule_warn_score_thr
+    ) or warn_rule_signal
+    hard_rule = (
+        rule_label == "hard_brake_risk"
+        and rule_hard_score >= params.rule_hard_score_thr
+    ) or hard_rule_signal
 
     pure_idx = max(range(len(probs)), key=lambda idx: probs[idx])
-    final_idx = max(range(len(boosted)), key=lambda idx: boosted[idx])
+    final_idx = pure_idx
+    decision_reason = f"pure:{labels[pure_idx]}"
 
-    if hard_rule and (probs[hard_idx] >= params.hard_prob_thr or boundary >= params.hard_boundary_thr):
+    weak_warn_prediction = (
+        pure_idx == warn_idx
+        and not warn_rule
+        and boundary < params.warn_boundary_thr
+        and rule_warn_score < params.rule_warn_score_thr
+    )
+    if weak_warn_prediction:
+        if probs[follow_idx] >= probs[0]:
+            final_idx = follow_idx
+            decision_reason = "demote:weak_warn->follow"
+        else:
+            final_idx = 0
+            decision_reason = "demote:weak_warn->normal"
+
+    if pure_idx != hard_idx and hard_rule and (
+        probs[hard_idx] >= params.hard_prob_thr or boundary >= params.hard_boundary_thr
+    ):
         final_idx = hard_idx
-    elif (not hard_rule) and warn_rule and (
+        if rule_label == "hard_brake_risk" and rule_hard_score >= params.rule_hard_score_thr:
+            decision_reason = f"promote:hard_rule({rule_reason})"
+        else:
+            decision_reason = f"promote:hard_signal({'+'.join(hard_signal_reasons)})"
+    elif pure_idx not in {warn_idx, hard_idx} and warn_rule and (
         probs[warn_idx] >= params.warn_prob_thr or boundary >= params.warn_boundary_thr
     ):
         final_idx = warn_idx
+        if rule_label in {"brake_warning", "hard_brake_risk"} and rule_warn_score >= params.rule_warn_score_thr:
+            decision_reason = f"promote:warn_rule({rule_reason})"
+        else:
+            decision_reason = f"promote:warn_signal({'+'.join(warn_signal_reasons)})"
+
+    warn_reason = "none"
+    hard_reason = "none"
+    if rule_label in {"brake_warning", "hard_brake_risk"} and rule_warn_score >= params.rule_warn_score_thr:
+        warn_reason = f"rule:{rule_reason}"
+    elif warn_rule_signal:
+        warn_reason = f"signal:{'+'.join(warn_signal_reasons)}"
+    if rule_label == "hard_brake_risk" and rule_hard_score >= params.rule_hard_score_thr:
+        hard_reason = f"rule:{rule_reason}"
+    elif hard_rule_signal:
+        hard_reason = f"signal:{'+'.join(hard_signal_reasons)}"
 
     return {
         "pure_label": labels[pure_idx],
         "pure_prob": probs[pure_idx],
         "final_label": labels[final_idx],
+        "final_prob": probs[final_idx],
+        "decision_reason": decision_reason,
         "boundary": boundary,
         "warn_prob": probs[warn_idx],
         "hard_prob": probs[hard_idx],
         "follow_prob": probs[follow_idx],
         "roi_risk": roi_risk,
         "center": center,
-        "looming": looming,
-        "occlusion": occlusion,
-        "motion_delta": motion_delta,
+        "roi_mean_area": roi_mean_area,
+        "roi_count_norm": roi_count_norm,
+        "roi_vertical_bias": roi_vertical_bias,
         "warn_rule": warn_rule,
         "hard_rule": hard_rule,
+        "warn_reason": warn_reason,
+        "hard_reason": hard_reason,
+        "rule_label": rule_label,
+        "rule_warn_score": rule_warn_score,
+        "rule_hard_score": rule_hard_score,
     }
 
 
@@ -400,17 +448,20 @@ def run_ui(args: UIArgs) -> None:
         draw_text(cv2, panel, 18, 92, f"stored tag: {row.get('context_tag', '-')}", (170, 210, 255), 0.6)
         draw_text(cv2, panel, 18, 122, f"pure model: {pred['pure_label']} ({pred['pure_prob']:.3f})", (120, 255, 160), 0.64)
         final_color = (70, 220, 255) if pred["final_label"] != pred["pure_label"] else (255, 220, 120)
-        draw_text(cv2, panel, 18, 152, f"hybrid final: {pred['final_label']}", final_color, 0.72)
+        draw_text(cv2, panel, 18, 152, f"hybrid final: {pred['final_label']} ({pred['final_prob']:.3f})", final_color, 0.72)
+        draw_text(cv2, panel, 18, 178, f"decision: {pred['decision_reason']}", (220, 220, 220), 0.48)
 
-        draw_text(cv2, panel, 18, 192, f"boundary: {pred['boundary']:.3f}", (240, 240, 240), 0.56)
-        draw_text(cv2, panel, 18, 220, f"warn_prob: {pred['warn_prob']:.3f}", (240, 210, 100), 0.56)
-        draw_text(cv2, panel, 18, 248, f"hard_prob: {pred['hard_prob']:.3f}", (255, 150, 120), 0.56)
-        draw_text(cv2, panel, 18, 276, f"follow_prob: {pred['follow_prob']:.3f}", (150, 220, 255), 0.56)
+        draw_text(cv2, panel, 18, 208, f"boundary: {pred['boundary']:.3f}", (240, 240, 240), 0.56)
+        draw_text(cv2, panel, 18, 236, f"warn_prob: {pred['warn_prob']:.3f}", (240, 210, 100), 0.56)
+        draw_text(cv2, panel, 18, 264, f"hard_prob: {pred['hard_prob']:.3f}", (255, 150, 120), 0.56)
+        draw_text(cv2, panel, 18, 292, f"follow_prob: {pred['follow_prob']:.3f}", (150, 220, 255), 0.56)
 
-        draw_text(cv2, panel, 18, 320, f"roi={pred['roi_risk']:.3f} center={pred['center']:.3f}", (220, 220, 220), 0.52)
-        draw_text(cv2, panel, 18, 346, f"looming={pred['looming']:.3f} occlusion={pred['occlusion']:.3f}", (220, 220, 220), 0.52)
-        draw_text(cv2, panel, 18, 372, f"motion_delta={pred['motion_delta']:.3f}", (220, 220, 220), 0.52)
-        draw_text(cv2, panel, 18, 402, f"warn_rule={int(pred['warn_rule'])} hard_rule={int(pred['hard_rule'])}", (180, 255, 180), 0.56)
+        draw_text(cv2, panel, 18, 336, f"roi={pred['roi_risk']:.3f} center={pred['center']:.3f}", (220, 220, 220), 0.52)
+        draw_text(cv2, panel, 18, 362, f"roi_mean_area={pred['roi_mean_area']:.3f}", (220, 220, 220), 0.52)
+        draw_text(cv2, panel, 18, 388, f"roi_count_norm={pred['roi_count_norm']:.3f} roi_y={pred['roi_vertical_bias']:.3f}", (220, 220, 220), 0.52)
+        draw_text(cv2, panel, 18, 418, f"warn_rule={int(pred['warn_rule'])} hard_rule={int(pred['hard_rule'])}", (180, 255, 180), 0.56)
+        draw_text(cv2, panel, 18, 444, f"warn_reason: {pred['warn_reason']}", (255, 220, 150), 0.48)
+        draw_text(cv2, panel, 18, 468, f"hard_reason: {pred['hard_reason']}", (255, 170, 150), 0.48)
 
         window_start = max(0, frame_index - 119)
         hist = predictions[window_start : frame_index + 1]
@@ -423,9 +474,9 @@ def run_ui(args: UIArgs) -> None:
             np,
             panel,
             x=18,
-            y=440,
+            y=500,
             w=460,
-            h=90,
+            h=80,
             values=boundary_series,
             color=(100, 200, 255),
             label="boundary",
@@ -438,9 +489,9 @@ def run_ui(args: UIArgs) -> None:
             np,
             panel,
             x=18,
-            y=560,
+            y=610,
             w=460,
-            h=70,
+            h=65,
             values=warn_series,
             color=(255, 210, 80),
             label="brake_warning prob",
@@ -453,9 +504,9 @@ def run_ui(args: UIArgs) -> None:
             np,
             panel,
             x=18,
-            y=660,
+            y=700,
             w=460,
-            h=70,
+            h=65,
             values=hard_series,
             color=(255, 130, 110),
             label="hard_brake_risk prob",
