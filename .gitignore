@@ -29,6 +29,7 @@ testing_work/
 # Root generated reports
 *.png
 *.csv
+!jetson_performance_validation_template.csv
 *.md.bak
 *comparison*.md
 *comparison*.csv
