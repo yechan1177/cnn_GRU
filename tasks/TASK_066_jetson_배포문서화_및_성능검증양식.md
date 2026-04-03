@@ -11,4 +11,4 @@
 - [x] 성능 검증 표 양식 작성
 - [x] README 문서 인덱스 반영
 - [x] CHANGELOG/TODO 반영
-- [ ] GitHub 반영
+- [x] GitHub 반영
