@@ -2,6 +2,14 @@
 
 이 문서는 GitHub 배포 기준으로 의미 있는 저장소 변경만 기록한다.
 
+## 2026-04-06
+### Added
+- 루트에서 `spatial.py` 핵심 흐름을 바로 따라해볼 수 있는 `practice_spatial_encoder.py` 추가
+- 간단 재현용 실행/산출물 설명 문서 `docs/34_spatial_간단재현가이드.md` 추가
+
+### Changed
+- README에 간단 재현 코드 실행 경로와 문서 링크 추가
+
 ## 2026-04-03
 ### Added
 - GitHub만으로 현재 상태를 이어받을 수 있도록 `docs/30_프로젝트_종합인수인계.md` 추가

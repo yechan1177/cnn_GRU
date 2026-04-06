@@ -88,6 +88,22 @@ cd C:\yolstm
 - 각 루트 실행 파일 상단의 `VIDEO_SOURCE`가 존재하면 해당 영상을 사용한다.
 - 영상이 없으면 자동으로 `webcam:0`으로 전환한다.
 
+## 간단 재현 코드
+`spatial.py`의 핵심 동작을 처음 보는 사람도 바로 따라해볼 수 있도록, 루트에 단순화한 재현 스크립트를 함께 둔다.
+
+```powershell
+cd C:\yolstm
+.\.venv\Scripts\python.exe practice_spatial_encoder.py
+```
+
+이 스크립트는 아래 과정을 한 번에 보여준다.
+- 단일 프레임 로드
+- YOLO 검출
+- 16차원 의미 기반 특징 벡터 계산
+- 결과 미리보기 이미지 저장
+
+자세한 사용법은 [Spatial Encoder 간단 재현 가이드](docs/34_spatial_%EA%B0%84%EB%8B%A8%EC%9E%AC%ED%98%84%EA%B0%80%EC%9D%B4%EB%93%9C.md)를 참고한다.
+
 ## 논문 재현
 이 저장소는 논문 초안 기준 실험을 다시 확인할 수 있도록 정리되어 있다. 기본적으로 아래 두 가지를 재현 대상으로 둔다.
 
