@@ -6,6 +6,7 @@
 ### Added
 - 루트에서 `spatial.py` 핵심 흐름을 바로 따라해볼 수 있는 `practice_spatial_encoder.py` 추가
 - 간단 재현용 실행/산출물 설명 문서 `docs/34_spatial_간단재현가이드.md` 추가
+- 연구 내용 없이 재사용 가능한 기본 운영 규칙 세트 `rule_next/` 추가
 
 ### Changed
 - README에 간단 재현 코드 실행 경로와 문서 링크 추가

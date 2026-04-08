@@ -62,6 +62,7 @@
 - [x] TASK_065 GitHub 종합 인수인계 정리
 - [x] TASK_066 Jetson 배포 문서화 및 성능 검증 양식 준비
 - [x] TASK_068 spatial 간단 재현 코드 및 가이드 추가
+- [x] TASK_069 rule_next 재사용 규칙 세트 구성
 
 ## 현재 스프린트: 발표자료 제작
 - [x] TASK_008 문서 생성
