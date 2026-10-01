@@ -140,10 +140,11 @@ def named_values() -> dict[str, str]:
         recs = [r for r in VLA["comma_action_curation"]["records"] if r["model"].endswith("_action")]
         for b in ("0.1", "0.2", "0.3"):
             k = str(int(float(b) * 100))
-            v[f"cur{k}_model"] = _fmt([r["curation"][b]["model"]["frame_coverage"] for r in recs], std=False)
-            v[f"cur{k}_random"] = _fmt([r["curation"][b]["random_frame_coverage"] for r in recs], std=False)
-            v[f"cur{k}_model_ev"] = _fmt([r["curation"][b]["model"]["event_coverage"] for r in recs], std=False)
-            v[f"cur{k}_random_ev"] = _fmt([r["curation"][b]["random_event_coverage"] for r in recs], std=False)
+            pct = lambda vals: f"{100 * float(np.mean(vals)):.1f}%"  # noqa: E731
+            v[f"cur{k}_model"] = pct([r["curation"][b]["model"]["frame_coverage"] for r in recs])
+            v[f"cur{k}_random"] = pct([r["curation"][b]["random_frame_coverage"] for r in recs])
+            v[f"cur{k}_model_ev"] = pct([r["curation"][b]["model"]["event_coverage"] for r in recs])
+            v[f"cur{k}_random_ev"] = pct([r["curation"][b]["random_event_coverage"] for r in recs])
         base = [r for r in VLA["comma_action_curation"]["records"] if not r["model"].endswith("_action")]
         v["act_mae05"] = _fmt([r["action_mae_model"][0] for r in recs])
         v["act_mae10"] = _fmt([r["action_mae_model"][1] for r in recs])
@@ -178,6 +179,19 @@ def named_values() -> dict[str, str]:
             v["lat_yolo_ms"] = f"{y[0]['p50_ms']:.1f}"
         v["cpu_model"] = str(LAT["device"].get("cpu_model", LAT["device"].get("processor")))
         v["cpu_count"] = str(LAT["device"].get("cpu_count"))
+    try:  # 내보낸 VLA 데이터에서 실제 서술 예시(제동 계열 맥락) 1개
+        import pyarrow.parquet as pq
+
+        chunk = ROOT / "data" / "processed" / "vla_export" / "synthetic_driving" / "data" / "chunk-000"
+        for f in sorted(chunk.glob("*.parquet")):
+            rows = pq.read_table(f, columns=["annotation.context", "annotation.narration_ko", "annotation.narration_en"]).to_pylist()
+            hit = next((r for r in rows if r["annotation.context"] in ("brake_warning", "hard_brake_risk")), None)
+            if hit:
+                v["example_narration_ko"] = hit["annotation.narration_ko"]
+                v["example_narration_en"] = hit["annotation.narration_en"]
+                break
+    except Exception:  # pragma: no cover - 내보내기 데이터가 없으면 생략
+        pass
     log = ROOT / "data" / "processed" / "comma_speedchallenge" / "extract.log"
     if log.exists():
         m = re.search(r"완료: (\d+) 프레임, ([\d.]+) s", log.read_text(encoding="utf-8"))
@@ -206,14 +220,19 @@ def resolve(text: str, depth: int = 0) -> str:
             MISSING.append(key)
             return f"> (섹션 {rest} 없음)"
         parts = rest.split(":")
+        # 선택적 마지막 인자: 소수 자릿수(예: syn:모델:main:flicker_per_min:1)
+        digits = 3
+        expected = {"syn": 3, "synm": 3, "synx": 3, "synxm": 3, "comma": 3, "commam": 3, "robot": 2, "robotm": 2}.get(kind)
+        if expected is not None and len(parts) == expected + 1 and parts[-1].isdigit():
+            digits = int(parts.pop())
         if kind in {"syn", "synm"} and len(parts) == 3:
-            return _fmt(_syn_vals(*parts), std=kind == "syn")
+            return _fmt(_syn_vals(*parts), digits, std=kind == "syn")
         if kind in {"synx", "synxm"} and len(parts) == 3:
-            return _fmt(_synx_vals(*parts), std=kind == "synx")
+            return _fmt(_synx_vals(*parts), digits, std=kind == "synx")
         if kind in {"comma", "commam"} and len(parts) == 3:
-            return _fmt(_comma_vals(*parts), std=kind == "comma")
+            return _fmt(_comma_vals(*parts), digits, std=kind == "comma")
         if kind in {"robot", "robotm"} and len(parts) == 2:
-            return _fmt(_robot_vals(*parts), std=kind == "robot")
+            return _fmt(_robot_vals(*parts), digits, std=kind == "robot")
         MISSING.append(key)
         return "N/A"
 

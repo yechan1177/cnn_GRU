@@ -47,6 +47,8 @@ def temporal_latency(spec: ModelSpec, input_dim: int = 16, n_classes: int = 6) -
     try:
         import onnxruntime as ort
 
+        with torch.no_grad():
+            ref = model(x)["context_logits"].numpy()
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "m.onnx")
 
@@ -60,12 +62,12 @@ def temporal_latency(spec: ModelSpec, input_dim: int = 16, n_classes: int = 6) -
                     return o["context_logits"], o["boundary_logit"]
 
             torch.onnx.export(_Wrap(model), (x,), path, input_names=["x"], output_names=["logits", "boundary"], opset_version=17, dynamo=False)
+            model.eval()  # 내보내기 후 학습 모드로 바뀌는 문제 방지(dropout이 켜지면 비교가 틀어진다)
             out["onnx_bytes"] = os.path.getsize(path)
             so = ort.SessionOptions()
             so.intra_op_num_threads = 1
             sess = ort.InferenceSession(path, so, providers=["CPUExecutionProvider"])
             xn = x.numpy()
-            ref = model(x)["context_logits"].detach().numpy()
             got = sess.run(None, {"x": xn})[0]
             out["onnx_max_abs_diff"] = float(np.abs(ref - got).max())
             out["onnx_cpu_t1"] = _bench(lambda: sess.run(None, {"x": xn}))

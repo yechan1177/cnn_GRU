@@ -6,7 +6,7 @@
 
 표 2. 합성 벤치마크 테스트 결과(평균 ± 표준편차, 시드 3개). CI는 에피소드 bootstrap 95% 구간(시드별 평균), 지연은 제동 이벤트 시작 대비 첫 검출 시각의 중앙값이다. 정답 라벨 자체의 전환 빈도는 분당 {{gt_flicker}}회다.
 
-**(1) 정확도와 macro-F1은 반대 방향을 가리킨다.** 2026-03 구성(v1 특징, 균등 분할)의 정확도는 {{syn:mc_cnn_gru_balanced_v1:main:accuracy}}로 v2 구성({{syn:mc_cnn_gru_semantic_v2:main:accuracy}})보다 높지만, macro-F1은 {{syn:mc_cnn_gru_balanced_v1:main:macro_f1}} 대 {{syn:mc_cnn_gru_semantic_v2:main:macro_f1}}로 뒤집힌다. 표 3처럼 v1 구성은 다수 클래스(정상 주행, 추종) F1이 높고 제동 계열 F1이 낮다. 2026-03 보고처럼 정확도를 주 지표로 쓰면 희소 이벤트 성능을 놓친다.
+**(1) 정확도와 macro-F1은 반대 방향을 가리킨다.** 2026-03 구성(v1 특징, 균등 분할)의 정확도는 {{syn:mc_cnn_gru_balanced_v1:main:accuracy}}로 특징만 v2로 바꾼 같은 구조({{syn:mc_cnn_gru_balanced_v2:main:accuracy}})보다 높지만, macro-F1은 {{syn:mc_cnn_gru_balanced_v1:main:macro_f1}} 대 {{syn:mc_cnn_gru_balanced_v2:main:macro_f1}}로 뒤집힌다. 표 3처럼 v1 구성은 다수 클래스(정상 주행, 추종) F1이 높고 제동 계열 F1이 낮다. 2026-03 보고처럼 정확도를 주 지표로 쓰면 희소 이벤트 성능을 놓친다.
 
 {{table:synthetic_per_class}}
 
@@ -16,9 +16,9 @@
 
 **(3) 의미 기반 채널 그룹의 이점은 확인되지 않았다.** v2에서 의미 그룹({{syn:mc_cnn_gru_semantic_v2:main:macro_f1}})은 균등 분할({{syn:mc_cnn_gru_balanced_v2:main:macro_f1}}), 단일채널({{syn:cnn_gru_single_v2:main:macro_f1}})과 시드 편차 범위 안에서 차이가 없었다. 2026-03 원고의 "의미 단위 채널 분리" 주장은 이 결과로 뒷받침되지 않는다. 대신 창 길이를 16프레임으로 늘린 구성이 {{syn:mc_cnn_gru_semantic_v2_w16:main:macro_f1}}로 가장 높았다.
 
-**(4) 하이브리드 룰 게이트는 macro-F1을 높이지 않았다.** 검증셋에서만 임계값을 고르면, 게이트는 제동 이벤트 recall을 {{synm:mc_cnn_gru_balanced_v1:main:event_recall}}에서 {{synm:mc_cnn_gru_balanced_v1_hybrid:main:event_recall}}로 올리는 대신 오경보를 {{synm:mc_cnn_gru_balanced_v1:main:false_alarms_per_min}}에서 {{synm:mc_cnn_gru_balanced_v1_hybrid:main:false_alarms_per_min}}회/분으로 늘렸고, macro-F1은 {{syn:mc_cnn_gru_balanced_v1_hybrid:main:macro_f1}}였다. 2026-03에 보고한 brake-critical recall 1.0은 검증셋 튜닝·보고 중복과 소표본(6개)의 영향으로 판단한다. 같은 특징의 룰 단독은 macro-F1 {{synm:rule_v1:main:macro_f1}}에 분당 라벨 전환이 {{synm:rule_v1:main:flicker_per_min}}회로, 프레임별 판단의 불안정성이 컸다.
+**(4) 하이브리드 룰 게이트는 macro-F1을 높이지 않았다.** 검증셋에서만 임계값을 고르면, 게이트는 제동 이벤트 recall을 {{synm:mc_cnn_gru_balanced_v1:main:event_recall}}에서 {{synm:mc_cnn_gru_balanced_v1_hybrid:main:event_recall}}로 올리는 대신 오경보를 {{synm:mc_cnn_gru_balanced_v1:main:false_alarms_per_min:2}}에서 {{synm:mc_cnn_gru_balanced_v1_hybrid:main:false_alarms_per_min:2}}회/분으로 늘렸고, macro-F1은 {{syn:mc_cnn_gru_balanced_v1_hybrid:main:macro_f1}}였다. 2026-03에 보고한 brake-critical recall 1.0은 검증셋 튜닝·보고 중복과 소표본(당시 문헌형 모델 recall 0.1667=1/6로 미루어 검증셋 제동 표본 약 6개로 추정)의 영향으로 판단한다. 같은 특징의 룰 단독은 macro-F1 {{synm:rule_v1:main:macro_f1}}에 분당 라벨 전환이 {{synm:rule_v1:main:flicker_per_min:0}}회로, 프레임별 판단의 불안정성이 컸다.
 
-**(5) 손실·후처리.** CB-focal 손실은 제동 계열 F1을 높였지만(표 3) ECE가 {{synm:mc_cnn_gru_semantic_v2_focal:main:ece}}로 커졌다. 인과 EMA 평활화는 분당 라벨 전환을 {{synm:mc_cnn_gru_semantic_v2:main:flicker_per_min}}에서 {{synm:mc_cnn_gru_semantic_v2_ema:main:flicker_per_min}}회로 줄였으나 여전히 정답(분당 {{gt_flicker}}회)보다 많다. 모든 학습 모델의 ECE는 temperature scaling 후 0.05 이하였다.
+**(5) 손실·후처리.** CB-focal 손실은 제동 계열 F1을 높였지만(표 3) ECE가 {{synm:mc_cnn_gru_semantic_v2_focal:main:ece}}로 커졌다. 인과 EMA 평활화는 분당 라벨 전환을 {{synm:mc_cnn_gru_semantic_v2:main:flicker_per_min:1}}에서 {{synm:mc_cnn_gru_semantic_v2_ema:main:flicker_per_min:1}}회로 줄였으나 여전히 정답(분당 {{gt_flicker}}회)보다 많다. 모든 학습 모델의 ECE는 temperature scaling 후 0.05 이하였다.
 
 ### 6.2 강건성: FPS와 검출 노이즈
 
@@ -38,7 +38,7 @@
 
 표 6. comma.ai speedchallenge 실주행 영상의 자차 운동 상태 추정(10-fold 블록 교차검증 평균 ± 표준편차). 라벨은 속도 센서에서만 계산했다.
 
-실영상에서도 특징 v2의 효과가 뚜렷했다. 같은 구조에서 v1 특징은 macro-F1 {{comma:mc_cnn_gru_balanced_v1:test_20fps:macro_f1}}, 제동 AUROC {{comma:mc_cnn_gru_balanced_v1:test_20fps:braking_auroc}}였고, v2 특징은 {{comma:mc_cnn_gru_balanced_v2:test_20fps:macro_f1}}, {{comma:mc_cnn_gru_balanced_v2:test_20fps:braking_auroc}}였다. 가장 높은 구성은 창 16의 의미 그룹 모델({{comma:mc_cnn_gru_semantic_v2_w16:test_20fps:macro_f1}})이지만 fold 간 표준편차가 0.1 안팎으로 커서 구조 간 차이는 통계적으로 구분되지 않는다. 룰 단독은 제동 이벤트 recall이 높으나({{commam:rule_v2_ego:test_20fps:event_recall}}) 분당 오경보가 {{commam:rule_v2_ego:test_20fps:false_alarms_per_min}}회로 실용성이 낮다. 가속 상태는 모든 모델에서 F1이 낮았는데, 전방 장면만으로는 자차의 가속 의도를 관측하기 어렵기 때문이다. 짝수 프레임만으로 특징을 다시 계산한 10fps 평가에서도 macro-F1이 유지되었다(표 6 마지막 열).
+실영상에서도 특징 v2의 효과가 뚜렷했다. 같은 구조에서 v1 특징은 macro-F1 {{comma:mc_cnn_gru_balanced_v1:test_20fps:macro_f1}}, 제동 AUROC {{comma:mc_cnn_gru_balanced_v1:test_20fps:braking_auroc}}였고, v2 특징은 {{comma:mc_cnn_gru_balanced_v2:test_20fps:macro_f1}}, {{comma:mc_cnn_gru_balanced_v2:test_20fps:braking_auroc}}였다. 가장 높은 구성은 창 16의 의미 그룹 모델({{comma:mc_cnn_gru_semantic_v2_w16:test_20fps:macro_f1}})이지만 fold 간 표준편차가 0.1 안팎으로 커서 구조 간 차이는 통계적으로 구분되지 않는다. 룰 단독은 제동 이벤트 recall이 높으나({{commam:rule_v2_ego:test_20fps:event_recall}}) 분당 오경보가 {{commam:rule_v2_ego:test_20fps:false_alarms_per_min:1}}회로 실용성이 낮다. 가속 상태는 모든 모델에서 F1이 낮았는데, 전방 장면만으로는 자차의 가속 의도를 관측하기 어렵기 때문이다. 짝수 프레임만으로 특징을 다시 계산한 10fps 평가에서도 macro-F1이 유지되었다(표 6 마지막 열).
 
 {{table:comma_s2r}}
 
