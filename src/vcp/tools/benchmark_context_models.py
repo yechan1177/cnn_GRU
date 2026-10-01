@@ -148,44 +148,8 @@ class SequenceDataset(Dataset):
         return output
 
 
-class LiteratureCNNGRUNet(nn.Module):
-    """문헌형 단일채널 CNN-GRU baseline."""
-
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        num_contexts: int,
-        dropout: float = 0.1,
-        cnn_channels: int = 24,
-    ) -> None:
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv1d(input_dim, cnn_channels, kernel_size=3, padding=1),
-            nn.BatchNorm1d(cnn_channels),
-            nn.ReLU(),
-            nn.Conv1d(cnn_channels, cnn_channels, kernel_size=3, padding=1),
-            nn.ReLU(),
-        )
-        self.gru = nn.GRU(
-            input_size=cnn_channels,
-            hidden_size=hidden_dim,
-            num_layers=1,
-            batch_first=True,
-        )
-        self.dropout = nn.Dropout(dropout)
-        self.context_head = nn.Linear(hidden_dim, num_contexts)
-        self.boundary_head = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
-        # x: [B, T, D] -> [B, D, T]
-        encoded = self.conv(x.transpose(1, 2)).transpose(1, 2)
-        gru_out, _ = self.gru(encoded)
-        pooled = self.dropout(gru_out.mean(dim=1))
-        return {
-            "context_logits": self.context_head(pooled),
-            "boundary_logit": self.boundary_head(pooled).squeeze(-1),
-        }
+# 문헌형 단일채널 CNN-GRU는 공용 모듈로 이동했다(하위 호환용 재노출).
+from vcp.components.temporal import LiteratureCNNGRUNet  # noqa: E402
 
 
 def infer_feature_dim(rows: list[dict[str, Any]]) -> int:

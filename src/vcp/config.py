@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -47,6 +47,8 @@ class SpatialConfig:
     max_det: int = 20
     input_size: int = 640
     fallback_to_mock: bool = True
+    # 검출 박스 -> 특징 변환 버전 (v1: 2026-03 제출본 호환, v2: FPS 불변 + 추적)
+    feature_version: str = "v1"
 
 
 @dataclass(slots=True)
@@ -60,6 +62,8 @@ class TemporalConfig:
     checkpoint_path: str | None = None
     device: str = "cpu"
     dropout: float = 0.1
+    # True면 체크포인트 로딩 실패 시 mock encoder로 대체(개발용). 실험/배포는 False 권장
+    fallback_to_mock: bool = True
 
 
 @dataclass(slots=True)
