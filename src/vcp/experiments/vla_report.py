@@ -103,6 +103,28 @@ def paired_bootstrap(a: np.ndarray, b: np.ndarray, n_boot: int = 4000, seed: int
     return {"diff": float(da.mean()), "lo": float(lo), "hi": float(hi), "p_le0": float((boots <= 0).mean())}
 
 
+def _rank(x: np.ndarray) -> np.ndarray:
+    order = np.argsort(x, kind="mergesort")
+    r = np.empty(len(x), dtype=float)
+    r[order] = np.arange(len(x), dtype=float)
+    # 동률은 평균 순위
+    for v in np.unique(x):
+        m = x == v
+        if m.sum() > 1:
+            r[m] = r[m].mean()
+    return r
+
+
+def spearman(x: np.ndarray, y: np.ndarray, n_perm: int = 10000, seed: int = 0) -> tuple[float, float]:
+    """스피어만 순위상관과 양측 순열 검정 p값(scipy 없이)."""
+
+    rx, ry = _rank(np.asarray(x, float)), _rank(np.asarray(y, float))
+    rho = float(np.corrcoef(rx, ry)[0, 1])
+    rng = np.random.default_rng(seed)
+    null = np.array([np.corrcoef(rx, rng.permutation(ry))[0, 1] for _ in range(n_perm)])
+    return rho, float((np.abs(null) >= abs(rho) - 1e-12).mean())
+
+
 def summarize_condition(rs: list[dict[str, Any]], expert: dict[str, Any], moving: bool) -> dict[str, Any]:
     succ = success_matrix(rs, expert, moving)
     cl = [r["closed_loop"]["overall"] for r in rs]
@@ -194,7 +216,8 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
     header = ["방법", "엣지 가능", "예산", "성공률", "위험 시나리오 성공률", "충돌률", "속도 오차(m/s)", "headway 오차(s)", "RMS jerk", "개루프 MAE", "위험 MAE", "위험 프레임 회수율"]
     rows = []
     full = summ.get(("driving", "full", 1.0))
-    for b in budgets:
+    main_b0 = 0.02 if 0.02 in budgets else (budgets[0] if budgets else None)
+    for b in [main_b0] if main_b0 is not None else []:
         for m in METHOD_ORDER:
             s = summ.get(("driving", m, b))
             if s is None:
@@ -218,6 +241,30 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
     if full:
         rows.append([METHOD_LABELS["full"], "-", "100%", _fmt(*full["success"]), _fmt(*full["hazard_success"]), _fmt(*full["collision"]), _fmt(*full["speed_error"], digits=2), _fmt(*full["headway_error"], digits=2), _fmt(*full["rms_jerk"], digits=2), _fmt(*full["mae"]), _fmt(*full["mae_hazard"]), "1.000"])
     _write_table(tables / "vla_main_driving", header, rows)
+
+    # 예산별 성공률 행렬
+    brow = []
+    for m in METHOD_ORDER:
+        cells = [summ.get(("driving", m, b)) for b in budgets]
+        if not any(cells):
+            continue
+        brow.append([METHOD_LABELS[m]] + [_fmt(*c["success"]) if c else "-" for c in cells])
+    if full:
+        brow.append([METHOD_LABELS["full"]] + [_fmt(*full["success"])] * 0 + [f"(100%: {_fmt(*full['success'])})"] + [""] * (len(budgets) - 1))
+    _write_table(tables / "vla_budget_success", ["방법"] + [f"{int(round(b * 100))}%" for b in budgets], brow)
+
+    # 개루프 지표와 폐루프 성공률의 순위상관(조건 단위)
+    pairs = [(s["mae"][0], s["mae_hazard"][0], s["success"][0]) for (d, m, b), s in summ.items() if d == "driving" and np.isfinite(s["mae"][0])]
+    if len(pairs) >= 5:
+        arr = np.asarray(pairs)
+        r1, p1 = spearman(arr[:, 0], arr[:, 2])
+        r2, p2 = spearman(arr[:, 1], arr[:, 2])
+        stats["ol_cl_spearman_mae"] = r1
+        stats["ol_cl_spearman_mae_p"] = p1
+        stats["ol_cl_spearman_mae_hazard"] = r2
+        stats["ol_cl_spearman_mae_hazard_p"] = p2
+        stats["ol_cl_n_conditions"] = len(pairs)
+        _olcl_figure(root, summ)
 
     # 대응 부트스트랩: 각 방법 vs 무작위(같은 예산), ours vs 각 방법
     boot: dict[str, Any] = {}
@@ -448,6 +495,37 @@ def _figures(root: Path, summ: dict[tuple[str, str, float], dict[str, Any]], bud
         plt.close(fig)
 
 
+def _olcl_figure(root: Path, summ: dict[tuple[str, str, float], dict[str, Any]]) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    try:
+        import koreanize_matplotlib  # noqa: F401
+    except ModuleNotFoundError:  # pragma: no cover
+        pass
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+    for (d, m, b), s in summ.items():
+        if d != "driving" or not np.isfinite(s["mae"][0]):
+            continue
+        for ax, key in ((axes[0], "mae"), (axes[1], "mae_hazard")):
+            ax.scatter(s[key][0], s["success"][0], s=18 + 300 * b, color="#1565c0" if m == "ours" else ("#212121" if m == "full" else "#9e9e9e"), alpha=0.8)
+            if b in (0.02, 1.0):
+                ax.annotate(METHOD_LABELS.get(m, m), (s[key][0], s["success"][0]), fontsize=6.5, xytext=(3, 2), textcoords="offset points")
+    axes[0].set_xlabel("개루프 행동 MAE(전체, m/s²)")
+    axes[1].set_xlabel("개루프 행동 MAE(위험 구간, m/s²)")
+    for ax in axes:
+        ax.set_ylabel("폐루프 성공률")
+        ax.grid(alpha=0.3)
+    fig.suptitle("개루프 지표와 폐루프 성공률(점 하나 = 방법×예산 조건, 크기 ∝ 예산)", fontsize=10)
+    fig.tight_layout()
+    out = root / "summary" / "figures" / "fig_vla_openloop_vs_closedloop.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def _ablation_figure(root: Path, abl: list[tuple[float, float, dict[str, Any]]], budget: float) -> None:
     import matplotlib
 
@@ -543,12 +621,16 @@ def extra_stats(root: Path) -> dict[str, Any]:
         prev_haz = np.concatenate([[False], haz[:-1]])
         stats[f"{pre}_hazard_events"] = int((haz & (~prev_haz | ep_change)).sum())  # 에피소드 안 위험 구간 시작 수
         stats[f"{pre}_hazard_frames_10pct"] = float(haz.sum() * 0.10)
+        stats[f"{pre}_hazard_frames_2pct"] = float(haz.sum() * 0.02)
         stats[f"{pre}_class_ratio"] = [float((y == c).mean()) for c in range(6)]
         stats[f"{pre}_labels"] = meta.get("labels")
         sc = cache / f"scores_{dom}.npz"
         if sc.exists():
             z = np.load(sc)
             stats[f"{pre}_scorer_auroc"] = auroc(z["event_score"], haz)
+            stats[f"{pre}_ittc_auroc"] = auroc(z["ittc"], haz)
+            stats[f"{pre}_action_auroc"] = auroc(-z["action"], haz)
+            stats[f"{pre}_entropy_auroc"] = auroc(z["entropy"], haz)
             stats[f"{pre}_scorer_ms_per_frame_batch"] = float(z["batch_ms_per_frame"])
         styles = [e["style"] for e in meta["episodes"]]
         stats[f"{pre}_style_counts"] = {s: styles.count(s) for s in sorted(set(styles))}
@@ -561,13 +643,46 @@ def extra_stats(root: Path) -> dict[str, Any]:
             pre = "scorer" if dom == "driving" else "robot_scorer"
             for k in ("val_macro_f1", "val_hazard_auroc", "params", "train_seconds", "train_episodes", "temperature"):
                 stats[f"{pre}_{k}"] = info.get(k)
+    runs_path = root / "summary" / "curation_runs.json"
+    runs = json.loads(runs_path.read_text(encoding="utf-8")) if runs_path.exists() else []
+    # 계산 비용: 점수기 단일 창 지연(이전 지연 측정), 검출기, coreset 선택 시간, 오프라인 손실 기준선의 정책 학습 시간
+    lat_path = Path("experiments/exp_100_paper_suite/summary/latency_results.json")
+    if lat_path.exists():
+        lat = json.loads(lat_path.read_text(encoding="utf-8"))
+        for t in lat["temporal"]:
+            if t["model"] == "mc_cnn_gru_semantic_v1v2_w16":
+                stats["cost_scorer_params"] = t["params"]
+                stats["cost_scorer_torch_ms"] = t["torch_cpu_t1"]["p50_ms"]
+                stats["cost_scorer_onnx_ms"] = t.get("onnx_cpu_t1", {}).get("p50_ms")
+        for y in lat["yolo"]:
+            if y["imgsz"] == 640 and y["threads"] == 4:
+                stats["cost_yolo640_ms"] = y["p50_ms"]
+            if y["imgsz"] == 320 and y["threads"] == 4:
+                stats["cost_yolo320_ms"] = y["p50_ms"]
+    cfg_d = CurationSuiteConfig(root=root, domain="driving")
+    pp = pool_path(cfg_d)
+    if (pp.parent / f"{pp.name}.npz").exists():
+        import time as _time
+
+        from ..vla.curation import select
+
+        pool, _ = load_pool(pp)
+        t0 = _time.perf_counter()
+        select("coreset", 0.02, pool["ep"], cfg_d.clip_len, np.random.default_rng(0), features=pool["X_v1v2"])
+        stats["cost_coreset_s"] = _time.perf_counter() - t0
+        sc = np.load(cache / "scores_driving.npz")
+        t0 = _time.perf_counter()
+        select("ours", 0.02, pool["ep"], cfg_d.clip_len, np.random.default_rng(0), event_score=sc["event_score"], entropy=sc["entropy"], lam=0.5, reservoir=0.9)
+        stats["cost_ours_select_s"] = _time.perf_counter() - t0
+    if runs_path.exists():
+        full_t = [r["train_log"]["train_time_s"] for r in runs if r["job"]["domain"] == "driving" and r["job"]["method"] == "full"]
+        if full_t:
+            stats["cost_offline_train_min"] = float(np.mean(full_t) / 60)
     dev = device_info()
     stats["cpu_model"] = dev.get("cpu_model", dev.get("processor"))
     stats["cpu_count"] = dev.get("cpu_count")
     stats["torch_version"] = dev.get("torch")
-    runs_path = root / "summary" / "curation_runs.json"
     if runs_path.exists():
-        runs = json.loads(runs_path.read_text(encoding="utf-8"))
         tt = [r["train_log"]["train_time_s"] for r in runs if r["job"]["domain"] == "driving"]
         tot = [r["seconds"] for r in runs if r["job"]["domain"] == "driving"]
         if tt:

@@ -23,7 +23,7 @@
 
 - GT 위험 프레임(제동 경고 + 강한 제동 위험)은 전체의 {{p:pool_hazard_ratio}}이다.
 - 위험 구간은 {{s:pool_hazard_events:0}}개이다.
-- 무작위 10% 선택에 포함되는 위험 프레임은 기댓값 기준 약 {{s:pool_hazard_frames_10pct:0}}개에 불과하다. 이는 희소 위험의 과소표집 문제를 정량적으로 보여준다.
+- 주 예산 2%로 무작위 선택하면 학습 프레임 {{s:driving:random:0.02:n_train_frames:0}}개 가운데 위험 프레임은 기댓값 기준 약 {{s:pool_hazard_frames_2pct:0}}개에 불과하다. 이는 소예산에서 희소 위험이 과소표집되는 문제를 정량적으로 보여준다.
 - 클래스별 비율은 표 2에 제시했다.
 
 {{table:pool_distribution}}
