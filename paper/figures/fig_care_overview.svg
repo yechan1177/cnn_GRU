@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560" font-family="NanumGothic, 'Noto Sans KR', sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#37474f"/></marker>
+    <style>
+      .box{fill:#ffffff;stroke:#37474f;stroke-width:2;rx:10}
+      .edge{fill:#e3f2fd;stroke:#1565c0;stroke-width:2}
+      .srv{fill:#f3e5f5;stroke:#6a1b9a;stroke-width:2}
+      .t{font-size:19px;fill:#212121;font-weight:700}
+      .s{font-size:15px;fill:#424242}
+      .m{font-size:14px;fill:#1565c0}
+      .ln{stroke:#37474f;stroke-width:2.2;fill:none;marker-end:url(#ar)}
+      .dash{stroke:#6a1b9a;stroke-width:2;fill:none;stroke-dasharray:7 5;marker-end:url(#ar)}
+    </style>
+  </defs>
+  <rect x="10" y="10" width="905" height="540" rx="16" class="edge" fill-opacity="0.35"/>
+  <text x="30" y="42" class="t" fill="#1565c0">현장 장치(차량 · 이동로봇) — 수집 시점, 상수 비용, 정책 비의존</text>
+  <rect x="975" y="10" width="415" height="540" rx="16" class="srv" fill-opacity="0.35"/>
+  <text x="995" y="42" class="t" fill="#6a1b9a">서버 — VLA 학습과 폐루프 검증</text>
+
+  <rect x="35" y="80" width="150" height="110" class="box"/>
+  <text x="55" y="118" class="t">카메라</text><text x="55" y="145" class="s">스트림 o_t</text><text x="55" y="168" class="s">+ 속도·행동 a_t</text>
+
+  <rect x="225" y="80" width="175" height="110" class="box"/>
+  <text x="243" y="118" class="t">검출기</text><text x="243" y="145" class="s">YOLOv8n 3클래스</text><text x="243" y="168" class="s">사람·차량·이륜차</text>
+
+  <rect x="440" y="80" width="205" height="110" class="box"/>
+  <text x="458" y="112" class="t">의미·물리 특징</text><text x="458" y="139" class="s">v1: 밀도·면적·비율</text><text x="458" y="162" class="s">v2: 추적, 역TTC</text><text x="458" y="182" class="m">d ln w/dt = 1/TTC</text>
+
+  <rect x="685" y="80" width="210" height="110" class="box"/>
+  <text x="703" y="112" class="t">맥락 점수기</text><text x="703" y="139" class="s">멀티채널 CNN-GRU</text><text x="703" y="162" class="s">창 16, 온도 보정</text><text x="703" y="182" class="m">p_t(6맥락)</text>
+
+  <rect x="440" y="250" width="455" height="125" class="box"/>
+  <text x="458" y="283" class="t">위험 강화 클립 선별(예산 β)</text>
+  <text x="458" y="311" class="m">s_k = max e_t + λ·mean u_t   (e: 위험 확률, u: 엔트로피)</text>
+  <text x="458" y="336" class="s">(1−ρ)K: 점수 상위 클립 · ρK: 저장소(무작위)</text>
+  <text x="458" y="360" class="s">스트리밍: 분위수 임계값 / 최소 힙</text>
+
+  <rect x="35" y="250" width="360" height="125" class="box"/>
+  <text x="53" y="283" class="t">언어·행동 정렬</text>
+  <text x="53" y="311" class="s">지시문 ℓ: 스타일 + 목표 속도</text>
+  <text x="53" y="336" class="s">서술 n_t: 맥락 + 속도 + TTC 템플릿</text>
+  <text x="53" y="360" class="s">행동: 가속도 청크 a_{t:t+H}</text>
+
+  <rect x="35" y="420" width="860" height="105" class="box"/>
+  <text x="53" y="455" class="t">내보내기(LeRobot v2): 관측 · 언어 · 행동 정렬 클립</text>
+  <text x="53" y="483" class="s">저장되지 않은 프레임은 서버에 없다 → 과거 프레임과 행동 타깃도 클립 안에서만 구성</text>
+  <text x="53" y="507" class="s">저장량 = β × 원본</text>
+
+  <path d="M185,135 L222,135" class="ln"/>
+  <path d="M400,135 L437,135" class="ln"/>
+  <path d="M645,135 L682,135" class="ln"/>
+  <path d="M790,190 L790,247" class="ln"/>
+  <path d="M440,312 L398,312" class="ln"/>
+  <path d="M215,375 L215,417" class="ln"/>
+  <path d="M110,190 L110,247" class="ln"/>
+
+  <rect x="1000" y="80" width="365" height="140" class="box"/>
+  <text x="1018" y="114" class="t">VLA-lite 정책</text>
+  <text x="1018" y="142" class="s">영상(t, t−2) → CNN</text>
+  <text x="1018" y="166" class="s">지시문 → 임베딩 → FiLM 조건화</text>
+  <text x="1018" y="190" class="s">속도 → MLP → 가속도 청크(H=8)</text>
+  <text x="1018" y="210" class="m">경사 단계 T 고정(통제)</text>
+
+  <rect x="1000" y="260" width="365" height="125" class="box"/>
+  <text x="1018" y="294" class="t">폐루프 평가</text>
+  <text x="1018" y="322" class="s">정책이 자차를 직접 제어</text>
+  <text x="1018" y="346" class="s">성공 = 무충돌 ∧ 진행 ≥ 0.8×전문가</text>
+  <text x="1018" y="370" class="s">위험 시나리오 · 지시 준수 · 승차감</text>
+
+  <rect x="1000" y="420" width="365" height="105" class="box"/>
+  <text x="1018" y="454" class="t">실주행 개루프 평가</text>
+  <text x="1018" y="482" class="s">comma.ai 영상, 블록 교차검증</text>
+  <text x="1018" y="506" class="s">제동 구간 MAE · 제동 시작 AUROC</text>
+
+  <path d="M895,472 L997,160" class="dash"/>
+  <path d="M1182,220 L1182,257" class="ln"/>
+  <path d="M1182,385 L1182,417" class="ln"/>
+</svg>

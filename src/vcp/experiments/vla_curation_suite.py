@@ -516,13 +516,57 @@ def stage_pilot(cfg: CurationSuiteConfig) -> dict[str, Any]:
     return {"jobs": [r["key"] for r in res]}
 
 
+def expert_reference(cfg: CurationSuiteConfig, eval_set: str) -> dict[str, Any]:
+    """같은 평가 시나리오를 전문가(지연 없는 IDM 스타일 명령)로 돈 기준 결과(캐시)."""
+
+    from ..vla.closed_loop import make_test_specs, run_closed_loop
+
+    path = cfg.cache / f"expert_{cfg.domain}_{eval_set}.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    per_cell = cfg.val_per_cell if eval_set == "val" else cfg.test_per_cell
+    specs = make_test_specs(cfg.domain, per_cell, SEED_BASES[cfg.domain][eval_set])
+    res = run_closed_loop(None, specs, domain=cfg.domain)
+    cfg.cache.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(res, ensure_ascii=False, default=_json_default), encoding="utf-8")
+    return res
+
+
+SUCCESS_PROGRESS = 0.8
+
+
+def episode_success(episodes: list[dict[str, Any]], expert: dict[str, Any], moving_only: bool = False) -> np.ndarray:
+    """에피소드 성공 = 충돌 없음 AND 이동 거리 ≥ 0.8 × 같은 시나리오 전문가 이동 거리.
+
+    충돌률만 보면 멈춰 서는 정책이 최고점이 되므로, CARLA 주행 점수처럼 진행률을 함께 요구한다.
+    로봇 도메인은 정지 중 피충돌(작업자가 다가와 부딪힘)을 빼기 위해 moving_only=True로 주행 중 충돌만 본다.
+    """
+
+    ref = {(e["scenario"], e["seed"]): e["distance"] for e in expert["episodes"]}
+    key = "collision_moving" if moving_only else "collision"
+    out = []
+    for e in episodes:
+        d_ref = ref[(e["scenario"], e["seed"])]  # 평가 사양이 다르면 KeyError(조용한 오판정 방지)
+        progress_ok = e["distance"] >= SUCCESS_PROGRESS * d_ref
+        out.append((not e[key]) and progress_ok)
+    return np.asarray(out, dtype=bool)
+
+
 def stage_tune(cfg: CurationSuiteConfig) -> dict[str, Any]:
     grid_l = (0.0, 0.5, 1.0) if not cfg.quick else (0.5,)
     grid_r = (0.0, 0.3, 0.6) if not cfg.quick else (0.3,)
     jobs = [make_job(cfg, "ours", 0.10, 0, "val", lam=lam, reservoir=r) for lam in grid_l for r in grid_r]
     res = run_jobs(cfg, jobs)
-    best = min(res, key=lambda r: (r["closed_loop"]["overall"]["collision_rate"], r["closed_loop"]["overall"].get("speed_error", 0.0)))
-    choice = {"lam": best["job"]["lam"], "reservoir": best["job"]["reservoir"], "criterion": "검증 충돌률 최소, 동률이면 속도 오차 최소"}
+    expert = expert_reference(cfg, "val")
+    moving = cfg.domain == "robot"
+    scored = [(float(episode_success(r["closed_loop"]["episodes"], expert, moving).mean()), -float(r["closed_loop"]["overall"].get("speed_error") or 0.0), r) for r in res]
+    best = max(scored, key=lambda x: (x[0], x[1]))[2]
+    choice = {
+        "lam": best["job"]["lam"],
+        "reservoir": best["job"]["reservoir"],
+        "criterion": "검증 성공률(충돌 없음 + 전문가 대비 진행 80% 이상) 최대, 동률이면 속도 오차 최소",
+        "grid": [{"lam": r["job"]["lam"], "reservoir": r["job"]["reservoir"], "success": sc, "speed_error": -se} for sc, se, r in scored],
+    }
     (cfg.cache / f"tune_{cfg.domain}.json").write_text(json.dumps(choice, ensure_ascii=False), encoding="utf-8")
     return choice
 
