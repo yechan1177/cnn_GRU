@@ -35,6 +35,7 @@ def _load(name: str) -> dict[str, Any] | None:
 
 
 SYN = _load("synthetic_results.json")
+SYNX = _load("synthetic_extra_results.json")
 COM = _load("comma_results.json")
 VLA = _load("vla_results.json")
 LAT = _load("latency_results.json")
@@ -66,6 +67,12 @@ def _syn_vals(model: str, test: str, metric: str) -> list[float]:
     if not SYN:
         return []
     return [_get(r["results"][test], metric) for r in SYN["records"] if r["model"] == model and test in r["results"]]
+
+
+def _synx_vals(model: str, test: str, metric: str) -> list[float]:
+    if not SYNX:
+        return []
+    return [_get(r["results"][test], metric) for r in SYNX["records"] if r["model"] == model and test in r["results"]]
 
 
 def _comma_vals(model: str, split: str, metric: str) -> list[float]:
@@ -109,6 +116,7 @@ def named_values() -> dict[str, str]:
     if SYN:
         ds = SYN["dataset"]
         v["synth_episodes"] = str(ds["episodes"])
+        v["gt_flicker"] = f"{SYN['records'][0]['results']['main']['gt_flicker_per_min']:.1f}"
         v["prop_f1"] = _fmt(_syn_vals("mc_cnn_gru_semantic_v2", "main", "macro_f1"))
         v["v1_f1"] = _fmt(_syn_vals("mc_cnn_gru_balanced_v1", "main", "macro_f1"))
         v["rule_v1_f1"] = _fmt(_syn_vals("rule_v1", "main", "macro_f1"))
@@ -130,12 +138,34 @@ def named_values() -> dict[str, str]:
         v["robot_ft"] = _fmt(_robot_vals("robot_10pct_finetune_from_driving", "macro_f1"))
         v["robot_scratch"] = _fmt(_robot_vals("robot_10pct_scratch", "macro_f1"))
         recs = [r for r in VLA["comma_action_curation"]["records"] if r["model"].endswith("_action")]
-        v["cur20_model"] = _fmt([r["curation"]["0.2"]["model"]["frame_coverage"] for r in recs], std=False)
-        v["cur20_random"] = _fmt([r["curation"]["0.2"]["random_frame_coverage"] for r in recs], std=False)
+        for b in ("0.1", "0.2", "0.3"):
+            k = str(int(float(b) * 100))
+            v[f"cur{k}_model"] = _fmt([r["curation"][b]["model"]["frame_coverage"] for r in recs], std=False)
+            v[f"cur{k}_random"] = _fmt([r["curation"][b]["random_frame_coverage"] for r in recs], std=False)
+            v[f"cur{k}_model_ev"] = _fmt([r["curation"][b]["model"]["event_coverage"] for r in recs], std=False)
+            v[f"cur{k}_random_ev"] = _fmt([r["curation"][b]["random_event_coverage"] for r in recs], std=False)
+        base = [r for r in VLA["comma_action_curation"]["records"] if not r["model"].endswith("_action")]
+        v["act_mae05"] = _fmt([r["action_mae_model"][0] for r in recs])
+        v["act_mae10"] = _fmt([r["action_mae_model"][1] for r in recs])
+        v["act_mae05_mean"] = _fmt([r["action_mae_train_mean"][0] for r in recs])
+        v["act_mae05_zero"] = _fmt([r["action_mae_zero"][0] for r in recs])
+        v["act_corr05"] = _fmt([r["action_corr_model"][0] for r in recs])
+        v["act_corr10"] = _fmt([r["action_corr_model"][1] for r in recs])
+        v["act_ctx_f1"] = _fmt([r["context"]["macro_f1"] for r in recs])
+        v["noact_ctx_f1"] = _fmt([r["context"]["macro_f1"] for r in base])
+        ex = VLA.get("export", {})
+        for name, d in ex.items():
+            v[f"export_{name}_eps"] = str(d["episodes"])
+            v[f"export_{name}_frames"] = f"{d['frames']:,}"
     if COM:
         v["comma_prop_f1"] = _fmt(_comma_vals("mc_cnn_gru_semantic_v2", "test_20fps", "macro_f1"))
         v["comma_major_f1"] = _fmt(_comma_vals("majority", "test_20fps", "macro_f1"))
         v["comma_prop_auroc"] = _fmt(_comma_vals("mc_cnn_gru_semantic_v2", "test_20fps", "braking_auroc"))
+        s2r = COM.get("sim_to_real") or {}
+        if s2r:
+            v["s2r_v2"] = f"{s2r['synth_semantic_v2']['braking_auroc_all']:.3f}"
+            v["s2r_v1"] = f"{s2r['synth_balanced_v1']['braking_auroc_all']:.3f}"
+            v["s2r_feat"] = f"{s2r['feature_only_lead_inv_ttc']['braking_auroc_all']:.3f}"
         lc = COM["dataset"]["label_counts"]
         v["comma_data_line"] = "라벨 분포는 " + ", ".join(f"{l} {c:,}" for l, c in zip(COM["labels"], lc, strict=True)) + " 프레임이다."
     if LAT:
@@ -178,6 +208,8 @@ def resolve(text: str, depth: int = 0) -> str:
         parts = rest.split(":")
         if kind in {"syn", "synm"} and len(parts) == 3:
             return _fmt(_syn_vals(*parts), std=kind == "syn")
+        if kind in {"synx", "synxm"} and len(parts) == 3:
+            return _fmt(_synx_vals(*parts), std=kind == "synx")
         if kind in {"comma", "commam"} and len(parts) == 3:
             return _fmt(_comma_vals(*parts), std=kind == "comma")
         if kind in {"robot", "robotm"} and len(parts) == 2:

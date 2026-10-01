@@ -297,7 +297,13 @@ def comma_section(res: dict[str, Any], fig_dir: Path, tab_dir: Path) -> str:
     _write_csv(tab_dir / "comma_main.csv", header, rows)
     s2r = res.get("sim_to_real")
     if s2r:
-        rows = [[k, f"{v['braking_auroc_all']:.3f}", f"{v['braking_auroc_moving']:.3f}"] for k, v in s2r.items()]
+        s2r_names = {
+            "synth_semantic_v2": "합성 학습 모델(v2, 의미 그룹)",
+            "synth_balanced_v1": "합성 학습 모델(v1, 균등 분할)",
+            "feature_only_lead_inv_ttc": "특징 단독: 선행차 역 TTC",
+        }
+        rows = [[s2r_names.get(k, k), f"{v['braking_auroc_all']:.3f}", f"{v['braking_auroc_moving']:.3f}"] for k, v in s2r.items()]
+        _write_csv(tab_dir / "comma_s2r.csv", ["모델/점수", "AUROC(전체)", "AUROC(이동 중)"], rows)
         md.append("\n### 표 R2. 합성→실영상 zero-shot: 합성 데이터로만 학습한 모델의 제동 구간 판별 AUROC")
         md.append("점수 = P(brake_warning)+P(hard_brake_risk). '이동 중'은 정지 프레임 제외.\n")
         md.append(_md_table(["모델/점수", "AUROC(전체)", "AUROC(이동 중)"], rows))
@@ -324,6 +330,7 @@ def latency_section(res: dict[str, Any], tab_dir: Path) -> str:
     _write_csv(tab_dir / "latency_temporal.csv", header, rows)
     rows = [[str(y["imgsz"]), str(y["threads"]), f"{y['p50_ms']:.1f}", f"{y['p95_ms']:.1f}", f"{1000.0 / y['p50_ms']:.1f}"] for y in res.get("yolo", [])]
     if rows:
+        _write_csv(tab_dir / "latency_yolo.csv", ["입력 크기", "스레드", "p50(ms)", "p95(ms)", "환산 FPS(p50)"], rows)
         md.append("\n### 표 L2. YOLOv8n(3클래스) CPU 지연시간")
         md.append(_md_table(["입력 크기", "스레드", "p50(ms)", "p95(ms)", "환산 FPS(p50)"], rows))
     return "\n".join(md)
