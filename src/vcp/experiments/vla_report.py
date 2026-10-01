@@ -267,6 +267,33 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
             scen_rows.append(row)
         _write_table(tables / "vla_scenarios_driving", ["방법"] + scen_names, scen_rows)
 
+    # ---------------- 혼합 비율·불확실성 절제(테스트, 주 예산) ----------------
+    tune = json.loads((root / "cache" / "tune_driving.json").read_text(encoding="utf-8")) if (root / "cache" / "tune_driving.json").exists() else {}
+    abl_rows = []
+    if main_b is not None:
+        abl: list[tuple[float, float, dict[str, Any]]] = []
+        for k, rs in groups.items():
+            dom, ev, m, b, st, lang, lam, res = k
+            if dom == "driving" and ev == "test" and m == "ours" and b == main_b and st == steps and lang and lam is not None:
+                abl.append((float(lam), float(res), summarize_condition(rs, expert("driving", "test"), False)))
+        if ("driving", "ours", main_b) in summ and tune:
+            abl.append((float(tune["lam"]), float(tune["reservoir"]), summ[("driving", "ours", main_b)]))
+        if ("driving", "event", main_b) in summ:
+            abl.append((0.0, 0.0, summ[("driving", "event", main_b)]))
+        if ("driving", "random", main_b) in summ:
+            abl.append((float("nan"), 1.0, summ[("driving", "random", main_b)]))
+        for lam, res, s in sorted(abl, key=lambda x: (np.nan_to_num(x[0], nan=-1), x[1])):
+            label = "무작위(ρ=1)" if res == 1.0 else ("맥락 이벤트(λ=0, ρ=0)" if res == 0.0 and lam == 0.0 else f"CARE λ={lam:.1f}, ρ={res:.2f}")
+            abl_rows.append([label, _fmt(*s["success"]), _fmt(*s["hazard_success"]), _fmt(*s["collision"]), _fmt(*s["speed_error"], digits=2), _fmt(*s["hazard_frame_recall"])])
+            key = "random" if res == 1.0 else f"{lam:.1f}:{res:.2f}"
+            stats[f"abl:{key}:success"] = s["success"][0]
+            stats[f"abl:{key}:success_sd"] = s["success"][1]
+            stats[f"abl:{key}:collision"] = s["collision"][0]
+            stats[f"abl:{key}:speed_error"] = s["speed_error"][0]
+        if abl_rows:
+            _write_table(tables / "vla_ablation", ["구성", "성공률", "위험 시나리오 성공률", "충돌률", "속도 오차(m/s)", "위험 프레임 회수율"], abl_rows)
+            _ablation_figure(root, abl, main_b)
+
     # ---------------- 언어 절제 ----------------
     lang_rows = []
     for m, b in (("full", 1.0), ("ours", main_b), ("random", main_b)):
@@ -419,6 +446,37 @@ def _figures(root: Path, summ: dict[tuple[str, str, float], dict[str, Any]], bud
         fig.tight_layout()
         fig.savefig(fig_dir / "fig_vla_selection.png", dpi=160)
         plt.close(fig)
+
+
+def _ablation_figure(root: Path, abl: list[tuple[float, float, dict[str, Any]]], budget: float) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    try:
+        import koreanize_matplotlib  # noqa: F401
+    except ModuleNotFoundError:  # pragma: no cover
+        pass
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
+    rand = [s for l, r, s in abl if r == 1.0]
+    for lam, color in ((0.5, "#1565c0"), (0.0, "#90caf9")):
+        pts = sorted([(r, s) for l, r, s in abl if r < 1.0 and np.isfinite(l) and abs(l - lam) < 1e-9], key=lambda x: x[0])
+        pts += [(1.0, s) for s in rand]  # ρ=1이면 λ와 무관하게 무작위
+        if len(pts) < 2:
+            continue
+        xs = [r for r, _ in pts]
+        for ax, key, title in ((axes[0], "success", "폐루프 성공률"), (axes[1], "collision", "충돌률")):
+            ax.errorbar(xs, [s[key][0] for _, s in pts], yerr=[s[key][1] for _, s in pts], marker="o", color=color, label=f"λ={lam}", capsize=2)
+            ax.set_xlabel("저장소 비율 ρ (0 = 점수 상위만, 1 = 무작위)")
+            ax.set_title(f"{title}(예산 {int(round(budget * 100))}%)")
+            ax.grid(alpha=0.3)
+    axes[0].legend(fontsize=8)
+    fig.tight_layout()
+    out = root / "summary" / "figures" / "fig_vla_mixing.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
 
 
 def build_comma_report(root: Path) -> dict[str, Any]:

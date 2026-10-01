@@ -615,6 +615,15 @@ def stage_lang(cfg: CurationSuiteConfig) -> list[dict[str, Any]]:
     return run_jobs(cfg, jobs)
 
 
+def stage_ablation(cfg: CurationSuiteConfig) -> list[dict[str, Any]]:
+    """혼합 비율 ρ·불확실성 가중 λ 절제(테스트, 시드 3). ρ·λ는 이미 검증에서 골랐으므로 분석용으로만 보고한다."""
+
+    cfg = tuned(cfg)
+    grid = [(cfg.lam, r) for r in (0.25, 0.5, 0.75)] + [(0.0, cfg.reservoir), (0.0, 0.5)]
+    jobs = [make_job(cfg, "ours", cfg.main_budget, s, lam=lam, reservoir=r) for lam, r in grid for s in cfg.seeds]
+    return run_jobs(cfg, jobs)
+
+
 def write_summary(cfg: CurationSuiteConfig) -> Path:
     """runs/*.json → summary/curation_runs.json(정책 가중치 없이 지표만, 추적 대상)."""
 
@@ -653,7 +662,7 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser(description="VLA 연계 큐레이션 실험")
-    ap.add_argument("stage", choices=["prepare", "pilot", "tune", "main", "lang", "robot", "comma", "summary", "all"])
+    ap.add_argument("stage", choices=["prepare", "pilot", "tune", "main", "ablation", "lang", "robot", "comma", "summary", "all"])
     ap.add_argument("--root", default="experiments/exp_110_vla_curation")
     ap.add_argument("--domain", default="driving")
     ap.add_argument("--workers", type=int, default=4)
@@ -678,6 +687,8 @@ def main() -> None:
         stage_tune(cfg)
     if args.stage in {"main", "all"}:
         stage_main(cfg)
+    if args.stage in {"ablation", "all"}:
+        stage_ablation(cfg)
     if args.stage in {"lang", "all"}:
         stage_lang(cfg)
     if args.stage == "robot":
