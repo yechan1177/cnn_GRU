@@ -28,7 +28,7 @@ from .vla_curation_suite import CurationSuiteConfig, _json_default, chunk_target
 
 logger = logging.getLogger(__name__)
 
-COMMA_METHODS = ("random", "uniform", "action_trigger", "rule_ittc", "uncertainty", "event", "event_sim", "coreset", "oracle", "ours")
+COMMA_METHODS = ("random", "uniform", "action_trigger", "uncertainty", "event", "event_sim", "ours", "oracle")
 BRAKING = 2
 N_BLOCKS = 5
 PURGE = 10

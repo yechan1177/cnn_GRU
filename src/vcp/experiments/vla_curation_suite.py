@@ -560,8 +560,9 @@ def episode_success(episodes: list[dict[str, Any]], expert: dict[str, Any], movi
 
 
 def stage_tune(cfg: CurationSuiteConfig) -> dict[str, Any]:
-    grid_l = (0.0, 0.5, 1.0) if not cfg.quick else (0.5,)
-    grid_r = (0.25, 0.5, 0.75) if not cfg.quick else (0.3,)
+    # 파일럿 2차: ρ=0.3에서 정상 주행(속도 추종)이 무너져 저장소 비율을 넓게 탐색한다
+    grid_l = (0.0, 0.5) if not cfg.quick else (0.5,)
+    grid_r = (0.25, 0.5, 0.75, 0.9) if not cfg.quick else (0.3,)
     jobs = [make_job(cfg, "ours", cfg.main_budget, 0, "val", lam=lam, reservoir=r) for lam in grid_l for r in grid_r]
     res = run_jobs(cfg, jobs)
     expert = expert_reference(cfg, "val")
@@ -580,6 +581,8 @@ def stage_tune(cfg: CurationSuiteConfig) -> dict[str, Any]:
 
 def tuned(cfg: CurationSuiteConfig) -> CurationSuiteConfig:
     path = cfg.cache / f"tune_{cfg.domain}.json"
+    if not path.exists():
+        path = cfg.cache / "tune_driving.json"  # 다른 도메인·실주행은 주행 검증에서 고른 값을 그대로 쓴다
     if path.exists():
         t = json.loads(path.read_text(encoding="utf-8"))
         return replace(cfg, lam=float(t["lam"]), reservoir=float(t["reservoir"]))
