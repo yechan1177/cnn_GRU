@@ -23,6 +23,7 @@ class CameraConfig:
     source_type:
     - mock: 내장 mock 스트림 사용
     - image_folder: 이미지 폴더를 순차 프레임처럼 사용
+    - video / webcam: mp4 파일 또는 웹캠(video_source)
     """
 
     fps: int = 15
@@ -33,6 +34,8 @@ class CameraConfig:
     image_dir: str | None = None
     image_pattern: str = "*.png"
     recursive: bool = True
+    # source_type이 video/webcam일 때: mp4 경로 또는 "webcam:<index>"
+    video_source: str | None = None
 
 
 @dataclass(slots=True)

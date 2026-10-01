@@ -1,0 +1,64 @@
+# Jetson Orin Nano 배포 프로파일(실제 모델 연결판).
+# 기존 deploy_jetson_orin_nano.yaml은 mock 구성만 있어 실제 추론 경로를 검증하지 못했다.
+# device: auto → CUDA가 있으면 GPU, 없으면 CPU(클라우드 검증용).
+# 현재 체크포인트는 v1 특징 기반 6맥락 모델이다. Jetson 실측(FPS/지연/전력)은 아직 수행하지 않았다.
+runtime:
+  profile: "deploy_jetson_orin_nano_real"
+  max_frames: 120
+  seed: 11
+
+camera:
+  fps: 20
+  width: 640
+  height: 480
+  channels: 3
+  source_type: "video"
+  video_source: "data/raw/external/comma_speedchallenge/train.mp4"
+
+spatial:
+  model_name: "yolo_nano"
+  feature_dim: 16
+  feature_version: "v1"
+  weights_path: "models/checkpoints/yolo3cls_best.pt"
+  device: "auto"
+  conf_threshold: 0.45
+  max_det: 30
+  input_size: 640
+  fallback_to_mock: false
+
+temporal:
+  model_name: "gru_torch"
+  window_size: 8
+  num_contexts: 6
+  hidden_dim: 96
+  checkpoint_path: "models/checkpoints/temporal_final_best.pt"
+  device: "auto"
+  dropout: 0.1
+  fallback_to_mock: false
+
+# 체크포인트 라벨 순서(label_map 인덱스 순)
+labels:
+  - "brake_warning"
+  - "dense_traffic"
+  - "front_vehicle_follow"
+  - "hard_brake_risk"
+  - "normal_drive"
+  - "post_brake_recovery"
+
+scoring:
+  context_weight: 0.38
+  boundary_weight: 0.30
+  uncertainty_weight: 0.20
+  novelty_weight: 0.12
+  high_threshold: 0.74
+  mid_threshold: 0.50
+
+curation:
+  ring_buffer_size: 96
+  pre_event_frames: 10
+  post_event_frames: 10
+
+storage:
+  base_dir: "outputs"
+  run_name: "deploy_orin_nano_real"
+  save_raw_frames: false

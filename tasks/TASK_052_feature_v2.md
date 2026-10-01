@@ -1,9 +1,9 @@
-# TASK_052_feature_v2 검출 특징 모듈화 및 FPS 불변 특징 v2
-
-## 목적
-- `docs/25_연구고도화_단계별계획.md`의 해당 단계를 수행한다.
+# TASK_052 검출 특징 모듈화 및 FPS 불변 특징 v2
 
 ## 체크리스트
-- [ ] 작업 수행
-- [ ] 테스트/검증
-- [ ] 문서 반영
+- [x] `vcp.features` 분리(Detection/FrameDetections, v1, v2, registry)
+- [x] v1이 2026-03 구현과 같은 값을 내는지 회귀 fixture 테스트(최대 오차 1e-6)
+- [x] v2: IoU 추적, Δt 정규화 EMA, 역 TTC, VRU 접근 지표
+- [x] FPS 불변성 단위 테스트(10/30fps에서 역 TTC ≈ 0.5)
+- [x] v1 클래스 비율 값/이름 불일치 문서화
+- [x] `spatial.feature_version` 설정
