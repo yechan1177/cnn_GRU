@@ -139,3 +139,6 @@ def predict_open_loop(model, data: PolicyData, idx: np.ndarray) -> np.ndarray   
 ```
 - 학습 대상 = 같은 그룹 안의 `action[t : t+chunk]`(끝은 마지막 값으로 채움), `accel_scale`로 정규화한다.
 - 경사 단계 수(`steps`)를 고정해 데이터 양과 계산량을 분리한다.
+- 구현 확장(시그니처 변경 없음, 모두 기본값): `PolicyConfig`에 `huber_beta`, `front_weight`, `warmup_steps`, `grad_clip`,
+  `n_curve_bins`, `device` 필드, `PoolImageSource(..., size=None, max_cache=100_000)`와 `from_pool(arrays, domain)`,
+  `PolicyData.observation(idx)`(PolicyFn 입력 형식 dict), `predict_open_loop(..., batch_size=512)`. 세부는 `docs/31_VLA_lite_정책.md`.
