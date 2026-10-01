@@ -118,6 +118,8 @@ def selection_stats(mask: np.ndarray, labels: np.ndarray, group: np.ndarray,
 ### `src/vcp/tools/extract_small_frames.py`
 - comma `train.mp4`를 64×64 uint8로 축소해 `frames` [20400,64,64,3]로 저장한다(`data/processed/comma_speedchallenge/frames_64.npz`).
 - 하늘·보닛을 자르는 crop 인자를 둔다.
+- (A3 추가, 시그니처 변경 없음) npz에 `crop` int32 [4] = (y0, y1, x0, x1), `size` int32 [2] = (H, W), `frame_id` int32 [N], `fps`도 저장한다. 기본 crop은 (100, 360, 0, 640)이며 근거는 모듈 docstring에 있다. `frames[i]`는 `comma_table.npz`의 `frame_id == i` 행과 대응한다(현재 항등 정렬).
+- (A3 추가) `curation.ITTC_FEATURE_INDEX` = `V2_KEYS.index("lead_inv_ttc")`. 방법별 정의·계산량은 `docs/30_큐레이션_방법_정의.md`.
 
 ## A4 소유
 ### `src/vcp/vla/policy.py`
