@@ -329,7 +329,21 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         stats[f"pilot:{m}:{b:.2f}:{st}:success"] = s["success"][0]
         stats[f"pilot:{m}:{b:.2f}:{st}:success_sd"] = s["success"][1]
         stats[f"pilot:{m}:{b:.2f}:{st}:n"] = len(rs)
+        if st == steps:
+            stats[f"pilot_coll:{m}:{b:.2f}"] = s["collision"][0]
+            stats[f"pilot_spd:{m}:{b:.2f}"] = s["speed_error"][0]
+            stats[f"pilot_hzrec:{m}:{b:.2f}"] = s["hazard_frame_recall"][0]
     _write_table(tables / "vla_pilot", ["방법", "예산", "경사 단계", "시드 수", "검증 성공률", "충돌률", "속도 오차", "학습 시간(s)"], pilot_rows)
+    tune_rows = []
+    for k, rs in sorted(groups.items(), key=lambda kv: (str(kv[0][6]), str(kv[0][7]))):
+        dom, ev, m, b, st, lang, lam, res = k
+        if ev != "val" or dom != "driving" or lam is None:
+            continue
+        s = summarize_condition(rs, expert("driving", "val"), False)
+        tune_rows.append([f"{lam:.1f}", f"{res:.2f}", _fmt(*s["success"]), _fmt(*s["collision"]), _fmt(*s["speed_error"], digits=2), _fmt(*s["hazard_frame_recall"])])
+        stats[f"tune:{lam:.1f}:{res:.2f}:success"] = s["success"][0]
+    if tune_rows:
+        _write_table(tables / "vla_tune", ["λ", "ρ", "검증 성공률", "충돌률", "속도 오차(m/s)", "위험 프레임 회수율"], tune_rows)
     tune_path = root / "cache" / "tune_driving.json"
     if tune_path.exists():
         stats["tune"] = json.loads(tune_path.read_text(encoding="utf-8"))
