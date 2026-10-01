@@ -18,7 +18,7 @@ from pathlib import Path
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description="논문용 자동 실험 스위트")
-    parser.add_argument("suite", choices=["synthetic", "comma", "latency", "vla", "report", "all"])
+    parser.add_argument("suite", choices=["synthetic", "synthetic-extra", "comma", "latency", "vla", "report", "all"])
     parser.add_argument("--out", default="experiments/exp_100_paper_suite/summary")
     parser.add_argument("--data-dir", default="data/processed/synth")
     parser.add_argument("--comma-dir", default="data/processed/comma_speedchallenge")
@@ -34,6 +34,21 @@ def main() -> None:
 
         run_synthetic_suite(
             SuiteConfig(out_dir=out, data_dir=Path(args.data_dir), seeds=seeds, workers=args.workers, quick=args.quick)
+        )
+    if args.suite in {"synthetic-extra", "all"}:
+        from .synthetic_suite import SuiteConfig, extra_model_specs, run_synthetic_suite
+
+        run_synthetic_suite(
+            SuiteConfig(
+                out_dir=out,
+                data_dir=Path(args.data_dir),
+                seeds=seeds,
+                workers=args.workers,
+                quick=args.quick,
+                results_name="synthetic_extra_results.json",
+                include_rules=False,
+            ),
+            specs=extra_model_specs(args.quick),
         )
     if args.suite in {"comma", "all"}:
         from .comma_suite import CommaSuiteConfig, run_comma_suite

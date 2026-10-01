@@ -24,15 +24,17 @@ NAMES: dict[str, str] = {
     "mlp_last_v2": "MLP(마지막 프레임, 시간정보 없음)",
     "gru_v2": "GRU",
     "cnn_gru_single_v2": "단일채널 CNN-GRU(문헌형)",
-    "mc_cnn_gru_balanced_v2": "멀티채널 CNN-GRU(균등 분할)",
-    "mc_cnn_gru_semantic_v2": "멀티채널 CNN-GRU(의미 그룹, 제안)",
-    "mc_cnn_gru_semantic_v2_focal": "제안 + CB-focal 손실",
-    "mc_cnn_gru_semantic_v2_w16": "제안 + 창 16",
-    "mc_cnn_gru_semantic_v2_ema": "제안 + 인과 EMA 평활화",
+    "mc_cnn_gru_balanced_v2": "멀티채널 CNN-GRU(균등 분할, v2)",
+    "mc_cnn_gru_semantic_v2": "멀티채널 CNN-GRU(의미 그룹, v2)",
+    "mc_cnn_gru_semantic_v2_focal": "의미 그룹(v2) + CB-focal 손실",
+    "mc_cnn_gru_semantic_v2_w16": "의미 그룹(v2) + 창 16",
+    "mc_cnn_gru_semantic_v2_ema": "의미 그룹(v2) + 인과 EMA 평활화",
     "mc_cnn_gru_balanced_v1": "2026-03 구성(v1 특징, 균등 분할)",
     "mc_cnn_gru_balanced_v1_hybrid": "2026-03 구성 + 하이브리드 룰 게이트",
     "mc_cnn_gru_semantic_v1": "멀티채널 의미 그룹(v1 특징)",
-    "mc_cnn_gru_semantic_v2_action": "제안 + 행동 보조 head",
+    "mc_cnn_gru_semantic_v2_action": "멀티채널(의미 그룹, v2) + 행동 보조 head",
+    "mc_cnn_gru_semantic_v1v2": "멀티채널 의미 그룹(v1+v2 결합 특징)",
+    "mc_cnn_gru_semantic_v1v2_w16": "멀티채널 의미 그룹(v1+v2 결합) + 창 16",
     "driving_pretrained_zero_shot": "주행 사전학습 → 로봇 zero-shot",
     "robot_10pct_scratch": "로봇 10% 데이터, 처음부터 학습",
     "robot_10pct_finetune_from_driving": "로봇 10% 데이터, 주행 사전학습 후 미세조정",
@@ -42,7 +44,7 @@ NAMES: dict[str, str] = {
 C_BLUE, C_ORANGE, C_AQUA = "#2a78d6", "#eb6834", "#1baf7a"
 C_NEUTRAL = "#a8a7a0"
 INK, INK2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
-PROPOSED = "mc_cnn_gru_semantic_v2"
+PROPOSED = "mc_cnn_gru_semantic_v2"  # 하위 실험(comma/VLA)에 쓰는 기준 구성
 
 
 def _name(key: str) -> str:
@@ -199,7 +201,12 @@ def synthetic_section(res: dict[str, Any], fig_dir: Path, tab_dir: Path) -> str:
     fig, ax = plt.subplots(figsize=(7.2, 0.36 * len(order) + 1.0))
     means = [_mean([r["results"]["main"]["macro_f1"] for r in groups[m]]) for m in order]
     stds = [np.std([r["results"]["main"]["macro_f1"] for r in groups[m]], ddof=1) if len(groups[m]) > 1 else 0.0 for m in order]
-    colors = [C_BLUE if m == PROPOSED else C_NEUTRAL for m in order]
+    def _color(m: str) -> str:
+        if m.startswith("rule") or m == "majority":
+            return C_NEUTRAL
+        return C_ORANGE if "_v1" in m and "_v1v2" not in m else C_BLUE
+
+    colors = [_color(m) for m in order]
     y = np.arange(len(order))[::-1]
     ax.barh(y, means, xerr=stds, color=colors, height=0.6, error_kw={"ecolor": INK2, "lw": 1, "capsize": 2})
     for yi, v in zip(y, means, strict=True):
@@ -208,6 +215,12 @@ def synthetic_section(res: dict[str, Any], fig_dir: Path, tab_dir: Path) -> str:
     ax.set_xlabel("테스트 macro-F1 (시드 3개 평균 ± 표준편차)")
     ax.set_xlim(0, min(1.0, max(means) + 0.12))
     ax.grid(axis="y", visible=False)
+    from matplotlib.patches import Patch
+
+    ax.legend(
+        handles=[Patch(color=C_BLUE, label="특징 v2(제안)"), Patch(color=C_ORANGE, label="특징 v1(2026-03)"), Patch(color=C_NEUTRAL, label="비학습 기준선")],
+        frameon=False, fontsize=8, loc="lower right",
+    )
     ax.set_title("합성 6맥락 벤치마크", loc="left", color=INK, fontsize=11)
     fig.tight_layout()
     fig.savefig(fig_dir / "fig_synthetic_macro_f1.png")
@@ -226,11 +239,33 @@ def synthetic_section(res: dict[str, Any], fig_dir: Path, tab_dir: Path) -> str:
     ax.set_xticks([10, 15, 30])
     ax.set_xlabel("테스트 FPS (학습은 15fps)")
     ax.set_ylabel("macro-F1")
-    ax.legend(frameon=False, fontsize=8, loc="lower left")
+    ax.legend(frameon=False, fontsize=8, loc="center left")
     ax.set_title("FPS 변화에 대한 강건성", loc="left", color=INK, fontsize=11)
     fig.tight_layout()
     fig.savefig(fig_dir / "fig_fps_robustness.png")
     plt.close(fig)
+    return "\n".join(md)
+
+
+def synthetic_extra_section(res: dict[str, Any], tab_dir: Path) -> str:
+    labels = res["labels"]
+    groups = _group_records(res["records"])
+    header = ["모델", "파라미터", "macro-F1(15fps)", "30fps(8프레임 연속 창)", "30fps(2프레임 간격 창)", "제동 이벤트 recall"] + [f"F1 {l}" for l in labels]
+    rows = []
+    for m, rs in groups.items():
+        main = [r["results"]["main"] for r in rs]
+        pcs = np.array([[np.nan if v is None else v for v in x["per_class_f1"]] for x in main], dtype=float)
+        rows.append(
+            [_name(m), f"{rs[0]['params']:,}", _ms([x["macro_f1"] for x in main]),
+             _ms([r["results"]["test_30fps_mid"]["macro_f1"] for r in rs]),
+             _ms([r["results"]["test_30fps_mid_dilated"]["macro_f1"] for r in rs if "test_30fps_mid_dilated" in r["results"]]),
+             _ms([x["event_recall"] for x in main])]
+            + [f"{np.nanmean(pcs[:, i]):.3f}" for i in range(len(labels))]
+        )
+    _write_csv(tab_dir / "synthetic_extra.csv", header, rows)
+    md = ["### 표 S5. 보충 실험: v1+v2 결합 특징과 시간 기준 창 (시드 3개)"]
+    md.append("시간 기준 창: 30fps 입력에서 2프레임 간격으로 8개를 골라 학습(15fps) 때와 같은 0.53초를 보게 한다.\n")
+    md.append(_md_table(header, rows))
     return "\n".join(md)
 
 
@@ -390,6 +425,7 @@ def build_report(out_dir: Path) -> Path:
     parts = ["# 자동 실험 결과 요약 (exp_100_paper_suite)", "", "이 문서는 `python -m vcp.experiments.run_suite report`가 결과 JSON에서 자동 생성한다. 수기 수정 금지.", ""]
     loaders = [
         ("synthetic_results.json", lambda r: synthetic_section(r, fig_dir, tab_dir)),
+        ("synthetic_extra_results.json", lambda r: synthetic_extra_section(r, tab_dir)),
         ("comma_results.json", lambda r: comma_section(r, fig_dir, tab_dir)),
         ("vla_results.json", lambda r: vla_section(r, fig_dir, tab_dir)),
         ("latency_results.json", lambda r: latency_section(r, tab_dir)),

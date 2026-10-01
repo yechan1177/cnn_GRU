@@ -19,12 +19,19 @@ class FrameTable:
     extra: dict[str, np.ndarray]
 
 
-def window_index(group: np.ndarray, window: int, stride: int = 1, mask: np.ndarray | None = None) -> np.ndarray:
+def window_index(
+    group: np.ndarray,
+    window: int,
+    stride: int = 1,
+    mask: np.ndarray | None = None,
+    dilation: int = 1,
+) -> np.ndarray:
     """각 대상 프레임에 대한 과거 window 인덱스 행렬 [M, W]를 만든다.
 
     - 같은 group 안에서만 과거 프레임을 사용한다(그룹 경계를 넘지 않음).
     - 그룹 시작 부분은 -1(=0 벡터 패딩)로 채운다. 런타임 실행기의 초기 0 패딩과 같다.
     - mask가 주어지면 해당 프레임만 대상 프레임으로 사용한다.
+    - dilation=k이면 k프레임 간격으로 과거를 본다(고FPS 입력에서 학습 시의 시간 길이를 맞추는 시간 기준 창).
     """
 
     n = len(group)
@@ -42,7 +49,7 @@ def window_index(group: np.ndarray, window: int, stride: int = 1, mask: np.ndarr
         rel = targets - starts[targets]
         targets = targets[(rel % stride) == 0]
 
-    offsets = np.arange(-window + 1, 1)
+    offsets = np.arange(-window + 1, 1) * max(1, int(dilation))
     mat = targets[:, None] + offsets[None, :]
     valid = mat >= starts[targets][:, None]
     return np.where(valid, mat, -1).astype(np.int64)

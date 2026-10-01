@@ -39,10 +39,38 @@ _V2_GROUPS = (
     ("vru", (11, 12, 13, 14, 15)),
 )
 
+# v1+v2 결합(32차원): v1은 0-15, v2는 16-31
+_V1V2_GROUPS = (
+    ("global", (0, 1, 2, 3, 4, 16, 17, 18, 19, 20)),
+    ("vehicle", (6, 9, 13, 14, 21, 22, 23, 24, 25, 26)),
+    ("vru", (5, 7, 8, 10, 11, 12, 15, 27, 28, 29, 30, 31)),
+)
+
 FEATURE_SPECS: dict[str, FeatureSpec] = {
     "v1": FeatureSpec("v1", tuple(V1_KEYS), _V1_GROUPS),
     "v2": FeatureSpec("v2", tuple(V2_KEYS), _V2_GROUPS),
+    "v1v2": FeatureSpec(
+        "v1v2",
+        tuple([f"v1.{k}" for k in V1_KEYS] + [f"v2.{k}" for k in V2_KEYS]),
+        _V1V2_GROUPS,
+    ),
 }
+
+
+class CombinedFeatureV1V2:
+    """v1과 v2 특징을 이어 붙인 32차원 추출기(상호 보완 ablation용)."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._v1 = build_feature_extractor("v1", **kwargs)
+        self._v2 = build_feature_extractor("v2", **kwargs)
+        self.keys = list(FEATURE_SPECS["v1v2"].keys)
+
+    def reset(self) -> None:
+        self._v1.reset()
+        self._v2.reset()
+
+    def update(self, frame: Any) -> list[float]:
+        return self._v1.update(frame) + self._v2.update(frame)
 
 
 def get_feature_spec(version: str) -> FeatureSpec:
@@ -58,8 +86,10 @@ def semantic_channel_groups(version: str) -> list[list[int]]:
     return [list(indices) for _, indices in get_feature_spec(version).semantic_groups]
 
 
-def build_feature_extractor(version: str, **kwargs: Any) -> SemanticFeatureV1 | SemanticFeatureV2:
+def build_feature_extractor(version: str, **kwargs: Any) -> Any:
     key = get_feature_spec(version).name
+    if key == "v1v2":
+        return CombinedFeatureV1V2(**kwargs)
     if key == "v1":
         allowed = {k: v for k, v in kwargs.items() if k in {"conf_threshold", "max_det", "class_count"}}
         return SemanticFeatureV1(**allowed)

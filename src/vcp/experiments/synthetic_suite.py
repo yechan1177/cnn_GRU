@@ -43,6 +43,21 @@ class SuiteConfig:
     train_stride: int = 2
     workers: int = 4
     quick: bool = False
+    results_name: str = "synthetic_results.json"
+    include_rules: bool = True
+
+
+def extra_model_specs(quick: bool = False) -> list[ModelSpec]:
+    """보충 실험: v1+v2 결합 특징, 시간 기준 창 평가(재학습 포함)."""
+
+    epochs = 3 if quick else 14
+    return [
+        ModelSpec("mc_cnn_gru_balanced_v1", "multichannel_cnn_gru", "v1", grouping="balanced", epochs=epochs),
+        ModelSpec("mc_cnn_gru_balanced_v2", "multichannel_cnn_gru", "v2", grouping="balanced", epochs=epochs),
+        ModelSpec("mc_cnn_gru_semantic_v2", "multichannel_cnn_gru", "v2", grouping="semantic", epochs=epochs),
+        ModelSpec("mc_cnn_gru_semantic_v1v2", "multichannel_cnn_gru", "v1v2", grouping="semantic", epochs=epochs),
+        ModelSpec("mc_cnn_gru_semantic_v1v2_w16", "multichannel_cnn_gru", "v1v2", grouping="semantic", window=16, epochs=epochs),
+    ]
 
 
 def default_model_specs(quick: bool = False) -> list[ModelSpec]:
@@ -177,6 +192,20 @@ def _job(args: tuple[ModelSpec, int, dict[str, Any]]) -> dict[str, Any]:
             summary["curation_event_recall"] = curve
             summary["confusion"] = np.bincount(y_t * n_classes + pred, minlength=n_classes * n_classes).reshape(n_classes, n_classes).tolist()
         results[test_name] = summary
+        if test_name == "test_30fps_mid" and ctx.get("dilated_eval"):
+            # 30fps 입력에서 2프레임 간격 창(학습 15fps와 같은 시간 길이)으로 재평가
+            idx_d = window_index(tdata["ep"], spec.window, dilation=2)
+            ld, bd, _ = predict(res.model, Xt, idx_d)
+            pdil = softmax(ld, temperature)
+            gd = tdata["ep"][idx_d[:, -1]]
+            if spec.ema_smoothing:
+                pdil = ema_smooth(pdil, gd, alpha)
+            pred_d = pdil.argmax(1)
+            if hybrid_params is not None:
+                pred_d = hybrid_gate_v1(pdil, 1.0 / (1.0 + np.exp(-bd)), Xt[idx_d[:, -1]], labels, hybrid_params)
+            results["test_30fps_mid_dilated"] = summarize(
+                tdata["y"][idx_d[:, -1]], pred_d, gd, tdata["t"][idx_d[:, -1]], n_classes, event_classes, probs=pdil
+            )
 
     return {
         "model": spec.name,
@@ -237,8 +266,9 @@ def run_synthetic_suite(cfg: SuiteConfig, specs: list[ModelSpec] | None = None) 
     split = split_groups(groups, cfg.val_ratio, cfg.test_ratio, cfg.split_seed)
     specs = specs or default_model_specs(cfg.quick)
 
-    records: list[dict[str, Any]] = _rule_jobs(paths, split)
+    records: list[dict[str, Any]] = _rule_jobs(paths, split) if cfg.include_rules else []
     ctx = {
+        "dilated_eval": True,
         "main": str(paths["main"]),
         "split": {k: v.tolist() for k, v in split.items()},
         "train_stride": cfg.train_stride,
@@ -274,7 +304,7 @@ def run_synthetic_suite(cfg: SuiteConfig, specs: list[ModelSpec] | None = None) 
         "records": records,
         "elapsed_s": round(time.perf_counter() - started, 1),
     }
-    out_path = cfg.out_dir / "synthetic_results.json"
+    out_path = cfg.out_dir / cfg.results_name
     out_path.write_text(json.dumps(out, ensure_ascii=False, indent=1, default=_json_default), encoding="utf-8")
     logger.info("저장: %s (%.1f s)", out_path, out["elapsed_s"])
     return out_path

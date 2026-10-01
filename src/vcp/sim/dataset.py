@@ -157,5 +157,7 @@ def load_dataset(path: Path) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
 
     path = Path(path)
     data = dict(np.load(path.parent / f"{path.name}.npz"))
+    if "X_v1" in data and "X_v2" in data:
+        data["X_v1v2"] = np.concatenate([data["X_v1"], data["X_v2"]], axis=1)
     meta = json.loads((path.parent / f"{path.name}.meta.json").read_text(encoding="utf-8"))
     return data, meta
