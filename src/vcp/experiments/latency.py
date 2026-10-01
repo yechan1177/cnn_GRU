@@ -130,8 +130,12 @@ def run_latency(out_dir: Path, comma_dir: Path | None = None) -> Path:
         ModelSpec("mc_cnn_gru_balanced", "multichannel_cnn_gru", grouping="balanced"),
         ModelSpec("mc_cnn_gru_semantic_v2", "multichannel_cnn_gru", "v2", grouping="semantic"),
         ModelSpec("mc_cnn_gru_semantic_v2_w16", "multichannel_cnn_gru", "v2", grouping="semantic", window=16),
+        ModelSpec("mc_cnn_gru_semantic_v1v2", "multichannel_cnn_gru", "v1v2", grouping="semantic"),
+        ModelSpec("mc_cnn_gru_semantic_v1v2_w16", "multichannel_cnn_gru", "v1v2", grouping="semantic", window=16),
     ]
-    temporal = [temporal_latency(s) for s in specs]
+    from ..features.registry import get_feature_spec
+
+    temporal = [temporal_latency(s, input_dim=get_feature_spec(s.feature_version).dim) for s in specs]
     video = Path("data/raw/external/comma_speedchallenge/train.mp4")
     yolo = yolo_latency(Path("models/checkpoints/yolo3cls_best.pt"), video)
     out = {"device": device_info(), "temporal": temporal, "yolo": yolo, "jetson_orin_nano": "미측정(실기기 필요)"}

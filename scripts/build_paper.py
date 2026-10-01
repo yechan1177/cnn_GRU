@@ -37,6 +37,9 @@ def _load(name: str) -> dict[str, Any] | None:
 SYN = _load("synthetic_results.json")
 SYNX = _load("synthetic_extra_results.json")
 COM = _load("comma_results.json")
+_COMX = _load("comma_extra_results.json")
+if COM and _COMX:
+    COM["records"] = COM["records"] + _COMX["records"]
 VLA = _load("vla_results.json")
 LAT = _load("latency_results.json")
 MISSING: list[str] = []

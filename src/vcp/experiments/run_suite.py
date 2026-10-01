@@ -18,7 +18,7 @@ from pathlib import Path
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description="논문용 자동 실험 스위트")
-    parser.add_argument("suite", choices=["synthetic", "synthetic-extra", "comma", "latency", "vla", "report", "all"])
+    parser.add_argument("suite", choices=["synthetic", "synthetic-extra", "comma", "comma-extra", "latency", "vla", "report", "all"])
     parser.add_argument("--out", default="experiments/exp_100_paper_suite/summary")
     parser.add_argument("--data-dir", default="data/processed/synth")
     parser.add_argument("--comma-dir", default="data/processed/comma_speedchallenge")
@@ -54,6 +54,22 @@ def main() -> None:
         from .comma_suite import CommaSuiteConfig, run_comma_suite
 
         run_comma_suite(CommaSuiteConfig(out_dir=out, data_dir=Path(args.comma_dir), seeds=seeds, workers=args.workers, quick=args.quick))
+    if args.suite in {"comma-extra", "all"}:
+        from .comma_suite import CommaSuiteConfig, comma_extra_specs, run_comma_suite
+
+        run_comma_suite(
+            CommaSuiteConfig(
+                out_dir=out,
+                data_dir=Path(args.comma_dir),
+                seeds=seeds,
+                workers=args.workers,
+                quick=args.quick,
+                results_name="comma_extra_results.json",
+                include_baselines=False,
+                run_sim_to_real=False,
+            ),
+            specs=comma_extra_specs(args.quick),
+        )
     if args.suite in {"latency", "all"}:
         from .latency import run_latency
 

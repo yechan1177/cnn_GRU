@@ -28,7 +28,7 @@
 
 표 4. 테스트 조건 변화에 따른 macro-F1.
 
-특징 v2는 단위 테스트에서 FPS와 무관한 역 TTC 값을 냈지만(3.2절), 모델 수준에서는 30fps에서 v2 구성의 하락({{synm:mc_cnn_gru_semantic_v2:main:macro_f1}} → {{synm:mc_cnn_gru_semantic_v2:test_30fps_mid:macro_f1}})이 v1 구성({{synm:mc_cnn_gru_balanced_v1:main:macro_f1}} → {{synm:mc_cnn_gru_balanced_v1:test_30fps_mid:macro_f1}})보다 컸다. 8프레임 창이 담는 시간이 0.53초에서 0.27초로 줄어, 시간 변화를 많이 쓰는 v2 모델이 더 영향을 받은 것으로 본다. 표 5의 보충 실험에서 30fps 입력을 2프레임 간격으로 골라 학습 때와 같은 시간 길이를 보게 하면(시간 기준 창) 이 하락이 줄어드는지 확인하였다. 검출 노이즈를 두 배로 키우면 v2 구성은 {{synm:mc_cnn_gru_semantic_v2:test_15fps_high:macro_f1}}로 떨어져 v1 구성({{synm:mc_cnn_gru_balanced_v1:test_15fps_high:macro_f1}})보다 낮아졌다. 박스 흔들림이 크기 변화율(역 TTC) 추정을 직접 교란하기 때문이며, 추적 필터 강화가 필요하다.
+특징 v2는 단위 테스트에서 FPS와 무관한 역 TTC 값을 냈지만(3.2절), 모델 수준에서는 30fps에서 v2 구성의 하락({{synm:mc_cnn_gru_semantic_v2:main:macro_f1}} → {{synm:mc_cnn_gru_semantic_v2:test_30fps_mid:macro_f1}})이 v1 구성({{synm:mc_cnn_gru_balanced_v1:main:macro_f1}} → {{synm:mc_cnn_gru_balanced_v1:test_30fps_mid:macro_f1}})보다 컸다. 처음에는 8프레임 창이 담는 시간이 0.53초에서 0.27초로 줄어든 탓으로 보았으나, 표 5의 보충 실험(시간 기준 창)에서 이 가설은 기각되었다. 검출 노이즈를 두 배로 키우면 v2 구성은 {{synm:mc_cnn_gru_semantic_v2:test_15fps_high:macro_f1}}로 떨어져 v1 구성({{synm:mc_cnn_gru_balanced_v1:test_15fps_high:macro_f1}})보다 낮아졌다. 박스 흔들림이 크기 변화율(역 TTC) 추정을 직접 교란하기 때문이며, 추적 필터 강화가 필요하다.
 
 {{section:results_extra_ko}}
 

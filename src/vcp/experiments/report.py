@@ -271,7 +271,7 @@ def synthetic_extra_section(res: dict[str, Any], tab_dir: Path) -> str:
 
 def comma_section(res: dict[str, Any], fig_dir: Path, tab_dir: Path) -> str:
     groups = _group_records(res["records"])
-    order = [m for m in ("majority", "rule_v2_ego", "mlp_last_v2", "gru_v2", "cnn_gru_single_v2", "mc_cnn_gru_balanced_v2", "mc_cnn_gru_semantic_v2", "mc_cnn_gru_semantic_v2_w16", "mc_cnn_gru_balanced_v1", "mc_cnn_gru_semantic_v1") if m in groups]
+    order = [m for m in ("majority", "rule_v2_ego", "mlp_last_v2", "gru_v2", "cnn_gru_single_v2", "mc_cnn_gru_balanced_v2", "mc_cnn_gru_semantic_v2", "mc_cnn_gru_semantic_v2_w16", "mc_cnn_gru_balanced_v1", "mc_cnn_gru_semantic_v1", "mc_cnn_gru_semantic_v1v2", "mc_cnn_gru_semantic_v1v2_w16") if m in groups]
     ds = res["dataset"]
     md = ["### 실주행 영상(comma.ai speedchallenge): 데이터"]
     md.append(f"- 20fps 단일 영상 {ds['frames']:,} 프레임(약 17분), 라벨 분포(" + ", ".join(f"{l} {c}" for l, c in zip(res["labels"], ds["label_counts"], strict=True)) + ")")
@@ -440,7 +440,12 @@ def build_report(out_dir: Path) -> Path:
     for fname, fn in loaders:
         path = out_dir / fname
         if path.exists():
-            parts.append(fn(json.loads(path.read_text(encoding="utf-8"))))
+            res = json.loads(path.read_text(encoding="utf-8"))
+            extra = out_dir / "comma_extra_results.json"
+            if fname == "comma_results.json" and extra.exists():
+                # comma 보충 실험(v1+v2 결합 특징) 기록을 같은 표에 합친다
+                res["records"] = res["records"] + json.loads(extra.read_text(encoding="utf-8"))["records"]
+            parts.append(fn(res))
             parts.append("")
         else:
             parts.append(f"> `{fname}` 없음(해당 실험 미실행)\n")

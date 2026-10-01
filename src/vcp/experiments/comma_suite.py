@@ -38,6 +38,9 @@ class CommaSuiteConfig:
     purge_s: float = 1.0
     workers: int = 4
     quick: bool = False
+    results_name: str = "comma_results.json"
+    include_baselines: bool = True
+    run_sim_to_real: bool = True
 
 
 def comma_model_specs(quick: bool = False) -> list[ModelSpec]:
@@ -56,7 +59,10 @@ def comma_model_specs(quick: bool = False) -> list[ModelSpec]:
 
 
 def _load(path: Path) -> dict[str, np.ndarray]:
-    return dict(np.load(path))
+    data = dict(np.load(path))
+    if "X_v1" in data and "X_v2" in data:
+        data["X_v1v2"] = np.concatenate([data["X_v1"], data["X_v2"]], axis=1)
+    return data
 
 
 def _fold_masks(n: int, fold: dict[str, np.ndarray], block: np.ndarray) -> dict[str, np.ndarray]:
@@ -169,7 +175,18 @@ def _sim_to_real(ctx: dict[str, Any], synth_main: Path, quick: bool) -> dict[str
     return out
 
 
-def run_comma_suite(cfg: CommaSuiteConfig, synth_main: Path | None = None) -> Path:
+def comma_extra_specs(quick: bool = False) -> list[ModelSpec]:
+    """보충 실험: v1+v2 결합 특징."""
+
+    e = 3 if quick else 20
+    kw = {"epochs": e, "patience": 5, "batch_size": 256}
+    return [
+        ModelSpec("mc_cnn_gru_semantic_v1v2", "multichannel_cnn_gru", "v1v2", grouping="semantic", **kw),
+        ModelSpec("mc_cnn_gru_semantic_v1v2_w16", "multichannel_cnn_gru", "v1v2", grouping="semantic", window=16, **kw),
+    ]
+
+
+def run_comma_suite(cfg: CommaSuiteConfig, synth_main: Path | None = None, specs: list[ModelSpec] | None = None) -> Path:
     started = time.perf_counter()
     path20 = cfg.data_dir / "comma_table.npz"
     path10 = cfg.data_dir / "comma_table_10fps.npz"
@@ -177,8 +194,8 @@ def run_comma_suite(cfg: CommaSuiteConfig, synth_main: Path | None = None) -> Pa
         raise FileNotFoundError(f"{path20} 가 없습니다. 먼저 vcp.tools.build_comma_dataset을 실행하세요.")
     d20 = _load(path20)
     ctx_base = {"path20": str(path20), "path10": str(path10), "n_blocks": cfg.n_blocks, "purge": int(round(cfg.purge_s * 20))}
-    records = _rule_and_majority(ctx_base)
-    specs = comma_model_specs(cfg.quick)
+    records = _rule_and_majority(ctx_base) if cfg.include_baselines else []
+    specs = specs or comma_model_specs(cfg.quick)
     folds = range(2) if cfg.quick else range(cfg.n_blocks)
     seeds = cfg.seeds[:1]
     jobs = [(spec, k, {**ctx_base, "seed": s}) for spec in specs for k in folds for s in seeds]
@@ -190,7 +207,7 @@ def run_comma_suite(cfg: CommaSuiteConfig, synth_main: Path | None = None) -> Pa
 
     sim2real = None
     synth_main = synth_main or Path("data/processed/synth/main_15fps_mid")
-    if (synth_main.parent / f"{synth_main.name}.npz").exists():
+    if cfg.run_sim_to_real and (synth_main.parent / f"{synth_main.name}.npz").exists():
         sim2real = _sim_to_real(ctx_base, synth_main, cfg.quick)
 
     out = {
@@ -202,7 +219,7 @@ def run_comma_suite(cfg: CommaSuiteConfig, synth_main: Path | None = None) -> Pa
         "sim_to_real": sim2real,
         "elapsed_s": round(time.perf_counter() - started, 1),
     }
-    path = cfg.out_dir / "comma_results.json"
+    path = cfg.out_dir / cfg.results_name
     path.write_text(json.dumps(out, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     logger.info("저장: %s", path)
     return path
