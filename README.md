@@ -25,6 +25,13 @@
 | VLA 연계 | 행동 head, 한/영 맥락 서술, 예산 기반 큐레이션, LeRobot v2 구조 내보내기 |
 | 클라우드 실행 | `--device auto`, `--no-display` headless 실행 |
 
+### 주요 재평가 결과 (자동 실험, 상세: [RESULTS.md](experiments/exp_100_paper_suite/summary/RESULTS.md))
+- 성능을 좌우한 것은 특징 설계다: 같은 구조에서 v1→v2로 바꾸면 macro-F1이 합성 0.506→0.580, 실주행(10-fold) 0.302→0.442.
+- 의미 기반 채널 그룹과 하이브리드 룰 게이트는 macro-F1 개선을 보이지 않았다(2026-03 주장 수정).
+- v1+v2 결합 + 창 16: 합성 최고 macro-F1 0.650, 실주행 최고 제동 AUROC 0.782.
+- 저장 예산 20%에서 모델 기반 큐레이션이 제동 프레임 46%를 회수(무작위 20%).
+- 수치는 GPU 없는 클라우드 CPU에서 측정했으며 Jetson Orin Nano는 미측정.
+
 ### 클라우드/서버(화면 없음)에서 실행
 ```bash
 python -m pip install -e . && python -m pip install onnx onnxruntime pyarrow matplotlib koreanize-matplotlib

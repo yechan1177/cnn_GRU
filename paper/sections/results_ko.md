@@ -38,7 +38,7 @@
 
 표 6. comma.ai speedchallenge 실주행 영상의 자차 운동 상태 추정(10-fold 블록 교차검증 평균 ± 표준편차). 라벨은 속도 센서에서만 계산했다.
 
-실영상에서도 특징 v2의 효과가 뚜렷했다. 같은 구조에서 v1 특징은 macro-F1 {{comma:mc_cnn_gru_balanced_v1:test_20fps:macro_f1}}, 제동 AUROC {{comma:mc_cnn_gru_balanced_v1:test_20fps:braking_auroc}}였고, v2 특징은 {{comma:mc_cnn_gru_balanced_v2:test_20fps:macro_f1}}, {{comma:mc_cnn_gru_balanced_v2:test_20fps:braking_auroc}}였다. 가장 높은 구성은 창 16의 의미 그룹 모델({{comma:mc_cnn_gru_semantic_v2_w16:test_20fps:macro_f1}})이지만 fold 간 표준편차가 0.1 안팎으로 커서 구조 간 차이는 통계적으로 구분되지 않는다. 룰 단독은 제동 이벤트 recall이 높으나({{commam:rule_v2_ego:test_20fps:event_recall}}) 분당 오경보가 {{commam:rule_v2_ego:test_20fps:false_alarms_per_min:1}}회로 실용성이 낮다. 가속 상태는 모든 모델에서 F1이 낮았는데, 전방 장면만으로는 자차의 가속 의도를 관측하기 어렵기 때문이다. 짝수 프레임만으로 특징을 다시 계산한 10fps 평가에서도 macro-F1이 유지되었다(표 6 마지막 열).
+실영상에서도 특징 v2의 효과가 뚜렷했다. 같은 구조에서 v1 특징은 macro-F1 {{comma:mc_cnn_gru_balanced_v1:test_20fps:macro_f1}}, 제동 AUROC {{comma:mc_cnn_gru_balanced_v1:test_20fps:braking_auroc}}였고, v2 특징은 {{comma:mc_cnn_gru_balanced_v2:test_20fps:macro_f1}}, {{comma:mc_cnn_gru_balanced_v2:test_20fps:braking_auroc}}였다. 가장 높은 구성은 창 16의 의미 그룹 모델({{comma:mc_cnn_gru_semantic_v2_w16:test_20fps:macro_f1}})이지만 fold 간 표준편차가 0.1 안팎으로 커서 구조 간 차이는 통계적으로 구분되지 않는다. 룰 단독은 제동 이벤트 recall이 높으나({{commam:rule_v2_ego:test_20fps:event_recall}}) 분당 오경보가 {{commam:rule_v2_ego:test_20fps:false_alarms_per_min:1}}회로 실용성이 낮다. 합성 벤치마크에서 가장 좋았던 v1+v2 결합 특징은 실영상에서 macro-F1 {{comma:mc_cnn_gru_semantic_v1v2_w16:test_20fps:macro_f1}}(창 16)로 v2 단독과 구분되지 않았지만, 제동 AUROC는 {{comma:mc_cnn_gru_semantic_v1v2_w16:test_20fps:braking_auroc}}로 가장 높았다. 가속 상태는 모든 모델에서 F1이 낮았는데, 전방 장면만으로는 자차의 가속 의도를 관측하기 어렵기 때문이다. 짝수 프레임만으로 특징을 다시 계산한 10fps 평가에서도 macro-F1이 유지되었다(표 6 마지막 열).
 
 {{table:comma_s2r}}
 

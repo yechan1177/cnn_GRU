@@ -209,17 +209,17 @@ def synthetic_section(res: dict[str, Any], fig_dir: Path, tab_dir: Path) -> str:
     colors = [_color(m) for m in order]
     y = np.arange(len(order))[::-1]
     ax.barh(y, means, xerr=stds, color=colors, height=0.6, error_kw={"ecolor": INK2, "lw": 1, "capsize": 2})
-    for yi, v in zip(y, means, strict=True):
-        ax.text(v + 0.01, yi, f"{v:.3f}", va="center", fontsize=8, color=INK2)
+    for yi, v, s in zip(y, means, stds, strict=True):
+        ax.text(v + s + 0.012, yi, f"{v:.3f}", va="center", fontsize=8, color=INK2)
     ax.set_yticks(y, [_name(m) for m in order], fontsize=8)
     ax.set_xlabel("테스트 macro-F1 (시드 3개 평균 ± 표준편차)")
-    ax.set_xlim(0, min(1.0, max(means) + 0.12))
+    ax.set_xlim(0, min(1.0, max(means) + 0.15))
     ax.grid(axis="y", visible=False)
     from matplotlib.patches import Patch
 
     ax.legend(
         handles=[Patch(color=C_BLUE, label="특징 v2(제안)"), Patch(color=C_ORANGE, label="특징 v1(2026-03)"), Patch(color=C_NEUTRAL, label="비학습 기준선")],
-        frameon=False, fontsize=8, loc="lower right",
+        frameon=False, fontsize=8, loc="upper right",
     )
     ax.set_title("합성 6맥락 벤치마크", loc="left", color=INK, fontsize=11)
     fig.tight_layout()
