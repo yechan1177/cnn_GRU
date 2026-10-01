@@ -1,4 +1,4 @@
-﻿# 비전인식-맥락 연계형 온디바이스 파이프라인
+# 비전인식-맥락 연계형 온디바이스 파이프라인
 
 실시간 주행 영상을 입력으로 받아 객체를 검출하고, 의미 기반 특징 벡터와 CNN-GRU 시계열 모델을 통해 주행 맥락을 해석하는 저장소다. 기본 목적은 **온디바이스에서 바로 실행 가능한 경량 파이프라인**을 제공하고, 이후 멀티모달 데이터셋 자동 구축으로 확장 가능한 기반을 만드는 것이다.
 
@@ -12,6 +12,31 @@
 3. 최근 `8프레임`을 `CNN-GRU`에 입력해 맥락을 예측한다.
 4. 하이브리드 룰 게이트로 최종 태그를 보정한다.
 5. UI에서 순수 모델 예측과 최종 하이브리드 결과를 함께 확인한다.
+
+## 2026-10 개정 요약
+2026-03 제출본을 재검토해 평가 누수·라벨 순환·FPS 의존 특징 문제를 확인하고, 아래 항목을 추가했다. 상세는 [단계별 계획](docs/25_연구고도화_단계별계획.md), [실험 프로토콜](docs/27_실험프로토콜_자동실험.md), [피지컬 AI/VLA 연계](docs/26_피지컬AI_로봇_VLA_연계.md), [자동 실험 결과](experiments/exp_100_paper_suite/summary/RESULTS.md), [논문 원고](paper/manuscript_ko.md)를 참고한다.
+
+| 항목 | 내용 |
+|---|---|
+| 특징 v2 | IoU 추적 + Δt 정규화 + 박스 크기 변화율 기반 역 TTC (FPS 불변) |
+| 합성 데이터 | 물리 기반 주행/실내 이동로봇 시나리오, GT 물리량 라벨(특징과 독립) |
+| 실데이터 | comma.ai speedchallenge 실주행 영상 + 속도 센서 라벨 |
+| 자동 실험 | 에피소드/시간 블록 분할, 검증셋 전용 튜닝, 다중 시드, 이벤트 지표, CI |
+| VLA 연계 | 행동 head, 한/영 맥락 서술, 예산 기반 큐레이션, LeRobot v2 구조 내보내기 |
+| 클라우드 실행 | `--device auto`, `--no-display` headless 실행 |
+
+### 클라우드/서버(화면 없음)에서 실행
+```bash
+python -m pip install -e . && python -m pip install onnx onnxruntime pyarrow matplotlib koreanize-matplotlib
+python run_final_model.py --source <영상.mp4> --no-display --device auto \
+    --save-video artifacts/run.mp4 --output-jsonl artifacts/run.jsonl
+```
+
+### 논문 실험 전체 자동 실행
+```bash
+bash scripts/run_paper_suite.sh          # 공개 데이터 다운로드 → 검출 → 합성 데이터 생성 → 실험 → 리포트 → 원고
+bash scripts/run_paper_suite.sh --quick  # 스모크 테스트
+```
 
 ## 핵심 기능
 | 기능 | 설명 |
@@ -35,6 +60,12 @@
 | `tests/` | 회귀 테스트 |
 | `docs/` | 한국어 설계 문서 |
 | `tasks/` | 작업 이력 및 체크리스트 |
+| `src/vcp/features/` | 검출 박스 → 의미 특징(v1 호환, v2 제안) |
+| `src/vcp/sim/` | 물리 기반 합성 시나리오(주행/AMR) |
+| `src/vcp/experiments/` | 자동 실험 스위트, 지표, 리포트 |
+| `src/vcp/vla/` | VLA 연계(언어 서술, 큐레이션, 내보내기) |
+| `experiments/exp_100_paper_suite/summary/` | 자동 실험 결과(추적) |
+| `paper/` | 논문 원고(자동 생성) |
 
 ## 빠른 시작
 ### 1. 설치
@@ -55,21 +86,16 @@ cd C:\yolstm
 
 기본 동작은 다음과 같다.
 - `data/raw/videos/people_braking.mp4`가 있으면 해당 영상을 사용한다.
-- 영상이 없으면 자동으로 `webcam:0`으로 전환한다.
+- 영상이 없으면 자동으로 `webcam:0`으로 전환한다(`--no-display` 모드에서는 오류로 종료).
+- `--source`, `--device`, `--conf` 등 명령행 인자로 상단 설정을 덮어쓸 수 있다.
 
 ## 입력 소스 변경
-`run_final_model.py` 상단 설정만 수정하면 된다.
-
-```python
-USE_WEBCAM = False
-WEBCAM_INDEX = 0
-VIDEO_SOURCE = str(ROOT_DIR / "data" / "raw" / "videos" / "people_braking.mp4")
-```
+`run_final_model.py`의 `--source` 인자(또는 상단 `DEFAULT_SOURCE`)로 지정한다.
 
 | 사용 방식 | 설정 |
 |---|---|
-| mp4 파일 | `USE_WEBCAM = False`, `VIDEO_SOURCE` 수정 |
-| 웹캠 | `USE_WEBCAM = True`, `WEBCAM_INDEX` 수정 |
+| mp4 파일 | `--source path/to/video.mp4` |
+| 웹캠 | `--source webcam:0` |
 
 ## 화면에서 확인할 수 있는 정보
 - YOLO 검출 박스
@@ -128,6 +154,9 @@ cd C:\yolstm
 4. [실험 방법](docs/05_실험방법.md)
 5. [브레이크 리뷰 UI](docs/17_브레이크리뷰UI.md)
 6. [최종 하이브리드 모델 UI](docs/20_최종하이브리드모델UI.md)
+7. [연구 고도화 단계별 계획](docs/25_연구고도화_단계별계획.md)
+8. [피지컬 AI · 로봇 · VLA 연계](docs/26_피지컬AI_로봇_VLA_연계.md)
+9. [실험 프로토콜과 자동 실험](docs/27_실험프로토콜_자동실험.md)
 
 ## 저장소 정책
 - 대용량 데이터셋, 실험 산출물, 영상 파일은 저장소에 포함하지 않는다.

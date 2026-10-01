@@ -268,12 +268,16 @@ def run_robot(data_dir: Path, out_dir: Path, quick: bool, workers: int = 4) -> d
 # D: VLA 내보내기
 # ----------------------------------------------------------------------
 def _synthetic_vla_episodes(path: Path, domain: str, labels: list[str], n_eps: int, model: Any | None = None) -> list[VLAEpisode]:
+    """메인 데이터셋의 테스트 분할(학습에 쓰지 않은 에피소드)에서 n_eps개를 내보낸다."""
+
     data, meta = load_dataset(path)
     fps = float(meta["config"]["fps"])
     action = future_action(data["ego_a"], data["ep"], fps)
     task_ko, task_en = task_instruction(domain)
+    groups = np.array([e["index"] for e in meta["episodes"]])
+    test_ids = set(split_groups(groups, 0.15, 0.15, 2026)["test"].tolist())
     episodes = []
-    for e in meta["episodes"][:n_eps]:
+    for e in [x for x in meta["episodes"] if x["index"] in test_ids][:n_eps]:
         sel = np.where(data["ep"] == e["index"])[0]
         if model is not None:
             idx = window_index(data["ep"][sel], 8)
@@ -378,7 +382,7 @@ def run_vla_suite(out_dir: Path, data_dir: Path, comma_dir: Path, quick: bool = 
         drv_model = build_model(ModelSpec("m", "multichannel_cnn_gru", "v2", grouping="semantic"), 16, 6)
         drv_model.load_state_dict(torch.load(pre, map_location="cpu", weights_only=True))
         drv_model.eval()
-    drv_eps = _synthetic_vla_episodes(data_dir / "test_15fps_mid", "driving", CONTEXT_LABELS, 20, model=drv_model)
+    drv_eps = _synthetic_vla_episodes(data_dir / "main_15fps_mid", "driving", CONTEXT_LABELS, 20, model=drv_model)
     export_lerobot_like(drv_eps, export_root / "synthetic_driving", "vcp_synthetic_driving", CONTEXT_LABELS)
     rob_eps = _synthetic_vla_episodes(data_dir / "robot_main_15fps_mid", "robot", list(ROBOT.label_names), 20)
     export_lerobot_like(rob_eps, export_root / "synthetic_robot", "vcp_synthetic_robot", list(ROBOT.label_names))

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" font-family="'Noto Sans KR','NanumGothic','Malgun Gothic',sans-serif">
+  <style>
+    .box{fill:#ffffff;stroke:#52514e;stroke-width:1.5;rx:10}
+    .dev{fill:#eef4fc;stroke:#2a78d6;stroke-width:1.5}
+    .srv{fill:#fdf0ea;stroke:#eb6834;stroke-width:1.5}
+    .t{font-size:15px;fill:#0b0b0b;font-weight:600}
+    .s{font-size:12px;fill:#52514e}
+    .h{font-size:14px;font-weight:700}
+    .a{stroke:#52514e;stroke-width:1.6;fill:none;marker-end:url(#arr)}
+  </style>
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#52514e"/></marker></defs>
+  <rect x="10" y="10" width="1180" height="330" rx="14" class="dev"/>
+  <text x="28" y="36" class="h" fill="#2a78d6">온디바이스 System-1 (Jetson Orin Nano 목표, 현재 CPU 검증)</text>
+  <rect x="10" y="360" width="1180" height="190" rx="14" class="srv"/>
+  <text x="28" y="386" class="h" fill="#c4521f">서버 / 학습 (RTX 3080 Ti): 데이터셋 구축 · VLA(System-2) 학습</text>
+
+  <rect x="30" y="60" width="150" height="110" rx="10" class="box"/>
+  <text x="105" y="100" text-anchor="middle" class="t">카메라</text>
+  <text x="105" y="122" text-anchor="middle" class="s">차량 대시캠 /</text>
+  <text x="105" y="140" text-anchor="middle" class="s">로봇 전방 카메라</text>
+
+  <rect x="215" y="60" width="170" height="110" rx="10" class="box"/>
+  <text x="300" y="98" text-anchor="middle" class="t">YOLOv8n (3클래스)</text>
+  <text x="300" y="120" text-anchor="middle" class="s">person / vehicle / bike</text>
+  <text x="300" y="138" text-anchor="middle" class="s">프레임별 박스</text>
+
+  <rect x="420" y="60" width="200" height="110" rx="10" class="box"/>
+  <text x="520" y="92" text-anchor="middle" class="t">의미 특징 v2 (16차원)</text>
+  <text x="520" y="114" text-anchor="middle" class="s">IoU 추적 · Δt 정규화</text>
+  <text x="520" y="132" text-anchor="middle" class="s">scale-rate → 역 TTC</text>
+  <text x="520" y="150" text-anchor="middle" class="s">global / vehicle / VRU 그룹</text>
+
+  <rect x="655" y="60" width="220" height="110" rx="10" class="box"/>
+  <text x="765" y="92" text-anchor="middle" class="t">멀티채널 CNN-GRU</text>
+  <text x="765" y="114" text-anchor="middle" class="s">그룹별 1D-CNN → GRU</text>
+  <text x="765" y="132" text-anchor="middle" class="s">창 8프레임, 약 6.5만 파라미터</text>
+  <text x="765" y="150" text-anchor="middle" class="s">온도 보정(temperature)</text>
+
+  <rect x="910" y="50" width="260" height="130" rx="10" class="box"/>
+  <text x="1040" y="78" text-anchor="middle" class="t">출력 head</text>
+  <text x="1040" y="100" text-anchor="middle" class="s">맥락 확률(6맥락) · 경계 점수</text>
+  <text x="1040" y="118" text-anchor="middle" class="s">행동(0.5s/1.0s 뒤 가감속)</text>
+  <text x="1040" y="136" text-anchor="middle" class="s">불확실성(엔트로피)</text>
+  <text x="1040" y="160" text-anchor="middle" class="s">→ 경고 / 이벤트 트리거</text>
+
+  <rect x="420" y="210" width="330" height="110" rx="10" class="box"/>
+  <text x="585" y="242" text-anchor="middle" class="t">자동 큐레이션</text>
+  <text x="585" y="264" text-anchor="middle" class="s">이벤트 점수 + 불확실성 상위 클립만 저장</text>
+  <text x="585" y="282" text-anchor="middle" class="s">저장/전송 예산 k% 안에서 선택</text>
+  <text x="585" y="300" text-anchor="middle" class="s">(전량 저장 대비 데이터량 절감)</text>
+
+  <rect x="800" y="210" width="370" height="110" rx="10" class="box"/>
+  <text x="985" y="242" text-anchor="middle" class="t">정렬 에피소드 생성</text>
+  <text x="985" y="264" text-anchor="middle" class="s">관측: 영상 프레임 참조 · 박스 · 특징 · 자차 상태</text>
+  <text x="985" y="282" text-anchor="middle" class="s">언어: 맥락 → 한/영 서술 · 과업 지시문</text>
+  <text x="985" y="300" text-anchor="middle" class="s">행동: 미래 가감속(센서/시뮬레이터)</text>
+
+  <rect x="30" y="410" width="330" height="120" rx="10" class="box"/>
+  <text x="195" y="442" text-anchor="middle" class="t">데이터 원천</text>
+  <text x="195" y="464" text-anchor="middle" class="s">물리 기반 합성(주행 · 실내 AMR)</text>
+  <text x="195" y="482" text-anchor="middle" class="s">공개 실주행(comma speedchallenge)</text>
+  <text x="195" y="500" text-anchor="middle" class="s">자체 수집 영상 + 센서(확장 예정)</text>
+
+  <rect x="420" y="410" width="330" height="120" rx="10" class="box"/>
+  <text x="585" y="442" text-anchor="middle" class="t">LeRobot v2 구조 데이터셋</text>
+  <text x="585" y="464" text-anchor="middle" class="s">meta/info · tasks · episodes</text>
+  <text x="585" y="482" text-anchor="middle" class="s">data/chunk-000/*.parquet</text>
+  <text x="585" y="500" text-anchor="middle" class="s">(관측, 언어, 행동) 프레임 정렬</text>
+
+  <rect x="800" y="410" width="370" height="120" rx="10" class="box"/>
+  <text x="985" y="442" text-anchor="middle" class="t">VLA(System-2) 학습 · 평가</text>
+  <text x="985" y="464" text-anchor="middle" class="s">OpenVLA / π0 계열 미세조정(향후 과제)</text>
+  <text x="985" y="482" text-anchor="middle" class="s">경량 맥락 모델 = 빠른 안전 계층 +</text>
+  <text x="985" y="500" text-anchor="middle" class="s">데이터 필터 · 맥락 토큰 제공</text>
+
+  <path d="M180,115 L213,115" class="a"/>
+  <path d="M385,115 L418,115" class="a"/>
+  <path d="M620,115 L653,115" class="a"/>
+  <path d="M875,115 L908,115" class="a"/>
+  <path d="M1040,180 C1040,195 700,190 640,208" class="a"/>
+  <path d="M750,265 L798,265" class="a"/>
+  <path d="M985,320 L700,408" class="a"/>
+  <path d="M360,470 L418,470" class="a"/>
+  <path d="M750,470 L798,470" class="a"/>
+</svg>

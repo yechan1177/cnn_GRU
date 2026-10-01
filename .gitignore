@@ -94,6 +94,7 @@ experiments/exp_1*/*
 # Paper: 원고(md)와 그림만 추적, 빌드 산출물은 무시
 paper/*
 !paper/*.md
+!paper/sections/
 !paper/figures/
 paper/figures/*
 !paper/figures/*.png
