@@ -53,7 +53,9 @@ class CurationSuiteConfig:
     testpool_episodes: int = 150
     val_per_cell: int = 2
     test_per_cell: int = 7
-    budgets: tuple[float, ...] = (0.05, 0.10, 0.20)
+    budgets: tuple[float, ...] = (0.01, 0.02, 0.05, 0.10)
+    main_budget: float = 0.02  # 모든 방법을 비교하는 주 예산(나머지 예산은 core_methods만)
+    core_methods: tuple[str, ...] = ("random", "action_trigger", "uncertainty", "event", "oracle", "ours")
     methods: tuple[str, ...] = (
         "random",
         "uniform",
@@ -68,7 +70,7 @@ class CurationSuiteConfig:
     )
     seeds: tuple[int, ...] = (0, 1, 2)
     clip_len: int = 30
-    steps: int = 3000
+    steps: int = 6000  # 파일럿(검증)에서 전체 데이터가 3000단계에 미수렴(성공률 0.88→6000단계 1.00)해 6000으로 확정
     batch: int = 128
     lam: float = 0.5
     reservoir: float = 0.3
@@ -509,9 +511,14 @@ def stage_pilot(cfg: CurationSuiteConfig) -> dict[str, Any]:
     for st in steps_grid:
         for method, budget in (("full", 1.0), ("random", 0.10)):
             jobs.append(make_job(cfg, method, budget, 0, "val", steps=st))
+    pilot_steps = 3000 if not cfg.quick else cfg.steps  # 파일럿 1차는 3000단계에서 시드 분산을 쟀다(기록 그대로 재현)
     for seed in (cfg.seeds if not cfg.quick else (0,)):
         for method, budget in (("full", 1.0), ("random", 0.10), ("oracle", 0.10)):
-            jobs.append(make_job(cfg, method, budget, seed, "val"))
+            jobs.append(make_job(cfg, method, budget, seed, "val", steps=pilot_steps))
+    # 파일럿 2차: 예산 규모(1/2/5%)에서 무작위·오라클·CARE·감속 트리거의 격차(주 예산 결정용)
+    for b in ((0.01, 0.02, 0.05) if not cfg.quick else (0.05,)):
+        for m in ("random", "oracle", "ours", "action_trigger"):
+            jobs.append(make_job(cfg, m, b, 0, "val", steps=pilot_steps))
     res = run_jobs(cfg, jobs)
     return {"jobs": [r["key"] for r in res]}
 
@@ -554,8 +561,8 @@ def episode_success(episodes: list[dict[str, Any]], expert: dict[str, Any], movi
 
 def stage_tune(cfg: CurationSuiteConfig) -> dict[str, Any]:
     grid_l = (0.0, 0.5, 1.0) if not cfg.quick else (0.5,)
-    grid_r = (0.0, 0.3, 0.6) if not cfg.quick else (0.3,)
-    jobs = [make_job(cfg, "ours", 0.10, 0, "val", lam=lam, reservoir=r) for lam in grid_l for r in grid_r]
+    grid_r = (0.25, 0.5, 0.75) if not cfg.quick else (0.3,)
+    jobs = [make_job(cfg, "ours", cfg.main_budget, 0, "val", lam=lam, reservoir=r) for lam in grid_l for r in grid_r]
     res = run_jobs(cfg, jobs)
     expert = expert_reference(cfg, "val")
     moving = cfg.domain == "robot"
@@ -586,9 +593,12 @@ def stage_main(cfg: CurationSuiteConfig, methods: tuple[str, ...] | None = None,
         ensure_offline_loss(cfg)
     jobs = [make_job(cfg, "full", 1.0, s) for s in cfg.seeds]
     for b in budgets or cfg.budgets:
-        for m in methods:
+        ms = methods if (b == cfg.main_budget or budgets is not None) else tuple(m for m in methods if m in cfg.core_methods)
+        for m in ms:
             for s in cfg.seeds:
                 jobs.append(make_job(cfg, m, b, s))
+    # 주 예산 조건을 먼저 끝내도록 정렬(중간 점검이 쉽다)
+    jobs.sort(key=lambda j: (j["method"] != "full", j["budget"] != cfg.main_budget, j["budget"], j["method"], j["seed"]))
     return run_jobs(cfg, jobs)
 
 
@@ -596,7 +606,7 @@ def stage_lang(cfg: CurationSuiteConfig) -> list[dict[str, Any]]:
     cfg = tuned(cfg)
     jobs = []
     for s in cfg.seeds:
-        for m, b in (("full", 1.0), ("ours", 0.10), ("random", 0.10)):
+        for m, b in (("full", 1.0), ("ours", cfg.main_budget), ("random", cfg.main_budget)):
             jobs.append(make_job(cfg, m, b, s, use_language=False))
             jobs.append(make_job(cfg, m, b, s))
     return run_jobs(cfg, jobs)
@@ -668,7 +678,7 @@ def main() -> None:
     if args.stage in {"lang", "all"}:
         stage_lang(cfg)
     if args.stage == "robot":
-        stage_main(cfg, methods=("random", "uniform", "action_trigger", "event", "oracle", "ours"), budgets=(0.10,))
+        stage_main(cfg, methods=("random", "uniform", "action_trigger", "uncertainty", "event", "oracle", "ours"), budgets=(cfg.main_budget,))
     if args.stage == "comma":
         from .comma_curation import run_comma_curation
 
