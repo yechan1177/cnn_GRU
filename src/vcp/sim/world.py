@@ -7,9 +7,9 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..features.base import Detection, FrameDetections
-from .camera import CameraConfig, DetectorNoiseConfig, project_actor, simulate_detections
-from .labels import ContextLabeler, FrameState, LabelThresholds
+from ..features.base import FrameDetections
+from .camera import CameraConfig, DetectorNoiseConfig
+from .labels import LabelThresholds
 
 LANE_W = 3.5
 
@@ -48,6 +48,8 @@ class DomainProfile:
     actor_idm: tuple[float, float, float, float]  # a, b, T, s0
     thresholds: LabelThresholds
     label_names: tuple[str, ...]
+    # 외부 제어(step(cmd)) 시 허용 최대 가속도(m/s^2). 내부 전문가는 a_max로 별도 제한된다.
+    ego_accel_max: float = 3.0
 
 
 DRIVING = DomainProfile(
@@ -113,6 +115,7 @@ ROBOT = DomainProfile(
         min_closing=0.2,
     ),
     label_names=("normal_move", "follow_agent", "slow_down", "safety_stop", "resume", "crowded"),
+    ego_accel_max=1.2,
 )
 
 
@@ -278,143 +281,31 @@ def simulate_episode(
     thresholds: LabelThresholds | None = None,
     physics_hz: float = 30.0,
 ) -> Episode:
-    """시나리오 1개를 시뮬레이션해 프레임별 검출/라벨을 만든다."""
+    """시나리오 1개를 시뮬레이션해 프레임별 검출/라벨을 만든다.
 
-    rng = random.Random(seed)
-    prof = profile_for_scenario(scenario)
-    cam = cam or CameraConfig(cam_height_m=prof.cam_height_m, max_range_m=prof.max_range_m)
-    noise = noise or DetectorNoiseConfig()
-    labeler = ContextLabeler(thresholds or prof.thresholds)
-    v0, actors, meta = _build_scenario(scenario, rng, duration_s)
+    내부적으로 `env.SimEnv`를 내부 전문가 모드(`step(None)`)로 끝까지 돌린다.
+    리팩터링 전 구현과 출력이 비트 단위로 같다(`tests/fixtures/sim_regression.json.gz` 회귀 테스트).
+    """
 
-    substeps = max(1, int(math.ceil(physics_hz / fps)))
-    dt = 1.0 / (fps * substeps)
-    n_frames = int(round(duration_s * fps))
+    from .env import SimEnv  # env가 world를 import하므로 지연 import
 
-    # 자차 IDM 파라미터(운전자 성향 무작위화)
-    t_head = rng.uniform(*prof.t_head)
-    a_max = rng.uniform(*prof.a_max)
-    b_comf = rng.uniform(*prof.b_comf)
-    s0 = rng.uniform(*prof.s0)
-    delay_steps = max(0, int(round(rng.uniform(*prof.delay_s) / dt)))
-    cmd_queue: list[float] = [0.0] * delay_steps
-
-    ego_x, ego_v, ego_a = 0.0, v0 * rng.uniform(0.85, 1.0), 0.0
-    pitch_noise = 0.0
-    collisions = 0
+    env = SimEnv(scenario, seed, fps=fps, duration_s=duration_s, noise=noise, physics_hz=physics_hz, cam=cam, thresholds=thresholds)
     frames: list[FrameDetections] = []
     labels: list[int] = []
     ego_vs: list[float] = []
     ego_as: list[float] = []
     ttcs: list[float] = []
-
-    def in_path(actor: Actor, horizon_s: float = 2.5) -> bool:
-        half = prof.path_half_vehicle if actor.kind == "vehicle" else prof.path_half_vru
-        if abs(actor.y) < half:
-            return True
-        if actor.kind != "vehicle" and actor.y_target is not None and actor.lat_speed > 0:
-            direction = math.copysign(1.0, actor.y_target - actor.y)
-            future_y = actor.y + direction * actor.lat_speed * horizon_s
-            return (actor.y > 0) != (future_y > 0) or abs(future_y) < half
-        return False
-
-    def path_obstacle() -> tuple[float, float, bool]:
-        best_gap, best_v, best_vehicle = math.inf, 0.0, False
-        for actor in actors:
-            gap = actor.x - ego_x
-            if gap <= -0.5 or not in_path(actor):
-                continue
-            if gap < best_gap:
-                best_gap, best_v, best_vehicle = gap, actor.v, actor.kind == "vehicle"
-        return best_gap, best_v, best_vehicle
-
-    step = 0
-    for frame_idx in range(n_frames):
-        for _ in range(substeps):
-            t = step * dt
-            # --- 주변 객체 운동
-            for actor in actors:
-                actor.apply_events(t, ego_x)
-                acc = max(-actor.brake_max, min(actor.acc_max, 0.8 * (actor.v_des - actor.v)))
-                if actor.follows and actor.kind == "vehicle":
-                    lane_tol = 0.43 * prof.lane_w
-                    ahead = [o for o in actors if o is not actor and o.kind == "vehicle" and 0.0 < o.x - actor.x and abs(o.y - actor.y) < lane_tol]
-                    if ahead:
-                        lead = min(ahead, key=lambda o: o.x)
-                        gap = lead.x - actor.x - prof.vehicle_length
-                        ia, ib, it, is0 = prof.actor_idm
-                        acc = min(acc, _idm(actor.v, max(actor.v_des, 0.3 * prof.lane_w), gap, actor.v - lead.v, ia, ib, it, is0))
-                        acc = max(acc, -prof.ego_brake_max)
-                actor.v = actor.v + acc * dt
-                if actor.kind == "vehicle":
-                    actor.v = max(0.0, actor.v)
-                actor.x += actor.v * dt
-                if actor.y_target is not None and actor.lat_speed > 0:
-                    dy = actor.y_target - actor.y
-                    move = math.copysign(min(abs(dy), actor.lat_speed * dt), dy)
-                    actor.y += move
-                    if abs(dy) < 1e-3:
-                        actor.lat_speed = 0.0
-            # --- 자차 IDM + 반응 지연
-            gap, v_obs, _ = path_obstacle()
-            cmd = _idm(ego_v, v0, gap, ego_v - v_obs, a_max, b_comf, t_head, s0)
-            cmd = max(-prof.ego_brake_max, min(a_max, cmd))
-            cmd_queue.append(cmd)
-            applied = cmd_queue.pop(0)
-            # 실제 가속도는 1차 지연(브레이크/구동 응답) 적용
-            ego_a += (applied - ego_a) * min(1.0, dt / 0.3)
-            ego_v = max(0.0, ego_v + ego_a * dt)
-            if ego_v == 0.0 and ego_a < 0:
-                ego_a = 0.0
-            ego_x += ego_v * dt
-            gap_now, v_obs_now, _ = path_obstacle()
-            if gap_now < 0.3:
-                collisions += 1
-                ego_x = ego_x - (0.3 - gap_now)
-                ego_v = min(ego_v, v_obs_now)
-            step += 1
-
-        # --- 프레임 샘플링: 투영, 검출, 라벨
-        t_frame = step * dt
-        pitch_noise = 0.8 * pitch_noise + rng.gauss(0.0, noise.pitch_jitter_px * noise.level)
-        horizon_y = cam.horizon_ratio * cam.height - cam.pitch_px_per_mps2 * (-ego_a) + pitch_noise
-        projected = []
-        for idx, actor in enumerate(actors):
-            depth = actor.x - (ego_x - prof.cam_behind_front_m)
-            width_m, height_m = prof.sizes[actor.kind]
-            box = project_actor(cam, idx, actor.kind, depth, actor.y, width_m, height_m, horizon_y)
-            if box is not None:
-                projected.append(box)
-        dets: list[Detection] = simulate_detections(projected, cam, noise, rng)
-        frames.append(FrameDetections(frame_idx, round(frame_idx / fps, 6), cam.width, cam.height, dets))
-
-        gap, v_obs, is_vehicle = path_obstacle()
-        nearby = sum(
-            1
-            for a in actors
-            if (a.kind == "vehicle" or prof.name == "robot")
-            and 0.0 < a.x - ego_x < prof.nearby_range_m
-            and abs(a.y) < prof.nearby_lateral_m
-        )
-        state = FrameState(t_frame, ego_v, ego_a, gap, ego_v - v_obs, is_vehicle, nearby)
-        labels.append(labeler(state))
-        ego_vs.append(round(ego_v, 4))
-        ego_as.append(round(ego_a, 4))
-        ttc = labeler.ttc(state)
-        ttcs.append(round(ttc, 4) if math.isfinite(ttc) else -1.0)
-
-    meta.update(
-        {
-            "seed": seed,
-            "v0": round(v0, 3),
-            "t_head": round(t_head, 3),
-            "reaction_delay_s": round(delay_steps * dt, 3),
-            "collisions_steps": collisions,
-            "noise_level": noise.level,
-            "domain": prof.name,
-        }
-    )
-    return Episode(scenario, fps, frames, labels, ego_vs, ego_as, ttcs, meta)
+    info = env.reset()
+    while True:
+        frames.append(info.frame)
+        labels.append(info.label)
+        ego_vs.append(info.ego_v)
+        ego_as.append(info.ego_a)
+        ttcs.append(info.ttc)
+        if env.done:
+            break
+        info = env.step(None)
+    return Episode(scenario, fps, frames, labels, ego_vs, ego_as, ttcs, env.summary())
 
 
 def scenario_types_for_domain(domain: str = "driving") -> dict[str, float]:
