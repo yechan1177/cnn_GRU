@@ -518,7 +518,7 @@ def stage_pilot(cfg: CurationSuiteConfig) -> dict[str, Any]:
     # 파일럿 2차: 예산 규모(1/2/5%)에서 무작위·오라클·CARE·감속 트리거의 격차(주 예산 결정용)
     for b in ((0.01, 0.02, 0.05) if not cfg.quick else (0.05,)):
         for m in ("random", "oracle", "ours", "action_trigger"):
-            jobs.append(make_job(cfg, m, b, 0, "val", steps=pilot_steps))
+            jobs.append(make_job(cfg, m, b, 0, "val"))  # 2차는 확정한 T(cfg.steps)로 실행
     res = run_jobs(cfg, jobs)
     return {"jobs": [r["key"] for r in res]}
 
