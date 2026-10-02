@@ -9,4 +9,4 @@
 | **CARE(제안)** | $\max e_t+\lambda\,\overline{u}_t$ + 저장소 $\rho$ | 점수기 | O | O | O | O |
 | Coreset[36] | 특징 k-center 탐욕 | 풀 전체 특징 | X | O | X(풀 크기에 비례) | X |
 | 오프라인 손실* | $\frac{1}{L}\sum_{t\in c}\ell_\theta(t)$ | 전체 풀로 학습한 정책 | X | X | X | X |
-| 오라클* | GT 위험 프레임 비율 | 특권 GT 라벨 | - | O | - | X |
+| 오라클* | GT 위험 프레임 비율 | 특권 GT 라벨 | 해당 없음 | O | 해당 없음 | X |

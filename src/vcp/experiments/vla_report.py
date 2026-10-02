@@ -292,7 +292,7 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         cells = [summ.get(("driving", m, b)) for b in budgets]
         if not any(cells):
             continue
-        brow.append([METHOD_LABELS[m]] + [_fmt(*c["success"]) if c else "-" for c in cells])
+        brow.append([METHOD_LABELS[m]] + [_fmt(*c["success"]) if c else "미실행" for c in cells])
     if full:
         brow.append([METHOD_LABELS["full"]] + [_fmt(*full["success"])] * 0 + [f"(100%: {_fmt(*full['success'])})"] + [""] * (len(budgets) - 1))
     _write_table(tables / "vla_budget_success", ["방법"] + [f"{int(round(b * 100))}%" for b in budgets], brow)
@@ -488,6 +488,7 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
     # AMR robot_crowded 진단(심사 M8/N10): 전문가 이동 거리 음수 에피소드 수, 해당 시나리오 제외 성공률
     ex_r = expert("robot", "test")
     stats["robot_expert_negative_distance"] = int(sum(1 for e in ex_r["episodes"] if e["distance"] < 0))
+    stats["robot_expert_collision_moving"] = float(np.mean([bool(e["collision_moving"]) for e in ex_r["episodes"]]))
     stats["robot_n_test"] = len(ex_r["episodes"])
     for m in ("ours", "random", "full"):
         rs = groups.get(("robot", "test", m, 1.0 if m == "full" else 0.02, steps, True, None, None))
@@ -703,6 +704,8 @@ def build_confirm_report(root: Path) -> dict[str, Any]:
         "H3c_ours_vs_mix_uncert": cmp("ours_b0.02", "mix_uncert_b0.02"),
         "X_mix_trigger_vs_random": cmp("mix_trigger_b0.02", "random_b0.02"),
         "X_rho095_vs_ours": cmp("ours_b0.02_r0.95", "ours_b0.02"),
+        "X_mix_oracle_vs_random": cmp("mix_oracle_b0.02", "random_b0.02"),
+        "X_mix_uncert_vs_random": cmp("mix_uncert_b0.02", "random_b0.02"),
     }
     tests = {k: v for k, v in tests.items() if v is not None}
     secondary = {k: v["p_le0"] for k, v in tests.items() if k[:2] in ("H2", "H3")}
@@ -743,6 +746,8 @@ def build_confirm_report(root: Path) -> dict[str, Any]:
         "H3c_ours_vs_mix_uncert": "H3c: CARE − 불확실성 혼합",
         "X_mix_trigger_vs_random": "(탐색) 감속 트리거 혼합 − 무작위",
         "X_rho095_vs_ours": "(탐색) ρ=0.95 − ρ=0.9",
+        "X_mix_oracle_vs_random": "(탐색) 오라클 혼합 − 무작위",
+        "X_mix_uncert_vs_random": "(탐색) 불확실성 혼합 − 무작위",
     }
     for k, lab in names.items():
         t = tests.get(k)

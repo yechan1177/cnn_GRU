@@ -100,7 +100,7 @@ def fmt_num(v: Any, digits: int) -> str:
     if isinstance(v, (int, float)):
         if not math.isfinite(float(v)):
             return "-"
-        return f"{float(v):.{digits}f}"
+        return f"{float(v):.{digits}f}".replace("-", "−")  # 음수 부호는 U+2212로 통일
     return str(v)
 
 
@@ -154,9 +154,12 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                 key = ":".join(parts)
                 if kind == "b":
                     bt = stats["bootstrap"][key]
-                    return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]"
+                    return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]".replace("-", "−")
                 v = lookup(key)
-                if kind == "s":
+                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
+                if kind == "s" and signed and isinstance(v, (int, float)) and math.isfinite(float(v)):
+                    txt = f"{float(v):+.{3 if digits is None else digits}f}"
+                    return txt.replace("-", "−")
                     out = fmt_num(v, 3 if digits is None else digits)
                     if out == "-":
                         MISSING.append(f"{body} (값 없음/NaN)")
