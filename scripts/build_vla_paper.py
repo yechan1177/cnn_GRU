@@ -91,6 +91,16 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
     def lookup(key: str) -> Any:
         if key in stats:
             return stats[key]
+        # 계층 부트스트랩: hb:<비교키>:<diff|lo|hi|p_le0>, 시드 대응 t: hbt:<비교키>:<diff|lo|hi|t>
+        if key.startswith(("hb:", "hbt:")):
+            kind, comp, field = key.split(":", 2)
+            entry = stats["hboot"][comp]
+            return entry["seed_t"][field] if kind == "hbt" else entry[field]
+        # 확증 실험 검정: ct:<검정키>:<diff|lo|hi|p_le0|p_holm>, 시드 대응 t: ctt:<검정키>:<diff|lo|hi|t>
+        if key.startswith(("ct:", "ctt:")):
+            kind, comp, field = key.split(":", 2)
+            entry = stats["confirm_tests"][comp]
+            return entry["seed_t"][field] if kind == "ctt" else entry[field]
         raise KeyError(key)
 
     def repl(m: re.Match[str]) -> str:

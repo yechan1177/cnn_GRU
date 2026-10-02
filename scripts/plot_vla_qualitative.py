@@ -40,17 +40,18 @@ def main() -> None:
     tune = json.loads((root / "cache" / "tune_driving.json").read_text(encoding="utf-8"))
     common = dict(event_score=sc["event_score"], entropy=sc["entropy"], features=pool["X_v1v2"], action=sc["action"], ittc=sc["ittc"], oracle=sc["oracle"])
     masks = {}
+    # 본 실험과 같은 선택(시드 0의 선택 난수 1000)을 재현한다
     for name, m, kw in (
         ("무작위", "random", {}),
         ("감속 트리거", "action_trigger", {}),
-        ("CARE(점수 몫)", "ours", {"lam": tune["lam"], "reservoir": 0.0}),
+        (f"CARE(ρ={tune['reservoir']})", "ours", {"lam": tune["lam"], "reservoir": tune["reservoir"]}),
     ):
         masks[name] = select(m, args.budget, pool["ep"], cfg.clip_len, np.random.default_rng(1000), **common, **kw)
     ep_ids = pool["ep"]
     if args.episode < 0:
-        cands = [e["index"] for e in meta["episodes"] if e["scenario"] == "lead_brake"]
-        best = max(cands, key=lambda i: (masks["CARE(점수 몫)"][ep_ids == i] & sc["oracle"][ep_ids == i]).sum() - 0.5 * masks["감속 트리거"][ep_ids == i].sum() / 30)
-        ep = best
+        # 사례 선정 기준(심사 m8): 급제동 시나리오 에피소드 가운데 고정 시드(2026)로 무작위 추출
+        cands = sorted(e["index"] for e in meta["episodes"] if e["scenario"] == "lead_brake")
+        ep = int(np.random.default_rng(2026).choice(cands))
     else:
         ep = args.episode
     idx = np.where(ep_ids == ep)[0]
@@ -63,6 +64,9 @@ def main() -> None:
     haz = sc["oracle"][idx]
     first_h = int(np.argmax(haz)) if haz.any() else len(idx) // 2
     picks = sorted({max(0, first_h - 45), max(0, first_h - 10), min(len(idx) - 1, first_h + 10), min(len(idx) - 1, first_h + 60)})
+    extra = iter(np.linspace(0, len(idx) - 1, 8).astype(int).tolist())
+    while len(picks) < 4:  # 에피소드 초반 사건이면 중복이 생기므로 등간격 프레임으로 채운다
+        picks = sorted(set(picks) | {next(extra)})
     for k, j in enumerate(picks[:4]):
         ax = fig.add_subplot(gs[0, k])
         i = idx[j]
@@ -91,7 +95,7 @@ def main() -> None:
     ax3.set_yticks([0.4, 1.4, 2.4])
     ax3.set_yticklabels(list(masks), fontsize=8)
     ax3.set_xlabel("시간(s)")
-    ax3.set_title(f"선택된 클립(예산 {int(args.budget * 100)}%, 풀 전체 기준 선택 결과 중 이 에피소드 부분)", fontsize=9)
+    ax3.set_title(f"선택된 클립(예산 {int(args.budget * 100)}%, 시드 0 선택을 재현; 풀 전체 선택 중 이 에피소드 부분)", fontsize=9)
     out = Path("paper/figures/fig_vla_episode.png")
     fig.savefig(out, dpi=160, bbox_inches="tight")
     print(out, "episode", ep)
