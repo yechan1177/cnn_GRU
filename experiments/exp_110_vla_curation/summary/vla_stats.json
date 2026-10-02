@@ -2476,6 +2476,145 @@
   "hi": 0.4865430954098701,
   "n_pairs": 10
  },
+ "confirm_tests": {
+  "H1_ours_vs_random_b0.02": {
+   "diff": 0.1457725947521866,
+   "lo": 0.07094266277939747,
+   "hi": 0.22254616132167152,
+   "p_le0": 0.0001,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": 0.14577259475218657,
+    "lo": 0.07223265980622103,
+    "hi": 0.21931252969815213,
+    "t": 4.850501154518219,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": 0.0001
+  },
+  "H2_ours_vs_random_b0.01": {
+   "diff": 0.08066083576287658,
+   "lo": -0.029154518950437316,
+   "hi": 0.1836734693877551,
+   "p_le0": 0.0731,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": 0.08066083576287657,
+    "lo": -0.041794597496282906,
+    "hi": 0.20311626902203606,
+    "t": 1.6118277471121965,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": 0.2193
+  },
+  "H3a_ours_vs_mix_trigger": {
+   "diff": 0.06608357628765792,
+   "lo": -0.009718172983479106,
+   "hi": 0.13994169096209913,
+   "p_le0": 0.043,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": 0.06608357628765792,
+    "lo": -0.008157908915581297,
+    "hi": 0.14032506149089713,
+    "t": 2.1781152509708086,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": 0.172
+  },
+  "H3b_ours_vs_mix_oracle": {
+   "diff": 0.042759961127308066,
+   "lo": -0.021379980563654033,
+   "hi": 0.10495626822157435,
+   "p_le0": 0.091,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": 0.04275996112730805,
+    "lo": -0.016117467118529558,
+    "hi": 0.10163738937314566,
+    "t": 1.7771432617884422,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": 0.2193
+  },
+  "H3c_ours_vs_mix_uncert": {
+   "diff": 0.07968901846452867,
+   "lo": -0.028182701652089408,
+   "hi": 0.17784256559766765,
+   "p_le0": 0.0734,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": 0.07968901846452865,
+    "lo": -0.04722628740160402,
+    "hi": 0.20660432433066134,
+    "t": 1.5364500510945627,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": 0.2193
+  },
+  "X_mix_trigger_vs_random": {
+   "diff": 0.07968901846452867,
+   "lo": -0.008746355685131196,
+   "hi": 0.18369776482021347,
+   "p_le0": 0.0397,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": 0.07968901846452867,
+    "lo": -0.02373964202838559,
+    "hi": 0.1831176789574429,
+    "t": 1.8853480964887943,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": null
+  },
+  "X_rho095_vs_ours": {
+   "diff": -0.021379980563654033,
+   "lo": -0.10592808551992225,
+   "hi": 0.0738581146744412,
+   "p_le0": 0.692,
+   "n_seeds": 7,
+   "seed_t": {
+    "diff": -0.02137998056365404,
+    "lo": -0.12916391959049336,
+    "hi": 0.08640395846318527,
+    "t": -0.4853859759776826,
+    "df": 6
+   },
+   "n_common_seeds": 7,
+   "p_holm": null
+  }
+ },
+ "confirm_n_episodes": 147,
+ "confirm:ours_b0.02:success": 0.7356656948493683,
+ "confirm:ours_b0.02:success_sd": 0.09011389548601545,
+ "confirm:ours_b0.02:n_seeds": 7,
+ "confirm:random_b0.02:success": 0.5898931000971819,
+ "confirm:random_b0.02:success_sd": 0.13552699843761695,
+ "confirm:random_b0.02:n_seeds": 7,
+ "confirm:ours_b0.01:success": 0.6433430515063167,
+ "confirm:ours_b0.01:success_sd": 0.08486215220905738,
+ "confirm:ours_b0.01:n_seeds": 7,
+ "confirm:random_b0.01:success": 0.5626822157434402,
+ "confirm:random_b0.01:success_sd": 0.07365751149027529,
+ "confirm:random_b0.01:n_seeds": 7,
+ "confirm:mix_trigger_b0.02:success": 0.6695821185617105,
+ "confirm:mix_trigger_b0.02:success_sd": 0.07460873748365107,
+ "confirm:mix_trigger_b0.02:n_seeds": 7,
+ "confirm:mix_oracle_b0.02:success": 0.6929057337220603,
+ "confirm:mix_oracle_b0.02:success_sd": 0.07182468413027472,
+ "confirm:mix_oracle_b0.02:n_seeds": 7,
+ "confirm:mix_uncert_b0.02:success": 0.6559766763848397,
+ "confirm:mix_uncert_b0.02:success_sd": 0.0797067936277962,
+ "confirm:mix_uncert_b0.02:n_seeds": 7,
+ "confirm:ours_b0.02_r0.95:success": 0.7142857142857144,
+ "confirm:ours_b0.02_r0.95:success_sd": 0.04998958658741181,
+ "confirm:ours_b0.02_r0.95:n_seeds": 7,
  "pool_episodes": 1200,
  "pool_frames": 540000,
  "pool_hazard_ratio": 0.07137037037037038,
@@ -2582,16 +2721,16 @@
  "cost_scorer_onnx_ms": 0.08533400023225113,
  "cost_yolo640_ms": 41.77528900027028,
  "cost_yolo320_ms": 18.042533999960142,
- "cost_coreset_s": 3.316165350999654,
- "cost_ours_select_s": 0.078527634999773,
+ "cost_coreset_s": 0.3352037750009913,
+ "cost_ours_select_s": 0.03798869199818,
  "cost_offline_train_min": 10.182435044454547,
  "openloop_n_frames": 22500,
  "openloop_n_hazard": 1543,
  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
  "cpu_count": 4,
  "torch_version": "2.14.1+cu130",
- "mean_train_min": 9.937430261236804,
- "mean_eval_min": 0.6896689569836819,
- "total_hours": 6.376259530932291,
- "n_policy_runs": 180
+ "mean_train_min": 10.025336882919248,
+ "mean_eval_min": 0.6843878617142536,
+ "total_hours": 8.92477062052792,
+ "n_policy_runs": 236
 }
