@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 HAZARD_IDS = (2, 3)  # 주행: brake_warning, hard_brake_risk / 로봇: slow_down, safety_stop
 SCORER_DATA = {"driving": "main_15fps_mid", "robot": "robot_main_15fps_mid"}
 SEED_BASES = {
-    "driving": {"pool": 100000, "val": 150000, "test": 200000, "testpool": 300000},
+    "driving": {"pool": 100000, "val": 150000, "test": 200000, "testpool": 300000, "confirm": 700000},
     "robot": {"pool": 400000, "val": 450000, "test": 500000, "testpool": 600000},
 }
 
@@ -326,8 +326,17 @@ def select_mask(cfg: CurationSuiteConfig, job: dict[str, Any], P: dict[str, Any]
     }
     if job["method"] == "offline_loss":
         kwargs["loss"] = np.load(P["loss_path"])
+    method = job["method"]
+    # 점수기 기여 분리 통제(심사 M6): 같은 저장소 혼합(ours 규칙)에서 점수 몫만 다른 신호로 고른다.
+    zeros = np.zeros_like(s["event_score"])
+    if method == "mix_trigger":  # 클립 점수 = 최대 감속(감속 트리거와 같은 순위)
+        method, kwargs["event_score"], kwargs["entropy"], kwargs["lam"] = "ours", (-s["action"]).astype(np.float32), zeros, 0.0
+    elif method == "mix_oracle":  # 클립 점수 = GT 위험 프레임 포함 여부(특권 정보)
+        method, kwargs["event_score"], kwargs["entropy"], kwargs["lam"] = "ours", s["oracle"].astype(np.float32), zeros, 0.0
+    elif method == "mix_uncert":  # 클립 점수 = 평균 엔트로피만(위험 확률 없음)
+        method, kwargs["event_score"], kwargs["lam"] = "ours", zeros, 1.0
     rng = np.random.default_rng(1000 + int(job["seed"]))
-    mask = select(job["method"], job["budget"], P["pool"]["ep"], cfg.clip_len, rng, **kwargs)
+    mask = select(method, job["budget"], P["pool"]["ep"], cfg.clip_len, rng, **kwargs)
     assert len(mask) == n
     return mask
 
@@ -624,6 +633,23 @@ def stage_ablation(cfg: CurationSuiteConfig) -> list[dict[str, Any]]:
     return run_jobs(cfg, jobs)
 
 
+CONFIRM_SEEDS = (3, 4, 5, 6, 7, 8, 9)
+
+
+def stage_confirm(cfg: CurationSuiteConfig) -> list[dict[str, Any]]:
+    """사전 등록 확증 실험(docs/32): 새 학습 시드 3~9, 새 평가 세트(confirm, 시드 700000번대)."""
+
+    cfg = tuned(cfg)
+    jobs = []
+    for s in CONFIRM_SEEDS:
+        for m, b in (("ours", 0.02), ("random", 0.02), ("ours", 0.01), ("random", 0.01), ("mix_trigger", 0.02), ("mix_oracle", 0.02), ("mix_uncert", 0.02)):
+            jobs.append(make_job(cfg, m, b, s, "confirm"))
+        jobs.append(make_job(cfg, "ours", 0.02, s, "confirm", lam=cfg.lam, reservoir=0.95))  # 탐색: 경계 확인
+    # 1차 가설 조건(2% CARE·무작위)을 먼저 끝낸다
+    jobs.sort(key=lambda j: (j["budget"] != 0.02 or j["method"] not in ("ours", "random") or "reservoir" in j, j["seed"]))
+    return run_jobs(cfg, jobs)
+
+
 def write_summary(cfg: CurationSuiteConfig) -> Path:
     """runs/*.json → summary/curation_runs.json(정책 가중치 없이 지표만, 추적 대상)."""
 
@@ -664,7 +690,7 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser(description="VLA 연계 큐레이션 실험")
-    ap.add_argument("stage", choices=["prepare", "pilot", "tune", "main", "ablation", "lang", "robot", "comma", "summary", "all"])
+    ap.add_argument("stage", choices=["prepare", "pilot", "tune", "main", "ablation", "lang", "robot", "comma", "confirm", "summary", "all"])
     ap.add_argument("--root", default="experiments/exp_110_vla_curation")
     ap.add_argument("--domain", default="driving")
     ap.add_argument("--workers", type=int, default=4)
@@ -689,6 +715,8 @@ def main() -> None:
         stage_tune(cfg)
     if args.stage in {"main", "all"}:
         stage_main(cfg)
+    if args.stage == "confirm":
+        stage_confirm(cfg)
     if args.stage in {"ablation", "all"}:
         stage_ablation(cfg)
     if args.stage in {"lang", "all"}:
