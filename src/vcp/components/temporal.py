@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import math
@@ -67,10 +67,36 @@ def _balanced_channel_groups(input_dim: int, group_count: int = 4) -> list[list[
 def build_temporal_channel_groups(
     input_dim: int,
     feature_keys: list[str] | None = None,
+    grouping: str = "auto",
+    feature_version: str | None = None,
 ) -> list[list[int]]:
-    """입력 벡터를 멀티채널 CNN-GRU용 채널 그룹으로 분리한다."""
+    """입력 벡터를 멀티채널 CNN-GRU용 채널 그룹으로 분리한다.
+
+    grouping
+    - ``semantic``: 특징 버전(v1/v2)의 의미 그룹(global/vehicle/person/bike 등)
+    - ``balanced``: 인덱스 균등 분할(2026-03 배포 체크포인트가 실제로 사용한 방식)
+    - ``single``: 전체를 하나의 그룹(단일채널 CNN-GRU)
+    - ``auto``: 기존 동작(가능하면 key 이름 기반 의미 그룹, 아니면 균등 분할)
+    """
 
     safe_dim = max(1, int(input_dim))
+    mode = str(grouping or "auto").strip().lower()
+    if mode == "single":
+        return [list(range(safe_dim))]
+    if mode == "semantic":
+        from ..features.registry import get_feature_spec
+
+        spec = get_feature_spec(feature_version or "v1")
+        if spec.dim != safe_dim:
+            raise ValueError(f"의미 그룹 차원 불일치: spec={spec.dim}, input={safe_dim}")
+        return [list(indices) for _, indices in spec.semantic_groups]
+    if mode == "balanced":
+        if safe_dim <= 8:
+            return _balanced_channel_groups(safe_dim, group_count=4)
+        global_group = list(range(0, min(5, safe_dim)))
+        remaining = list(range(len(global_group), safe_dim))
+        split_groups = _balanced_channel_groups(len(remaining), group_count=3) if remaining else []
+        return [global_group] + [[remaining[idx] for idx in group] for group in split_groups]
     if safe_dim <= 8:
         return _balanced_channel_groups(safe_dim, group_count=4)
 
@@ -308,6 +334,66 @@ if nn is not None:  # pragma: no branch
                 normalized = _balanced_channel_groups(self.input_dim, group_count=4)
             return normalized
 
+    class LiteratureCNNGRUNet(nn.Module):
+        """문헌형 단일채널 CNN-GRU baseline (2026-03 비교군과 같은 파라미터 이름)."""
+
+        def __init__(
+            self,
+            input_dim: int,
+            hidden_dim: int,
+            num_contexts: int,
+            dropout: float = 0.1,
+            cnn_channels: int = 24,
+        ) -> None:
+            super().__init__()
+            self.conv = nn.Sequential(
+                nn.Conv1d(int(input_dim), int(cnn_channels), kernel_size=3, padding=1),
+                nn.BatchNorm1d(int(cnn_channels)),
+                nn.ReLU(),
+                nn.Conv1d(int(cnn_channels), int(cnn_channels), kernel_size=3, padding=1),
+                nn.ReLU(),
+            )
+            self.gru = nn.GRU(
+                input_size=int(cnn_channels),
+                hidden_size=int(hidden_dim),
+                num_layers=1,
+                batch_first=True,
+            )
+            self.dropout = nn.Dropout(max(0.0, min(0.5, float(dropout))))
+            self.context_head = nn.Linear(int(hidden_dim), int(num_contexts))
+            self.boundary_head = nn.Linear(int(hidden_dim), 1)
+
+        def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+            encoded = self.conv(x.transpose(1, 2)).transpose(1, 2)
+            gru_out, _ = self.gru(encoded)
+            pooled = self.dropout(gru_out.mean(dim=1))
+            return {
+                "context_logits": self.context_head(pooled),
+                "boundary_logit": self.boundary_head(pooled).squeeze(-1),
+            }
+
+    class LastFrameMLP(nn.Module):
+        """시간 정보를 쓰지 않는 ablation baseline(마지막 프레임 특징만 사용)."""
+
+        def __init__(self, input_dim: int, hidden_dim: int, num_contexts: int, dropout: float = 0.1) -> None:
+            super().__init__()
+            self.body = nn.Sequential(
+                nn.Linear(int(input_dim), int(hidden_dim)),
+                nn.ReLU(),
+                nn.Dropout(max(0.0, min(0.5, float(dropout)))),
+                nn.Linear(int(hidden_dim), int(hidden_dim)),
+                nn.ReLU(),
+            )
+            self.context_head = nn.Linear(int(hidden_dim), int(num_contexts))
+            self.boundary_head = nn.Linear(int(hidden_dim), 1)
+
+        def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+            pooled = self.body(x[:, -1, :])
+            return {
+                "context_logits": self.context_head(pooled),
+                "boundary_logit": self.boundary_head(pooled).squeeze(-1),
+            }
+
 else:
 
     class TemporalGRUNet:  # pragma: no cover - torch 미설치 환경 안내용
@@ -321,6 +407,9 @@ else:
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             raise ModuleNotFoundError("BaselineTemporalGRUNet 사용 시 torch 설치가 필요합니다.")
+
+    LiteratureCNNGRUNet = BaselineTemporalGRUNet  # pragma: no cover
+    LastFrameMLP = BaselineTemporalGRUNet  # pragma: no cover
 
 
 def build_temporal_model(
@@ -336,6 +425,21 @@ def build_temporal_model(
     arch = architecture.strip().lower()
     if arch in {"gru", "gru_baseline", "baseline_gru"}:
         return BaselineTemporalGRUNet(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_contexts=num_contexts,
+            dropout=dropout,
+        )
+    if arch in {"single_channel_cnn_gru", "literature_cnn_gru"}:
+        return LiteratureCNNGRUNet(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_contexts=num_contexts,
+            dropout=dropout,
+            cnn_channels=cnn_channels,
+        )
+    if arch in {"mlp_last", "last_frame_mlp"}:
+        return LastFrameMLP(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             num_contexts=num_contexts,
@@ -370,12 +474,14 @@ class GRUTemporalEncoderTorch(TemporalEncoder):
             raise ValueError("gru_torch 모드에는 temporal.checkpoint_path가 필요합니다.")
 
         self._window_size = max(2, int(cfg.window_size))
-        self._device = torch.device(str(cfg.device))
+        from ..utils.device import resolve_device
+
+        self._device = torch.device(resolve_device(str(cfg.device)))
         checkpoint_path = Path(cfg.checkpoint_path)
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Temporal 체크포인트를 찾을 수 없습니다: {checkpoint_path}")
 
-        checkpoint = torch.load(checkpoint_path, map_location=self._device)
+        checkpoint = torch.load(checkpoint_path, map_location=self._device, weights_only=False)
         model_cfg = checkpoint.get("model_config", {})
         state_dict = checkpoint.get("state_dict", {})
 
@@ -383,6 +489,8 @@ class GRUTemporalEncoderTorch(TemporalEncoder):
         if not inferred_architecture:
             if "input_proj.weight" in state_dict:
                 inferred_architecture = "gru"
+            elif "conv.0.weight" in state_dict:
+                inferred_architecture = "single_channel_cnn_gru"
             else:
                 inferred_architecture = "multichannel_cnn_gru"
 
@@ -407,7 +515,9 @@ class GRUTemporalEncoderTorch(TemporalEncoder):
         ckpt_hidden_dim = int(model_cfg.get("hidden_dim", inferred_hidden_dim))
         ckpt_num_contexts = int(model_cfg.get("num_contexts", inferred_num_contexts))
         ckpt_dropout = float(model_cfg.get("dropout", cfg.dropout))
-        ckpt_cnn_channels = int(model_cfg.get("cnn_channels", 16))
+        conv_weight = state_dict.get("conv.0.weight")
+        default_cnn = int(conv_weight.shape[0]) if conv_weight is not None else 16
+        ckpt_cnn_channels = int(model_cfg.get("cnn_channels", default_cnn))
         raw_channel_groups = model_cfg.get("channel_groups", build_temporal_channel_groups(ckpt_input_dim))
         architecture = inferred_architecture
 
@@ -498,6 +608,12 @@ def build_temporal_encoder(
         try:
             return GRUTemporalEncoderTorch(cfg=cfg, labels=labels, input_dim=input_dim)
         except Exception as exc:
-            logger.warning("GRUTemporalEncoderTorch 초기화 실패, mock encoder로 대체: %s", exc)
+            if not getattr(cfg, "fallback_to_mock", True):
+                raise
+            logger.error(
+                "GRUTemporalEncoderTorch 초기화 실패 -> mock encoder로 대체합니다. "
+                "mock 출력은 학습된 모델이 아니므로 실험/배포에 사용하지 마십시오: %s",
+                exc,
+            )
 
     return GRUTemporalEncoderMock(cfg=cfg, labels=labels)

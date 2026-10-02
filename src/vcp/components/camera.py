@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import math
@@ -132,10 +132,62 @@ class ImageFolderCameraStream(CameraStream):
         return [round(float(value) / 255.0, 6) for value in data]
 
 
+class VideoCameraStream(CameraStream):
+    """mp4 파일 또는 웹캠(`webcam:<index>`)을 실시간 프레임 스트림으로 읽는다."""
+
+    def __init__(self, camera_cfg: CameraConfig, runtime_cfg: RuntimeConfig) -> None:
+        try:
+            import cv2
+        except ModuleNotFoundError as exc:  # pragma: no cover
+            raise ModuleNotFoundError("video 입력에는 opencv-python이 필요합니다.") from exc
+        source = str(camera_cfg.video_source or "")
+        if not source:
+            raise ValueError("camera.video_source가 비어 있습니다(mp4 경로 또는 webcam:0).")
+        if source.startswith("webcam:"):
+            self._capture = cv2.VideoCapture(int(source.split(":", 1)[1] or 0))
+        else:
+            if not Path(source).exists():
+                raise FileNotFoundError(f"영상 파일을 찾을 수 없습니다: {source}")
+            self._capture = cv2.VideoCapture(source)
+        if not self._capture.isOpened():
+            raise RuntimeError(f"입력 소스를 열 수 없습니다: {source}")
+        fps = float(self._capture.get(cv2.CAP_PROP_FPS))
+        self._fps = fps if fps > 0 else float(max(1, int(camera_cfg.fps)))
+        self._cv2 = cv2
+        self._max_frames = max(1, int(runtime_cfg.max_frames))
+        self._frame_id = 0
+        self._source = source
+        logger.info("VideoCameraStream 초기화: source=%s, fps=%.2f", source, self._fps)
+
+    def read(self) -> FramePacket | None:
+        if self._frame_id >= self._max_frames:
+            return None
+        ok, frame = self._capture.read()
+        if not ok:
+            return None
+        cv2 = self._cv2
+        small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (8, 4), interpolation=cv2.INTER_AREA)
+        frame_id = self._frame_id
+        self._frame_id += 1
+        return FramePacket(
+            frame_id=frame_id,
+            sensor_timestamp=frame_id / self._fps,
+            system_timestamp=time.time(),
+            pixels=[round(float(v) / 255.0, 6) for v in small.reshape(-1).tolist()],
+            raw_path=f"{self._source}#frame={frame_id}",
+            image=frame,
+        )
+
+    def close(self) -> None:
+        self._capture.release()
+
+
 def build_camera_stream(camera_cfg: CameraConfig, runtime_cfg: RuntimeConfig) -> CameraStream:
     """설정에 맞는 카메라 스트림 구현체를 생성한다."""
 
     source_type = camera_cfg.source_type.strip().lower()
     if source_type == "image_folder":
         return ImageFolderCameraStream(camera_cfg, runtime_cfg)
+    if source_type in {"video", "webcam"}:
+        return VideoCameraStream(camera_cfg, runtime_cfg)
     return MockCameraStream(camera_cfg, runtime_cfg)

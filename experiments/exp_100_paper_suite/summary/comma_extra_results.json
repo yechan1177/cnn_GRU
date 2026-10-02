@@ -1,0 +1,959 @@
+{
+ "suite": "comma_speedchallenge_ego_state",
+ "labels": [
+  "cruise",
+  "accelerating",
+  "braking",
+  "stopped"
+ ],
+ "config": {
+  "out_dir": "experiments/exp_100_paper_suite/summary",
+  "data_dir": "data/processed/comma_speedchallenge",
+  "seeds": [
+   0,
+   1,
+   2
+  ],
+  "n_blocks": 10,
+  "purge_s": 1.0,
+  "workers": 4,
+  "quick": false,
+  "results_name": "comma_extra_results.json",
+  "include_baselines": false,
+  "run_sim_to_real": false
+ },
+ "dataset": {
+  "frames": 20400,
+  "label_counts": [
+   12916,
+   2783,
+   3473,
+   1228
+  ],
+  "fps": 20
+ },
+ "records": [
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 0,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 0,
+   "test_20fps": {
+    "accuracy": 0.7683168316831683,
+    "macro_f1": 0.3528899237065999,
+    "per_class_f1": [
+     0.8663620788121074,
+     0.0,
+     0.19230769230769232,
+     null
+    ],
+    "event_frame_recall": 0.11705685618729098,
+    "event_frame_precision": 0.5384615384615384,
+    "event_recall": 0.15384615384615385,
+    "n_events": 13,
+    "median_latency_s": -0.375,
+    "false_alarms_per_min": 0.5940594283777908,
+    "flicker_per_min": 4.754829267068721,
+    "gt_flicker_per_min": 19.019317068274884,
+    "ece": 0.17531673329891542,
+    "braking_auroc": 0.7137174272560676
+   },
+   "test_10fps": {
+    "accuracy": 0.7712871287128713,
+    "macro_f1": 0.3501146927441748,
+    "per_class_f1": [
+     0.8685258964143426,
+     0.0,
+     0.18181818181818182,
+     null
+    ],
+    "event_frame_recall": 0.10738255033557047,
+    "event_frame_precision": 0.5925925925925926,
+    "event_recall": 0.2222222222222222,
+    "n_events": 9,
+    "median_latency_s": 1.700000286102295,
+    "false_alarms_per_min": 0.594059405940594,
+    "flicker_per_min": 2.37859263003524,
+    "gt_flicker_per_min": 14.271555780211438,
+    "ece": 0.17939364886519932
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 1,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 8,
+   "test_20fps": {
+    "accuracy": 0.9435,
+    "macro_f1": 0.5910575422770544,
+    "per_class_f1": [
+     0.9707329707329707,
+     0.0,
+     0.21138211382113822,
+     null
+    ],
+    "event_frame_recall": 0.21311475409836064,
+    "event_frame_precision": 0.20967741935483872,
+    "event_recall": 1.0,
+    "n_events": 1,
+    "median_latency_s": 0.399993896484375,
+    "false_alarms_per_min": 3.0,
+    "flicker_per_min": 13.206603704886003,
+    "gt_flicker_per_min": 1.2006003368078184,
+    "ece": 0.1412796249091625,
+    "braking_auroc": 0.8482655416430642
+   },
+   "test_10fps": {
+    "accuracy": 0.952,
+    "macro_f1": 0.5947717231222386,
+    "per_class_f1": [
+     0.9752577319587629,
+     0.0,
+     0.21428571428571427,
+     null
+    ],
+    "event_frame_recall": 0.2,
+    "event_frame_precision": 0.23076923076923078,
+    "event_recall": 1.0,
+    "n_events": 1,
+    "median_latency_s": 0.70001220703125,
+    "false_alarms_per_min": 1.800000137329112,
+    "flicker_per_min": 6.006006372950488,
+    "gt_flicker_per_min": 1.2012012745900975,
+    "ece": 0.14477316206693647
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 2,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 9,
+   "test_20fps": {
+    "accuracy": 0.6845,
+    "macro_f1": 0.332523000296778,
+    "per_class_f1": [
+     0.8152905198776759,
+     0.0,
+     0.18227848101265823,
+     null
+    ],
+    "event_frame_recall": 0.19047619047619047,
+    "event_frame_precision": 0.17475728155339806,
+    "event_recall": 0.3333333333333333,
+    "n_events": 9,
+    "median_latency_s": 0.0,
+    "false_alarms_per_min": 10.199998443603754,
+    "flicker_per_min": 70.8354090576283,
+    "gt_flicker_per_min": 13.20660168871036,
+    "ece": 0.11912300649285315,
+    "braking_auroc": 0.49047122376774505
+   },
+   "test_10fps": {
+    "accuracy": 0.696,
+    "macro_f1": 0.3267643532175832,
+    "per_class_f1": [
+     0.8234582829504232,
+     0.013245033112582781,
+     0.14358974358974358,
+     null
+    ],
+    "event_frame_recall": 0.14736842105263157,
+    "event_frame_precision": 0.14,
+    "event_recall": 0.2222222222222222,
+    "n_events": 9,
+    "median_latency_s": 0.1999969482421875,
+    "false_alarms_per_min": 4.2,
+    "flicker_per_min": 39.63964206147322,
+    "gt_flicker_per_min": 12.012012745900975,
+    "ece": 0.1293225012421608
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 3,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 6,
+   "test_20fps": {
+    "accuracy": 0.7265,
+    "macro_f1": 0.282165072925722,
+    "per_class_f1": [
+     0.841495218777166,
+     0.005,
+     0.0,
+     0.0
+    ],
+    "event_frame_recall": 0.0,
+    "event_frame_precision": 0.0,
+    "event_recall": 0.0,
+    "n_events": 4,
+    "median_latency_s": null,
+    "false_alarms_per_min": 1.2,
+    "flicker_per_min": 15.007501918989046,
+    "gt_flicker_per_min": 14.407201842229483,
+    "ece": 0.029053428515791898,
+    "braking_auroc": 0.6213599802487103
+   },
+   "test_10fps": {
+    "accuracy": 0.728,
+    "macro_f1": 0.2873759585675643,
+    "per_class_f1": [
+     0.8422273781902552,
+     0.01990049751243781,
+     0.0,
+     null
+    ],
+    "event_frame_recall": 0.0,
+    "event_frame_precision": 0.0,
+    "event_recall": 0.0,
+    "n_events": 2,
+    "median_latency_s": null,
+    "false_alarms_per_min": 0.6,
+    "flicker_per_min": 7.207207647540585,
+    "gt_flicker_per_min": 10.810811471310878,
+    "ece": 0.031886038780212414
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 4,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 3,
+   "test_20fps": {
+    "accuracy": 0.6575,
+    "macro_f1": 0.560132039169686,
+    "per_class_f1": [
+     0.7644514353126229,
+     0.20105820105820105,
+     0.5421940928270043,
+     0.732824427480916
+    ],
+    "event_frame_recall": 0.5288065843621399,
+    "event_frame_precision": 0.5562770562770563,
+    "event_recall": 0.7777777777777778,
+    "n_events": 9,
+    "median_latency_s": -0.149993896484375,
+    "false_alarms_per_min": 3.5999999999999996,
+    "flicker_per_min": 44.422205680207576,
+    "gt_flicker_per_min": 17.408702226027295,
+    "ece": 0.10205711165070536,
+    "braking_auroc": 0.770614185299346
+   },
+   "test_10fps": {
+    "accuracy": 0.67,
+    "macro_f1": 0.5756348193935394,
+    "per_class_f1": [
+     0.7744945567651633,
+     0.2222222222222222,
+     0.5517241379310345,
+     0.7540983606557377
+    ],
+    "event_frame_recall": 0.5311203319502075,
+    "event_frame_precision": 0.5739910313901345,
+    "event_recall": 0.7777777777777778,
+    "n_events": 9,
+    "median_latency_s": 0.100006103515625,
+    "false_alarms_per_min": 3.0,
+    "flicker_per_min": 29.42943122745739,
+    "gt_flicker_per_min": 17.417418481556414,
+    "ece": 0.13071400505304337
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 5,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 5,
+   "test_20fps": {
+    "accuracy": 0.531,
+    "macro_f1": 0.3181333928799617,
+    "per_class_f1": [
+     0.6332894158981115,
+     0.06479481641468683,
+     0.5744493392070484,
+     0.0
+    ],
+    "event_frame_recall": 0.6980728051391863,
+    "event_frame_precision": 0.4880239520958084,
+    "event_recall": 1.0,
+    "n_events": 9,
+    "median_latency_s": -0.4000244140625,
+    "false_alarms_per_min": 9.0,
+    "flicker_per_min": 55.22760706187969,
+    "gt_flicker_per_min": 22.81140291686335,
+    "ece": 0.05616833382844927,
+    "braking_auroc": 0.7683077924490614
+   },
+   "test_10fps": {
+    "accuracy": 0.534,
+    "macro_f1": 0.3340963654539587,
+    "per_class_f1": [
+     0.6238859180035651,
+     0.13617021276595745,
+     0.5763293310463122,
+     0.0
+    ],
+    "event_frame_recall": 0.717948717948718,
+    "event_frame_precision": 0.4813753581661891,
+    "event_recall": 1.0,
+    "n_events": 9,
+    "median_latency_s": -0.39996337890625,
+    "false_alarms_per_min": 4.2,
+    "flicker_per_min": 34.2342258679026,
+    "gt_flicker_per_min": 22.822817245268403,
+    "ece": 0.053016782313585295
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 6,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 2,
+   "test_20fps": {
+    "accuracy": 0.5725,
+    "macro_f1": 0.4652733681017737,
+    "per_class_f1": [
+     0.6836772983114446,
+     0.0,
+     0.31444241316270566,
+     0.8629737609329446
+    ],
+    "event_frame_recall": 0.18859649122807018,
+    "event_frame_precision": 0.945054945054945,
+    "event_recall": 0.3,
+    "n_events": 10,
+    "median_latency_s": 1.10003662109375,
+    "false_alarms_per_min": 0.0,
+    "flicker_per_min": 16.20810207250817,
+    "gt_flicker_per_min": 21.010502686584665,
+    "ece": 0.10484640036523343,
+    "braking_auroc": 0.8302427052086174
+   },
+   "test_10fps": {
+    "accuracy": 0.574,
+    "macro_f1": 0.47310751702360365,
+    "per_class_f1": [
+     0.6839762611275965,
+     0.0,
+     0.2825278810408922,
+     0.9259259259259259
+    ],
+    "event_frame_recall": 0.16521739130434782,
+    "event_frame_precision": 0.9743589743589743,
+    "event_recall": 0.3,
+    "n_events": 10,
+    "median_latency_s": 1.60003662109375,
+    "false_alarms_per_min": 0.0,
+    "flicker_per_min": 10.210207714988496,
+    "gt_flicker_per_min": 21.021015883799844,
+    "ece": 0.11861964616179467
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 7,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 7,
+   "test_20fps": {
+    "accuracy": 0.65,
+    "macro_f1": 0.6305380479725654,
+    "per_class_f1": [
+     0.6715993170176437,
+     0.5082644628099173,
+     0.647693817468106,
+     0.6945945945945946
+    ],
+    "event_frame_recall": 0.8048780487804879,
+    "event_frame_precision": 0.541871921182266,
+    "event_recall": 1.0,
+    "n_events": 8,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 7.199999999999999,
+    "flicker_per_min": 70.8354090576283,
+    "gt_flicker_per_min": 18.009002302786854,
+    "ece": 0.1465988458842039,
+    "braking_auroc": 0.8854118729866544
+   },
+   "test_10fps": {
+    "accuracy": 0.643,
+    "macro_f1": 0.6203705119432682,
+    "per_class_f1": [
+     0.6794462193823216,
+     0.540084388185654,
+     0.631578947368421,
+     0.6303724928366762
+    ],
+    "event_frame_recall": 0.7317073170731707,
+    "event_frame_precision": 0.5555555555555556,
+    "event_recall": 1.0,
+    "n_events": 8,
+    "median_latency_s": -0.20001220703125,
+    "false_alarms_per_min": 3.5999999999999996,
+    "flicker_per_min": 43.84383312906825,
+    "gt_flicker_per_min": 18.018013614685582,
+    "ece": 0.139974053889513
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 8,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 8,
+   "test_20fps": {
+    "accuracy": 0.58,
+    "macro_f1": 0.30340956405581143,
+    "per_class_f1": [
+     0.7333069932832872,
+     0.0,
+     0.4803312629399586,
+     0.0
+    ],
+    "event_frame_recall": 0.5603864734299517,
+    "event_frame_precision": 0.42028985507246375,
+    "event_recall": 0.875,
+    "n_events": 8,
+    "median_latency_s": -0.35003662109375,
+    "false_alarms_per_min": 9.6,
+    "flicker_per_min": 55.82790713863925,
+    "gt_flicker_per_min": 18.609302379546417,
+    "ece": 0.08816507689654829,
+    "braking_auroc": 0.6796151104775481
+   },
+   "test_10fps": {
+    "accuracy": 0.57,
+    "macro_f1": 0.30184506307200776,
+    "per_class_f1": [
+     0.7153167602245389,
+     0.0,
+     0.49206349206349204,
+     0.0
+    ],
+    "event_frame_recall": 0.5961538461538461,
+    "event_frame_precision": 0.4189189189189189,
+    "event_recall": 0.75,
+    "n_events": 8,
+    "median_latency_s": -0.200042724609375,
+    "false_alarms_per_min": 5.3999999999999995,
+    "flicker_per_min": 39.03902949848543,
+    "gt_flicker_per_min": 18.618614068508435,
+    "ece": 0.06569131043553353
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2",
+   "fold": 9,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 0,
+   "test_20fps": {
+    "accuracy": 0.49257425742574257,
+    "macro_f1": 0.4446239471350551,
+    "per_class_f1": [
+     0.47530864197530864,
+     0.0,
+     0.48632668144863267,
+     0.8168604651162791
+    ],
+    "event_frame_recall": 0.6553784860557769,
+    "event_frame_precision": 0.38660399529964745,
+    "event_recall": 0.9166666666666666,
+    "n_events": 12,
+    "median_latency_s": -0.39996337890625,
+    "false_alarms_per_min": 11.881188118811881,
+    "flicker_per_min": 54.68052830622172,
+    "gt_flicker_per_min": 24.962849878927305,
+    "ece": 0.20724991694240288,
+    "braking_auroc": 0.6902692261257999
+   },
+   "test_10fps": {
+    "accuracy": 0.4425742574257426,
+    "macro_f1": 0.40719974309569684,
+    "per_class_f1": [
+     0.4222222222222222,
+     0.0,
+     0.4088888888888889,
+     0.7976878612716763
+    ],
+    "event_frame_recall": 0.552,
+    "event_frame_precision": 0.3247058823529412,
+    "event_recall": 0.7272727272727273,
+    "n_events": 11,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 6.534653465346534,
+    "flicker_per_min": 27.948457063078518,
+    "gt_flicker_per_min": 23.785920904747673,
+    "ece": 0.2135202045192813
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 0,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 4,
+   "test_20fps": {
+    "accuracy": 0.69009900990099,
+    "macro_f1": 0.4290400713880855,
+    "per_class_f1": [
+     0.7950735545672255,
+     0.0,
+     0.49204665959703076,
+     null
+    ],
+    "event_frame_recall": 0.7759197324414716,
+    "event_frame_precision": 0.36024844720496896,
+    "event_recall": 0.6923076923076923,
+    "n_events": 13,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 5.940594283777909,
+    "flicker_per_min": 35.6612195030154,
+    "gt_flicker_per_min": 19.019317068274884,
+    "ece": 0.16319227587468554,
+    "braking_auroc": 0.8419931633432378
+   },
+   "test_10fps": {
+    "accuracy": 0.6663366336633664,
+    "macro_f1": 0.41785339424969586,
+    "per_class_f1": [
+     0.7714884696016772,
+     0.0,
+     0.4820717131474104,
+     null
+    ],
+    "event_frame_recall": 0.8120805369127517,
+    "event_frame_precision": 0.34277620396600567,
+    "event_recall": 0.6666666666666666,
+    "n_events": 9,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 2.376237623762376,
+    "flicker_per_min": 12.48761130768501,
+    "gt_flicker_per_min": 14.271555780211438,
+    "ece": 0.19591498127078064
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 1,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 1,
+   "test_20fps": {
+    "accuracy": 0.863,
+    "macro_f1": 0.5001495841560462,
+    "per_class_f1": [
+     0.9262250942380184,
+     0.0,
+     0.07407407407407407,
+     0.0
+    ],
+    "event_frame_recall": 0.09836065573770492,
+    "event_frame_precision": 0.0594059405940594,
+    "event_recall": 1.0,
+    "n_events": 1,
+    "median_latency_s": 0.6999969482421875,
+    "false_alarms_per_min": 1.7999999999999998,
+    "flicker_per_min": 16.20810454690555,
+    "gt_flicker_per_min": 1.2006003368078184,
+    "ece": 0.09971620464324951,
+    "braking_auroc": 0.8371393062166572
+   },
+   "test_10fps": {
+    "accuracy": 0.878,
+    "macro_f1": 0.46751863684771033,
+    "per_class_f1": [
+     0.9350372736954207,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "event_frame_recall": 0.0,
+    "event_frame_precision": 0.0,
+    "event_recall": 0.0,
+    "n_events": 1,
+    "median_latency_s": null,
+    "false_alarms_per_min": 1.800000137329112,
+    "flicker_per_min": 10.810811471310878,
+    "gt_flicker_per_min": 1.2012012745900975,
+    "ece": 0.10228867936134338
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 2,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 10,
+   "test_20fps": {
+    "accuracy": 0.5205,
+    "macro_f1": 0.2951827783715844,
+    "per_class_f1": [
+     0.6864436012418075,
+     0.009259259259259259,
+     0.18984547461368653,
+     null
+    ],
+    "event_frame_recall": 0.2275132275132275,
+    "event_frame_precision": 0.16287878787878787,
+    "event_recall": 0.2222222222222222,
+    "n_events": 9,
+    "median_latency_s": 0.1750030517578125,
+    "false_alarms_per_min": 8.999998626709194,
+    "flicker_per_min": 75.63780967170479,
+    "gt_flicker_per_min": 13.20660168871036,
+    "ece": 0.09939408895373344,
+    "braking_auroc": 0.5604609105437377
+   },
+   "test_10fps": {
+    "accuracy": 0.54,
+    "macro_f1": 0.2881883038815616,
+    "per_class_f1": [
+     0.7148703956343793,
+     0.006153846153846154,
+     0.14354066985645933,
+     null
+    ],
+    "event_frame_recall": 0.15789473684210525,
+    "event_frame_precision": 0.13157894736842105,
+    "event_recall": 0.2222222222222222,
+    "n_events": 9,
+    "median_latency_s": 0.850006103515625,
+    "false_alarms_per_min": 4.2,
+    "flicker_per_min": 42.04204461065341,
+    "gt_flicker_per_min": 12.012012745900975,
+    "ece": 0.12873368445038796
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 3,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 6,
+   "test_20fps": {
+    "accuracy": 0.736,
+    "macro_f1": 0.38453394198012303,
+    "per_class_f1": [
+     0.8445886169271601,
+     0.0979020979020979,
+     0.2111111111111111,
+     null
+    ],
+    "event_frame_recall": 0.15447154471544716,
+    "event_frame_precision": 0.3333333333333333,
+    "event_recall": 0.25,
+    "n_events": 4,
+    "median_latency_s": 0.20001220703125,
+    "false_alarms_per_min": 1.7999999999999998,
+    "flicker_per_min": 10.805401381672112,
+    "gt_flicker_per_min": 14.407201842229483,
+    "ece": 0.06063388380408288,
+    "braking_auroc": 0.7440735302398309
+   },
+   "test_10fps": {
+    "accuracy": 0.748,
+    "macro_f1": 0.3914770985067612,
+    "per_class_f1": [
+     0.8531139835487661,
+     0.1308411214953271,
+     0.19047619047619047,
+     null
+    ],
+    "event_frame_recall": 0.13114754098360656,
+    "event_frame_precision": 0.34782608695652173,
+    "event_recall": 0.5,
+    "n_events": 2,
+    "median_latency_s": 1.0,
+    "false_alarms_per_min": 0.6,
+    "flicker_per_min": 7.207207647540585,
+    "gt_flicker_per_min": 10.810811471310878,
+    "ece": 0.07092215144634245
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 4,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 1,
+   "test_20fps": {
+    "accuracy": 0.6485,
+    "macro_f1": 0.5366849185599748,
+    "per_class_f1": [
+     0.757527733755943,
+     0.18082191780821918,
+     0.5306122448979592,
+     0.6777777777777778
+    ],
+    "event_frame_recall": 0.5082304526748971,
+    "event_frame_precision": 0.5550561797752809,
+    "event_recall": 0.6666666666666666,
+    "n_events": 9,
+    "median_latency_s": -0.274993896484375,
+    "false_alarms_per_min": 2.4,
+    "flicker_per_min": 28.214103607699407,
+    "gt_flicker_per_min": 17.408702226027295,
+    "ece": 0.12371830737590793,
+    "braking_auroc": 0.7715247538746731
+   },
+   "test_10fps": {
+    "accuracy": 0.691,
+    "macro_f1": 0.6049828051190609,
+    "per_class_f1": [
+     0.7804499612102405,
+     0.3163841807909605,
+     0.5701559020044543,
+     0.7529411764705882
+    ],
+    "event_frame_recall": 0.5311203319502075,
+    "event_frame_precision": 0.6153846153846154,
+    "event_recall": 0.5555555555555556,
+    "n_events": 9,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 2.4,
+    "flicker_per_min": 18.61861975614651,
+    "gt_flicker_per_min": 17.417418481556414,
+    "ece": 0.11864657175540926
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 5,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 3,
+   "test_20fps": {
+    "accuracy": 0.5835,
+    "macro_f1": 0.42821470598480005,
+    "per_class_f1": [
+     0.7063732928679818,
+     0.22053231939163498,
+     0.4406294706723891,
+     0.34532374100719426
+    ],
+    "event_frame_recall": 0.3297644539614561,
+    "event_frame_precision": 0.6637931034482759,
+    "event_recall": 0.5555555555555556,
+    "n_events": 9,
+    "median_latency_s": 1.25,
+    "false_alarms_per_min": 1.2,
+    "flicker_per_min": 19.20960245630598,
+    "gt_flicker_per_min": 22.81140291686335,
+    "ece": 0.05995436766743662,
+    "braking_auroc": 0.7869469808397971
+   },
+   "test_10fps": {
+    "accuracy": 0.592,
+    "macro_f1": 0.4507387779345148,
+    "per_class_f1": [
+     0.7071320182094082,
+     0.311787072243346,
+     0.41260744985673353,
+     0.37142857142857144
+    ],
+    "event_frame_recall": 0.3076923076923077,
+    "event_frame_precision": 0.6260869565217392,
+    "event_recall": 0.5555555555555556,
+    "n_events": 9,
+    "median_latency_s": 1.9000244140625,
+    "false_alarms_per_min": 0.6,
+    "flicker_per_min": 15.015011345571319,
+    "gt_flicker_per_min": 22.822817245268403,
+    "ece": 0.05984099772572517
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 6,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 1,
+   "test_20fps": {
+    "accuracy": 0.58,
+    "macro_f1": 0.4581095306655214,
+    "per_class_f1": [
+     0.6891441274546128,
+     0.0,
+     0.47920133111480867,
+     0.6640926640926641
+    ],
+    "event_frame_recall": 0.3157894736842105,
+    "event_frame_precision": 0.993103448275862,
+    "event_recall": 0.3,
+    "n_events": 10,
+    "median_latency_s": 0.70001220703125,
+    "false_alarms_per_min": 0.0,
+    "flicker_per_min": 12.606301611950798,
+    "gt_flicker_per_min": 21.010502686584665,
+    "ece": 0.08797341090440754,
+    "braking_auroc": 0.8786374534133261
+   },
+   "test_10fps": {
+    "accuracy": 0.559,
+    "macro_f1": 0.4079783474350852,
+    "per_class_f1": [
+     0.6818851251840943,
+     0.0,
+     0.43278688524590164,
+     0.5172413793103449
+    ],
+    "event_frame_recall": 0.28695652173913044,
+    "event_frame_precision": 0.88,
+    "event_recall": 0.2,
+    "n_events": 10,
+    "median_latency_s": 2.20001220703125,
+    "false_alarms_per_min": 0.0,
+    "flicker_per_min": 9.009006807342791,
+    "gt_flicker_per_min": 21.021015883799844,
+    "ece": 0.06976479369401932
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 7,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 4,
+   "test_20fps": {
+    "accuracy": 0.6135,
+    "macro_f1": 0.6095201184131963,
+    "per_class_f1": [
+     0.6058479532163743,
+     0.5463917525773195,
+     0.6558791801510249,
+     0.6299615877080665
+    ],
+    "event_frame_recall": 0.7414634146341463,
+    "event_frame_precision": 0.5880077369439072,
+    "event_recall": 1.0,
+    "n_events": 8,
+    "median_latency_s": -0.199981689453125,
+    "false_alarms_per_min": 4.2,
+    "flicker_per_min": 46.82340598724582,
+    "gt_flicker_per_min": 18.009002302786854,
+    "ece": 0.12480297958850858,
+    "braking_auroc": 0.917542567878509
+   },
+   "test_10fps": {
+    "accuracy": 0.608,
+    "macro_f1": 0.5983053983769298,
+    "per_class_f1": [
+     0.6265060240963856,
+     0.5644599303135889,
+     0.6285714285714286,
+     0.5736842105263158
+    ],
+    "event_frame_recall": 0.6439024390243903,
+    "event_frame_precision": 0.6139534883720931,
+    "event_recall": 0.875,
+    "n_events": 8,
+    "median_latency_s": 0.0,
+    "false_alarms_per_min": 3.0,
+    "flicker_per_min": 31.23122359878834,
+    "gt_flicker_per_min": 18.018013614685582,
+    "ece": 0.12954551878571507
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 8,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 8,
+   "test_20fps": {
+    "accuracy": 0.535,
+    "macro_f1": 0.3827784540339442,
+    "per_class_f1": [
+     0.6761947297900849,
+     0.02708803611738149,
+     0.4811643835616438,
+     0.3466666666666667
+    ],
+    "event_frame_recall": 0.678743961352657,
+    "event_frame_precision": 0.3726790450928382,
+    "event_recall": 0.75,
+    "n_events": 8,
+    "median_latency_s": -0.20001220703125,
+    "false_alarms_per_min": 8.4,
+    "flicker_per_min": 39.01950498937152,
+    "gt_flicker_per_min": 18.609302379546417,
+    "ece": 0.07123006300628185,
+    "braking_auroc": 0.720866762919507
+   },
+   "test_10fps": {
+    "accuracy": 0.513,
+    "macro_f1": 0.37766836019914474,
+    "per_class_f1": [
+     0.6435555555555555,
+     0.009259259259259259,
+     0.4631217838765009,
+     0.39473684210526316
+    ],
+    "event_frame_recall": 0.6490384615384616,
+    "event_frame_precision": 0.36,
+    "event_recall": 0.625,
+    "n_events": 8,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 7.199999999999999,
+    "flicker_per_min": 30.63062314496549,
+    "gt_flicker_per_min": 18.618614068508435,
+    "ece": 0.060450038194656386
+   }
+  },
+  {
+   "model": "mc_cnn_gru_semantic_v1v2_w16",
+   "fold": 9,
+   "seed": 0,
+   "params": 57318,
+   "best_epoch": 0,
+   "test_20fps": {
+    "accuracy": 0.4628712871287129,
+    "macro_f1": 0.4243424032277291,
+    "per_class_f1": [
+     0.4052600119545726,
+     0.0,
+     0.5003813882532419,
+     0.7917282127031019
+    ],
+    "event_frame_recall": 0.6533864541832669,
+    "event_frame_precision": 0.4054388133498146,
+    "event_recall": 0.6666666666666666,
+    "n_events": 12,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 1.7821782178217822,
+    "flicker_per_min": 24.962849878927305,
+    "gt_flicker_per_min": 24.962849878927305,
+    "ece": 0.24352813557823108,
+    "braking_auroc": 0.7634665553858347
+   },
+   "test_10fps": {
+    "accuracy": 0.45742574257425744,
+    "macro_f1": 0.41934223850152863,
+    "per_class_f1": [
+     0.4188235294117647,
+     0.0,
+     0.46322378716744916,
+     0.7953216374269005
+    ],
+    "event_frame_recall": 0.592,
+    "event_frame_precision": 0.38046272493573263,
+    "event_recall": 0.7272727272727273,
+    "n_events": 11,
+    "median_latency_s": -0.5,
+    "false_alarms_per_min": 1.7821782178217822,
+    "flicker_per_min": 19.623384746416832,
+    "gt_flicker_per_min": 23.785920904747673,
+    "ece": 0.21700055516592345
+   }
+  }
+ ],
+ "sim_to_real": null,
+ "elapsed_s": 160.5
+}

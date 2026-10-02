@@ -1,0 +1,2076 @@
+{
+ "suite": "vla_physical_ai",
+ "comma_action_curation": {
+  "records": [
+   {
+    "fold": 0,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.696039603960396,
+     "macro_f1": 0.4065494248395845,
+     "per_class_f1": [
+      0.8062115820122937,
+      0.0,
+      0.4134366925064599,
+      null
+     ],
+     "event_frame_recall": 0.5351170568561873,
+     "event_frame_precision": 0.3368421052631579,
+     "event_recall": 0.38461538461538464,
+     "n_events": 13,
+     "median_latency_s": -0.5,
+     "false_alarms_per_min": 14.851485709444772,
+     "flicker_per_min": 54.68053657129029,
+     "gt_flicker_per_min": 19.019317068274884,
+     "ece": 0.1711989578339133
+    },
+    "action_mae_zero": [
+     0.41429969668388367,
+     0.41334977746009827
+    ],
+    "action_mae_train_mean": [
+     0.41413620114326477,
+     0.4131753742694855
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.391304347826087,
+       "event_coverage": 0.3076923076923077,
+       "n_events": 13
+      },
+      "random_frame_coverage": 0.11889632107023411,
+      "random_event_coverage": 0.1307692307692308
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.6020066889632107,
+       "event_coverage": 0.3076923076923077,
+       "n_events": 13
+      },
+      "random_frame_coverage": 0.21973244147157187,
+      "random_event_coverage": 0.25000000000000006
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.705685618729097,
+       "event_coverage": 0.38461538461538464,
+       "n_events": 13
+      },
+      "random_frame_coverage": 0.35418060200668894,
+      "random_event_coverage": 0.3961538461538462
+     }
+    }
+   },
+   {
+    "fold": 0,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.6742574257425743,
+     "macro_f1": 0.4081451858342235,
+     "per_class_f1": [
+      0.7873098089996763,
+      0.0,
+      0.437125748502994,
+      0.0
+     ],
+     "event_frame_recall": 0.4882943143812709,
+     "event_frame_precision": 0.3956639566395664,
+     "event_recall": 0.38461538461538464,
+     "n_events": 13,
+     "median_latency_s": -0.4500007629394531,
+     "false_alarms_per_min": 13.069307424311399,
+     "flicker_per_min": 87.96434144077134,
+     "gt_flicker_per_min": 19.019317068274884,
+     "ece": 0.15448496208922696
+    },
+    "action_mae_zero": [
+     0.41429969668388367,
+     0.41334977746009827
+    ],
+    "action_mae_train_mean": [
+     0.41413620114326477,
+     0.4131753742694855
+    ],
+    "action_mae_model": [
+     0.3779635727405548,
+     0.3793754279613495
+    ],
+    "action_corr_model": [
+     0.4826749043228887,
+     0.4870681404653816
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.20735785953177258,
+       "event_coverage": 0.15384615384615385,
+       "n_events": 13
+      },
+      "random_frame_coverage": 0.11889632107023411,
+      "random_event_coverage": 0.1307692307692308
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.5785953177257525,
+       "event_coverage": 0.23076923076923078,
+       "n_events": 13
+      },
+      "random_frame_coverage": 0.21973244147157187,
+      "random_event_coverage": 0.25000000000000006
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.7892976588628763,
+       "event_coverage": 0.3076923076923077,
+       "n_events": 13
+      },
+      "random_frame_coverage": 0.35418060200668894,
+      "random_event_coverage": 0.3961538461538462
+     }
+    }
+   },
+   {
+    "fold": 1,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.946,
+     "macro_f1": 0.4957336365434052,
+     "per_class_f1": [
+      0.9722365038560411,
+      0.0,
+      0.019230769230769232,
+      null
+     ],
+     "event_frame_recall": 0.01639344262295082,
+     "event_frame_precision": 0.023255813953488372,
+     "event_recall": 1.0,
+     "n_events": 1,
+     "median_latency_s": 0.6999969482421875,
+     "false_alarms_per_min": 1.7999999999999998,
+     "flicker_per_min": 7.203602020846911,
+     "gt_flicker_per_min": 1.2006003368078184,
+     "ece": 0.1572325427234173
+    },
+    "action_mae_zero": [
+     0.14880946278572083,
+     0.14879919588565826
+    ],
+    "action_mae_train_mean": [
+     0.14998307824134827,
+     0.1497931033372879
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.6557377049180327,
+       "event_coverage": 1.0,
+       "n_events": 1
+      },
+      "random_frame_coverage": 0.052459016393442616,
+      "random_event_coverage": 0.2
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.6557377049180327,
+       "event_coverage": 1.0,
+       "n_events": 1
+      },
+      "random_frame_coverage": 0.1221311475409836,
+      "random_event_coverage": 0.45
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6557377049180327,
+       "event_coverage": 1.0,
+       "n_events": 1
+      },
+      "random_frame_coverage": 0.1663934426229508,
+      "random_event_coverage": 0.5
+     }
+    }
+   },
+   {
+    "fold": 1,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.956,
+     "macro_f1": 0.4887525562372188,
+     "per_class_f1": [
+      0.9775051124744376,
+      0.0,
+      0.0,
+      null
+     ],
+     "event_frame_recall": 0.0,
+     "event_frame_precision": 0.0,
+     "event_recall": 0.0,
+     "n_events": 1,
+     "median_latency_s": null,
+     "false_alarms_per_min": 1.7999999999999998,
+     "flicker_per_min": 4.802401347231274,
+     "gt_flicker_per_min": 1.2006003368078184,
+     "ece": 0.08100906966626643
+    },
+    "action_mae_zero": [
+     0.14880946278572083,
+     0.14879919588565826
+    ],
+    "action_mae_train_mean": [
+     0.14998307824134827,
+     0.1497931033372879
+    ],
+    "action_mae_model": [
+     0.2606795132160187,
+     0.26516231894493103
+    ],
+    "action_corr_model": [
+     0.10894123895466162,
+     0.09807284985385298
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.6557377049180327,
+       "event_coverage": 1.0,
+       "n_events": 1
+      },
+      "random_frame_coverage": 0.052459016393442616,
+      "random_event_coverage": 0.2
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.6557377049180327,
+       "event_coverage": 1.0,
+       "n_events": 1
+      },
+      "random_frame_coverage": 0.1221311475409836,
+      "random_event_coverage": 0.45
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6557377049180327,
+       "event_coverage": 1.0,
+       "n_events": 1
+      },
+      "random_frame_coverage": 0.1663934426229508,
+      "random_event_coverage": 0.5
+     }
+    }
+   },
+   {
+    "fold": 2,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.7505,
+     "macro_f1": 0.34651716139364735,
+     "per_class_f1": [
+      0.8567259994163992,
+      0.0,
+      0.18282548476454294,
+      null
+     ],
+     "event_frame_recall": 0.1746031746031746,
+     "event_frame_precision": 0.19186046511627908,
+     "event_recall": 0.4444444444444444,
+     "n_events": 9,
+     "median_latency_s": -0.1750030517578125,
+     "false_alarms_per_min": 6.599998992920075,
+     "flicker_per_min": 82.24111051605998,
+     "gt_flicker_per_min": 13.20660168871036,
+     "ece": 0.15065645337104797
+    },
+    "action_mae_zero": [
+     0.2520393431186676,
+     0.2537952959537506
+    ],
+    "action_mae_train_mean": [
+     0.25418850779533386,
+     0.25569936633110046
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.1693121693121693,
+       "event_coverage": 0.1111111111111111,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.11957671957671956,
+      "random_event_coverage": 0.14444444444444446
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.4074074074074074,
+       "event_coverage": 0.2222222222222222,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.217989417989418,
+      "random_event_coverage": 0.25555555555555554
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5132275132275133,
+       "event_coverage": 0.5555555555555556,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.31693121693121695,
+      "random_event_coverage": 0.35
+     }
+    }
+   },
+   {
+    "fold": 2,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.833,
+     "macro_f1": 0.36777665872673304,
+     "per_class_f1": [
+      0.9079276773296244,
+      0.0,
+      0.19540229885057472,
+      null
+     ],
+     "event_frame_recall": 0.17989417989417988,
+     "event_frame_precision": 0.2138364779874214,
+     "event_recall": 0.4444444444444444,
+     "n_events": 9,
+     "median_latency_s": -0.1750030517578125,
+     "false_alarms_per_min": 8.999998626709194,
+     "flicker_per_min": 57.62880736891793,
+     "gt_flicker_per_min": 13.20660168871036,
+     "ece": 0.19328545337915423
+    },
+    "action_mae_zero": [
+     0.2520393431186676,
+     0.2537952959537506
+    ],
+    "action_mae_train_mean": [
+     0.25418850779533386,
+     0.25569936633110046
+    ],
+    "action_mae_model": [
+     0.3429233729839325,
+     0.330844521522522
+    ],
+    "action_corr_model": [
+     0.21282451024140542,
+     0.21331426121589103
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.19576719576719576,
+       "event_coverage": 0.2222222222222222,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.11957671957671956,
+      "random_event_coverage": 0.14444444444444446
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.4074074074074074,
+       "event_coverage": 0.2222222222222222,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.217989417989418,
+      "random_event_coverage": 0.25555555555555554
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5132275132275133,
+       "event_coverage": 0.5555555555555556,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.31693121693121695,
+      "random_event_coverage": 0.35
+     }
+    }
+   },
+   {
+    "fold": 3,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.717,
+     "macro_f1": 0.29193351946623536,
+     "per_class_f1": [
+      0.8355321020228672,
+      0.040268456375838924,
+      0.0,
+      null
+     ],
+     "event_frame_recall": 0.0,
+     "event_frame_precision": 0.0,
+     "event_recall": 0.0,
+     "n_events": 4,
+     "median_latency_s": null,
+     "false_alarms_per_min": 1.7999999999999998,
+     "flicker_per_min": 22.211102840103788,
+     "gt_flicker_per_min": 14.407201842229483,
+     "ece": 0.07000698062777519
+    },
+    "action_mae_zero": [
+     0.42900562286376953,
+     0.43018609285354614
+    ],
+    "action_mae_train_mean": [
+     0.435613214969635,
+     0.436631977558136
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.3089430894308943,
+       "event_coverage": 0.5,
+       "n_events": 4
+      },
+      "random_frame_coverage": 0.09715447154471545,
+      "random_event_coverage": 0.1875
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.6341463414634146,
+       "event_coverage": 0.5,
+       "n_events": 4
+      },
+      "random_frame_coverage": 0.16300813008130083,
+      "random_event_coverage": 0.3625
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6341463414634146,
+       "event_coverage": 0.5,
+       "n_events": 4
+      },
+      "random_frame_coverage": 0.2207317073170732,
+      "random_event_coverage": 0.4625
+     }
+    }
+   },
+   {
+    "fold": 3,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.722,
+     "macro_f1": 0.28902582625883283,
+     "per_class_f1": [
+      0.8391608391608392,
+      0.014218009478672985,
+      0.0136986301369863,
+      null
+     ],
+     "event_frame_recall": 0.008130081300813009,
+     "event_frame_precision": 0.043478260869565216,
+     "event_recall": 0.25,
+     "n_events": 4,
+     "median_latency_s": 0.20001220703125,
+     "false_alarms_per_min": 2.4,
+     "flicker_per_min": 22.81140291686335,
+     "gt_flicker_per_min": 14.407201842229483,
+     "ece": 0.042309949263930315
+    },
+    "action_mae_zero": [
+     0.42900562286376953,
+     0.43018609285354614
+    ],
+    "action_mae_train_mean": [
+     0.435613214969635,
+     0.436631977558136
+    ],
+    "action_mae_model": [
+     0.40803080797195435,
+     0.4039047658443451
+    ],
+    "action_corr_model": [
+     0.2134978245905286,
+     0.2025487928659697
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.11382113821138211,
+       "event_coverage": 0.25,
+       "n_events": 4
+      },
+      "random_frame_coverage": 0.09715447154471545,
+      "random_event_coverage": 0.1875
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.6341463414634146,
+       "event_coverage": 0.5,
+       "n_events": 4
+      },
+      "random_frame_coverage": 0.16300813008130083,
+      "random_event_coverage": 0.3625
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6504065040650406,
+       "event_coverage": 1.0,
+       "n_events": 4
+      },
+      "random_frame_coverage": 0.2207317073170732,
+      "random_event_coverage": 0.4625
+     }
+    }
+   },
+   {
+    "fold": 4,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.6285,
+     "macro_f1": 0.5204327027368062,
+     "per_class_f1": [
+      0.7457627118644068,
+      0.15633423180592992,
+      0.5217391304347826,
+      0.6578947368421053
+     ],
+     "event_frame_recall": 0.5679012345679012,
+     "event_frame_precision": 0.4825174825174825,
+     "event_recall": 0.7777777777777778,
+     "n_events": 9,
+     "median_latency_s": -0.350006103515625,
+     "false_alarms_per_min": 5.3999999999999995,
+     "flicker_per_min": 43.22160552668845,
+     "gt_flicker_per_min": 17.408702226027295,
+     "ece": 0.09571987836062908
+    },
+    "action_mae_zero": [
+     0.6722734570503235,
+     0.6823293566703796
+    ],
+    "action_mae_train_mean": [
+     0.6708395481109619,
+     0.681488573551178
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.2222222222222222,
+       "event_coverage": 0.2222222222222222,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.11337448559670785,
+      "random_event_coverage": 0.19444444444444445
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.49382716049382713,
+       "event_coverage": 0.4444444444444444,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.21975308641975314,
+      "random_event_coverage": 0.39444444444444443
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5740740740740741,
+       "event_coverage": 0.5555555555555556,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.33425925925925926,
+      "random_event_coverage": 0.538888888888889
+     }
+    }
+   },
+   {
+    "fold": 4,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.631,
+     "macro_f1": 0.47480047042669166,
+     "per_class_f1": [
+      0.7554038680318543,
+      0.011869436201780416,
+      0.49944994499449946,
+      0.6324786324786325
+     ],
+     "event_frame_recall": 0.4670781893004115,
+     "event_frame_precision": 0.5366430260047281,
+     "event_recall": 0.6666666666666666,
+     "n_events": 9,
+     "median_latency_s": -0.07501220703125,
+     "false_alarms_per_min": 3.0,
+     "flicker_per_min": 31.215603991497215,
+     "gt_flicker_per_min": 17.408702226027295,
+     "ece": 0.10225750026106835
+    },
+    "action_mae_zero": [
+     0.6722734570503235,
+     0.6823293566703796
+    ],
+    "action_mae_train_mean": [
+     0.6708395481109619,
+     0.681488573551178
+    ],
+    "action_mae_model": [
+     0.5902789235115051,
+     0.5744385719299316
+    ],
+    "action_corr_model": [
+     0.4066575892590653,
+     0.48574369057666816
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.2222222222222222,
+       "event_coverage": 0.2222222222222222,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.11337448559670785,
+      "random_event_coverage": 0.19444444444444445
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.45267489711934156,
+       "event_coverage": 0.3333333333333333,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.21975308641975314,
+      "random_event_coverage": 0.39444444444444443
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6790123456790124,
+       "event_coverage": 0.6666666666666666,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.33425925925925926,
+      "random_event_coverage": 0.538888888888889
+     }
+    }
+   },
+   {
+    "fold": 5,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.5605,
+     "macro_f1": 0.410378848651367,
+     "per_class_f1": [
+      0.6841282251759186,
+      0.0340632603406326,
+      0.4651741293532338,
+      0.4581497797356828
+     ],
+     "event_frame_recall": 0.4004282655246253,
+     "event_frame_precision": 0.5548961424332344,
+     "event_recall": 0.7777777777777778,
+     "n_events": 9,
+     "median_latency_s": -0.449951171875,
+     "false_alarms_per_min": 4.2,
+     "flicker_per_min": 34.81740445205459,
+     "gt_flicker_per_min": 22.81140291686335,
+     "ece": 0.1360304596275091
+    },
+    "action_mae_zero": [
+     0.6706971526145935,
+     0.6727635860443115
+    ],
+    "action_mae_train_mean": [
+     0.6649922132492065,
+     0.6672005653381348
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.2955032119914347,
+       "event_coverage": 0.3333333333333333,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.10289079229122056,
+      "random_event_coverage": 0.17777777777777778
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.39828693790149894,
+       "event_coverage": 0.4444444444444444,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.20642398286937902,
+      "random_event_coverage": 0.3666666666666666
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5417558886509636,
+       "event_coverage": 0.7777777777777778,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.28415417558886513,
+      "random_event_coverage": 0.4833333333333333
+     }
+    }
+   },
+   {
+    "fold": 5,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.535,
+     "macro_f1": 0.4094769385418586,
+     "per_class_f1": [
+      0.658008658008658,
+      0.07954545454545454,
+      0.46215139442231074,
+      0.43820224719101125
+     ],
+     "event_frame_recall": 0.37259100642398285,
+     "event_frame_precision": 0.6083916083916084,
+     "event_recall": 0.8888888888888888,
+     "n_events": 9,
+     "median_latency_s": 0.32501220703125,
+     "false_alarms_per_min": 4.8,
+     "flicker_per_min": 55.82790713863925,
+     "gt_flicker_per_min": 22.81140291686335,
+     "ece": 0.06617957085371015
+    },
+    "action_mae_zero": [
+     0.6706971526145935,
+     0.6727635860443115
+    ],
+    "action_mae_train_mean": [
+     0.6649922132492065,
+     0.6672005653381348
+    ],
+    "action_mae_model": [
+     0.5469263792037964,
+     0.5337671637535095
+    ],
+    "action_corr_model": [
+     0.5042774962004066,
+     0.5282350097848041
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.2334047109207709,
+       "event_coverage": 0.3333333333333333,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.10289079229122056,
+      "random_event_coverage": 0.17777777777777778
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.4132762312633833,
+       "event_coverage": 0.5555555555555556,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.20642398286937902,
+      "random_event_coverage": 0.3666666666666666
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5331905781584583,
+       "event_coverage": 0.6666666666666666,
+       "n_events": 9
+      },
+      "random_frame_coverage": 0.28415417558886513,
+      "random_event_coverage": 0.4833333333333333
+     }
+    }
+   },
+   {
+    "fold": 6,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.559,
+     "macro_f1": 0.44525478835427856,
+     "per_class_f1": [
+      0.6839378238341969,
+      0.0,
+      0.21682242990654205,
+      0.8802588996763754
+     ],
+     "event_frame_recall": 0.12719298245614036,
+     "event_frame_precision": 0.7341772151898734,
+     "event_recall": 0.3,
+     "n_events": 10,
+     "median_latency_s": 2.5,
+     "false_alarms_per_min": 0.0,
+     "flicker_per_min": 13.806901765469922,
+     "gt_flicker_per_min": 21.010502686584665,
+     "ece": 0.18996558684110643
+    },
+    "action_mae_zero": [
+     0.6313729286193848,
+     0.6362380385398865
+    ],
+    "action_mae_train_mean": [
+     0.6295665502548218,
+     0.6344611644744873
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.2675438596491228,
+       "event_coverage": 0.3,
+       "n_events": 10
+      },
+      "random_frame_coverage": 0.08519736842105265,
+      "random_event_coverage": 0.155
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.47368421052631576,
+       "event_coverage": 0.3,
+       "n_events": 10
+      },
+      "random_frame_coverage": 0.20361842105263156,
+      "random_event_coverage": 0.35
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6359649122807017,
+       "event_coverage": 0.7,
+       "n_events": 10
+      },
+      "random_frame_coverage": 0.29276315789473684,
+      "random_event_coverage": 0.48
+     }
+    }
+   },
+   {
+    "fold": 6,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.556,
+     "macro_f1": 0.43901646855489085,
+     "per_class_f1": [
+      0.6786500366837858,
+      0.0,
+      0.16205533596837945,
+      0.9153605015673981
+     ],
+     "event_frame_recall": 0.08991228070175439,
+     "event_frame_precision": 0.82,
+     "event_recall": 0.3,
+     "n_events": 10,
+     "median_latency_s": 2.5999755859375,
+     "false_alarms_per_min": 0.0,
+     "flicker_per_min": 13.806901765469922,
+     "gt_flicker_per_min": 21.010502686584665,
+     "ece": 0.20200014600157734
+    },
+    "action_mae_zero": [
+     0.6313729286193848,
+     0.6362380385398865
+    ],
+    "action_mae_train_mean": [
+     0.6295665502548218,
+     0.6344611644744873
+    ],
+    "action_mae_model": [
+     0.4817385971546173,
+     0.5254402756690979
+    ],
+    "action_corr_model": [
+     0.6953434655564397,
+     0.6155662983983647
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.2675438596491228,
+       "event_coverage": 0.3,
+       "n_events": 10
+      },
+      "random_frame_coverage": 0.08519736842105265,
+      "random_event_coverage": 0.155
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.47368421052631576,
+       "event_coverage": 0.3,
+       "n_events": 10
+      },
+      "random_frame_coverage": 0.20361842105263156,
+      "random_event_coverage": 0.35
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6359649122807017,
+       "event_coverage": 0.7,
+       "n_events": 10
+      },
+      "random_frame_coverage": 0.29276315789473684,
+      "random_event_coverage": 0.48
+     }
+    }
+   },
+   {
+    "fold": 7,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.641,
+     "macro_f1": 0.610795875317717,
+     "per_class_f1": [
+      0.6346730653869226,
+      0.3799654576856649,
+      0.5688073394495413,
+      0.8597376387487387
+     ],
+     "event_frame_recall": 0.5292682926829269,
+     "event_frame_precision": 0.6147308781869688,
+     "event_recall": 0.75,
+     "n_events": 8,
+     "median_latency_s": -0.5,
+     "false_alarms_per_min": 4.8,
+     "flicker_per_min": 51.62580660132232,
+     "gt_flicker_per_min": 18.009002302786854,
+     "ece": 0.14968115422129633
+    },
+    "action_mae_zero": [
+     0.6656754612922668,
+     0.6674943566322327
+    ],
+    "action_mae_train_mean": [
+     0.6678317785263062,
+     0.6695610880851746
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.24878048780487805,
+       "event_coverage": 0.5,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.10451219512195123,
+      "random_event_coverage": 0.21875
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.5121951219512195,
+       "event_coverage": 0.75,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.23878048780487804,
+      "random_event_coverage": 0.375
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5707317073170731,
+       "event_coverage": 0.875,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.3246341463414635,
+      "random_event_coverage": 0.475
+     }
+    }
+   },
+   {
+    "fold": 7,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.6395,
+     "macro_f1": 0.6339932939404562,
+     "per_class_f1": [
+      0.6127320954907162,
+      0.44285714285714284,
+      0.605524861878453,
+      0.874859075535513
+     ],
+     "event_frame_recall": 0.6682926829268293,
+     "event_frame_precision": 0.5535353535353535,
+     "event_recall": 1.0,
+     "n_events": 8,
+     "median_latency_s": -0.350006103515625,
+     "false_alarms_per_min": 6.6,
+     "flicker_per_min": 68.43420875059005,
+     "gt_flicker_per_min": 18.009002302786854,
+     "ece": 0.16380672393739223
+    },
+    "action_mae_zero": [
+     0.6656754612922668,
+     0.6674943566322327
+    ],
+    "action_mae_train_mean": [
+     0.6678317785263062,
+     0.6695610880851746
+    ],
+    "action_mae_model": [
+     0.5144437551498413,
+     0.5469092130661011
+    ],
+    "action_corr_model": [
+     0.482795830177529,
+     0.4576605901835255
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.23658536585365852,
+       "event_coverage": 0.375,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.10451219512195123,
+      "random_event_coverage": 0.21875
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.44390243902439025,
+       "event_coverage": 0.75,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.23878048780487804,
+      "random_event_coverage": 0.375
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.6682926829268293,
+       "event_coverage": 0.75,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.3246341463414635,
+      "random_event_coverage": 0.475
+     }
+    }
+   },
+   {
+    "fold": 8,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.4775,
+     "macro_f1": 0.3542788612512179,
+     "per_class_f1": [
+      0.6234952262349522,
+      0.14335664335664336,
+      0.3083832335329341,
+      0.3418803418803419
+     ],
+     "event_frame_recall": 0.24879227053140096,
+     "event_frame_precision": 0.40551181102362205,
+     "event_recall": 0.75,
+     "n_events": 8,
+     "median_latency_s": 0.225006103515625,
+     "false_alarms_per_min": 9.6,
+     "flicker_per_min": 83.4417106695791,
+     "gt_flicker_per_min": 18.609302379546417,
+     "ece": 0.027858538627624493
+    },
+    "action_mae_zero": [
+     0.6466493010520935,
+     0.6402115225791931
+    ],
+    "action_mae_train_mean": [
+     0.6441647410392761,
+     0.6380798816680908
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.28743961352657005,
+       "event_coverage": 0.25,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.10217391304347827,
+      "random_event_coverage": 0.20625
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.34057971014492755,
+       "event_coverage": 0.625,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.19275362318840578,
+      "random_event_coverage": 0.34375
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.43719806763285024,
+       "event_coverage": 0.625,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.29335748792270533,
+      "random_event_coverage": 0.50625
+     }
+    }
+   },
+   {
+    "fold": 8,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.6,
+     "macro_f1": 0.48816761146633414,
+     "per_class_f1": [
+      0.7332782824112304,
+      0.11834319526627218,
+      0.5140924464487034,
+      0.5869565217391305
+     ],
+     "event_frame_recall": 0.5507246376811594,
+     "event_frame_precision": 0.4820295983086681,
+     "event_recall": 0.75,
+     "n_events": 8,
+     "median_latency_s": -0.024993896484375,
+     "false_alarms_per_min": 13.799999999999999,
+     "flicker_per_min": 78.03900997874304,
+     "gt_flicker_per_min": 18.609302379546417,
+     "ece": 0.07944822072982789
+    },
+    "action_mae_zero": [
+     0.6466493010520935,
+     0.6402115225791931
+    ],
+    "action_mae_train_mean": [
+     0.6441647410392761,
+     0.6380798816680908
+    ],
+    "action_mae_model": [
+     0.6572625637054443,
+     0.6520953178405762
+    ],
+    "action_corr_model": [
+     0.16861525113290154,
+     0.18980726425187117
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.28743961352657005,
+       "event_coverage": 0.25,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.10217391304347827,
+      "random_event_coverage": 0.20625
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.3961352657004831,
+       "event_coverage": 0.5,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.19275362318840578,
+      "random_event_coverage": 0.34375
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.5893719806763285,
+       "event_coverage": 0.625,
+       "n_events": 8
+      },
+      "random_frame_coverage": 0.29335748792270533,
+      "random_event_coverage": 0.50625
+     }
+    }
+   },
+   {
+    "fold": 9,
+    "model": "mc_cnn_gru_semantic_v2",
+    "params": 56166,
+    "context": {
+     "accuracy": 0.49653465346534653,
+     "macro_f1": 0.41329802695316675,
+     "per_class_f1": [
+      0.5298550724637681,
+      0.04081632653061224,
+      0.3552479815455594,
+      0.7272727272727273
+     ],
+     "event_frame_recall": 0.30677290836653387,
+     "event_frame_precision": 0.42191780821917807,
+     "event_recall": 0.5833333333333334,
+     "n_events": 12,
+     "median_latency_s": 0.4000244140625,
+     "false_alarms_per_min": 7.7227722772277225,
+     "flicker_per_min": 61.812771128772376,
+     "gt_flicker_per_min": 24.962849878927305,
+     "ece": 0.2694193166523877
+    },
+    "action_mae_zero": [
+     0.6020774841308594,
+     0.6039965748786926
+    ],
+    "action_mae_train_mean": [
+     0.600783109664917,
+     0.6028763651847839
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.0796812749003984,
+       "event_coverage": 0.08333333333333333,
+       "n_events": 12
+      },
+      "random_frame_coverage": 0.11324701195219122,
+      "random_event_coverage": 0.20833333333333331
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.3047808764940239,
+       "event_coverage": 0.25,
+       "n_events": 12
+      },
+      "random_frame_coverage": 0.20647410358565735,
+      "random_event_coverage": 0.3916666666666667
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.40239043824701193,
+       "event_coverage": 0.3333333333333333,
+       "n_events": 12
+      },
+      "random_frame_coverage": 0.3054780876494024,
+      "random_event_coverage": 0.4916666666666668
+     }
+    }
+   },
+   {
+    "fold": 9,
+    "model": "mc_cnn_gru_semantic_v2_action",
+    "params": 56360,
+    "context": {
+     "accuracy": 0.5004950495049505,
+     "macro_f1": 0.4322550529942337,
+     "per_class_f1": [
+      0.5399449035812672,
+      0.0660377358490566,
+      0.3534675615212528,
+      0.7695700110253583
+     ],
+     "event_frame_recall": 0.3147410358565737,
+     "event_frame_precision": 0.4030612244897959,
+     "event_recall": 0.6666666666666666,
+     "n_events": 12,
+     "median_latency_s": 0.524993896484375,
+     "false_alarms_per_min": 10.693069306930694,
+     "flicker_per_min": 80.8320853222408,
+     "gt_flicker_per_min": 24.962849878927305,
+     "ece": 0.25472559816766494
+    },
+    "action_mae_zero": [
+     0.6020774841308594,
+     0.6039965748786926
+    ],
+    "action_mae_train_mean": [
+     0.600783109664917,
+     0.6028763651847839
+    ],
+    "action_mae_model": [
+     0.4981633424758911,
+     0.46830254793167114
+    ],
+    "action_corr_model": [
+     0.4779288259053476,
+     0.5287777605668668
+    ],
+    "curation": {
+     "0.1": {
+      "model": {
+       "frame_coverage": 0.06573705179282868,
+       "event_coverage": 0.08333333333333333,
+       "n_events": 12
+      },
+      "random_frame_coverage": 0.11324701195219122,
+      "random_event_coverage": 0.20833333333333331
+     },
+     "0.2": {
+      "model": {
+       "frame_coverage": 0.16533864541832669,
+       "event_coverage": 0.25,
+       "n_events": 12
+      },
+      "random_frame_coverage": 0.20647410358565735,
+      "random_event_coverage": 0.3916666666666667
+     },
+     "0.3": {
+      "model": {
+       "frame_coverage": 0.42231075697211157,
+       "event_coverage": 0.4166666666666667,
+       "n_events": 12
+      },
+      "random_frame_coverage": 0.3054780876494024,
+      "random_event_coverage": 0.4916666666666668
+     }
+    }
+   }
+  ]
+ },
+ "robot": {
+  "labels": [
+   "normal_move",
+   "follow_agent",
+   "slow_down",
+   "safety_stop",
+   "resume",
+   "crowded"
+  ],
+  "dataset": {
+   "episodes": 500,
+   "frames": 225000,
+   "label_counts": {
+    "test": [
+     18925,
+     10233,
+     1155,
+     433,
+     1011,
+     1993
+    ],
+    "val": [
+     21078,
+     8418,
+     938,
+     297,
+     700,
+     2319
+    ],
+    "train": [
+     84108,
+     53870,
+     4536,
+     1547,
+     3486,
+     9953
+    ]
+   },
+   "scenario_counts": {
+    "robot_agent_stop": 93,
+    "robot_aisle_free": 80,
+    "robot_human_headon": 78,
+    "robot_follow_agent": 80,
+    "robot_human_crossing": 96,
+    "robot_crowded": 73
+   },
+   "episodes_with_contact": 71
+  },
+  "records": [
+   {
+    "model": "mlp_last_v2",
+    "seed": 0,
+    "params": 11623,
+    "test": {
+     "accuracy": 0.8157333333333333,
+     "macro_f1": 0.4184139984311752,
+     "per_class_f1": [
+      0.8725761772853186,
+      0.8662610737538692,
+      0.19424460431654678,
+      0.0,
+      0.0,
+      0.5774021352313167
+     ],
+     "event_frame_recall": 0.16750629722921914,
+     "event_frame_precision": 0.5185185185185185,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.1333341598510742,
+     "false_alarms_per_min": 1.0400000330607106,
+     "flicker_per_min": 49.630291008097714,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.014151669427200605
+    }
+   },
+   {
+    "model": "mlp_last_v2",
+    "seed": 1,
+    "params": 11623,
+    "test": {
+     "accuracy": 0.8134518518518519,
+     "macro_f1": 0.41559656148158997,
+     "per_class_f1": [
+      0.869768574908648,
+      0.8666490625825192,
+      0.19260129183793306,
+      0.0,
+      0.0,
+      0.5645604395604396
+     ],
+     "event_frame_recall": 0.17065491183879095,
+     "event_frame_precision": 0.49452554744525545,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.1333332061767578,
+     "false_alarms_per_min": 1.2266667056613512,
+     "flicker_per_min": 51.60801935198529,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.020556690480973975
+    }
+   },
+   {
+    "model": "mlp_last_v2",
+    "seed": 2,
+    "params": 11623,
+    "test": {
+     "accuracy": 0.8153481481481482,
+     "macro_f1": 0.4151339136850227,
+     "per_class_f1": [
+      0.8724825763037731,
+      0.8629951899691942,
+      0.1841620626151013,
+      0.0,
+      0.0,
+      0.5711636532220676
+     ],
+     "event_frame_recall": 0.15869017632241814,
+     "event_frame_precision": 0.5316455696202531,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.1333341598510742,
+     "false_alarms_per_min": 1.0400000330607106,
+     "flicker_per_min": 50.084634006017836,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.01450566810766856
+    }
+   },
+   {
+    "model": "gru_v2",
+    "seed": 0,
+    "params": 58280,
+    "test": {
+     "accuracy": 0.8322962962962963,
+     "macro_f1": 0.4623330209654466,
+     "per_class_f1": [
+      0.886798508752438,
+      0.8957545187053384,
+      0.2342786683107275,
+      0.18181818181818182,
+      0.0,
+      0.5753482482059941
+     ],
+     "event_frame_recall": 0.25,
+     "event_frame_precision": 0.6321656050955414,
+     "event_recall": 0.5344827586206896,
+     "n_events": 58,
+     "median_latency_s": 1.133333683013916,
+     "false_alarms_per_min": 0.5600000178019211,
+     "flicker_per_min": 14.164811111627243,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.022410686953862502
+    }
+   },
+   {
+    "model": "gru_v2",
+    "seed": 1,
+    "params": 58280,
+    "test": {
+     "accuracy": 0.8287111111111111,
+     "macro_f1": 0.4619205593941698,
+     "per_class_f1": [
+      0.8837418035852302,
+      0.8949881920755707,
+      0.2986807387862797,
+      0.12424849699398798,
+      0.0,
+      0.5698641249239506
+     ],
+     "event_frame_recall": 0.30100755667506296,
+     "event_frame_precision": 0.5930521091811415,
+     "event_recall": 0.5,
+     "n_events": 58,
+     "median_latency_s": 0.8666658401489258,
+     "false_alarms_per_min": 0.8800000279744475,
+     "flicker_per_min": 13.550111761500022,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.013539357377864675
+    }
+   },
+   {
+    "model": "gru_v2",
+    "seed": 2,
+    "params": 58280,
+    "test": {
+     "accuracy": 0.8299851851851852,
+     "macro_f1": 0.4770643389641833,
+     "per_class_f1": [
+      0.8874058020982121,
+      0.8891243311966944,
+      0.22882999353587588,
+      0.2889137737961926,
+      0.0,
+      0.5681121331581253
+     ],
+     "event_frame_recall": 0.3136020151133501,
+     "event_frame_precision": 0.5845070422535211,
+     "event_recall": 0.5344827586206896,
+     "n_events": 58,
+     "median_latency_s": 0.7333335876464844,
+     "false_alarms_per_min": 0.9600000305175791,
+     "flicker_per_min": 18.494432621218966,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.022188896788491126
+    }
+   },
+   {
+    "model": "cnn_gru_single_v2",
+    "seed": 0,
+    "params": 38791,
+    "test": {
+     "accuracy": 0.837362962962963,
+     "macro_f1": 0.4911322363177582,
+     "per_class_f1": [
+      0.8883313032886724,
+      0.8957637729549248,
+      0.34985754985754985,
+      0.2543171114599686,
+      0.015473887814313346,
+      0.5430497925311203
+     ],
+     "event_frame_recall": 0.34886649874055414,
+     "event_frame_precision": 0.6890547263681592,
+     "event_recall": 0.5689655172413793,
+     "n_events": 58,
+     "median_latency_s": 0.5999994277954102,
+     "false_alarms_per_min": 0.9600000305175791,
+     "flicker_per_min": 21.808463900165716,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.022281914381627663
+    }
+   },
+   {
+    "model": "cnn_gru_single_v2",
+    "seed": 1,
+    "params": 38791,
+    "test": {
+     "accuracy": 0.8347851851851852,
+     "macro_f1": 0.47900335970215563,
+     "per_class_f1": [
+      0.8865999752994936,
+      0.897381384495722,
+      0.3002336448598131,
+      0.21745788667687596,
+      0.0,
+      0.572347266881029
+     ],
+     "event_frame_recall": 0.3167506297229219,
+     "event_frame_precision": 0.6473616473616474,
+     "event_recall": 0.5689655172413793,
+     "n_events": 58,
+     "median_latency_s": 0.8000001907348633,
+     "false_alarms_per_min": 0.7466666904025615,
+     "flicker_per_min": 16.890869099147956,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.016956020228068067
+    }
+   },
+   {
+    "model": "cnn_gru_single_v2",
+    "seed": 2,
+    "params": 38791,
+    "test": {
+     "accuracy": 0.8248592592592593,
+     "macro_f1": 0.47158303685185127,
+     "per_class_f1": [
+      0.880911738126318,
+      0.8950523955998123,
+      0.27208480565371024,
+      0.23510971786833856,
+      0.0,
+      0.5463395638629284
+     ],
+     "event_frame_recall": 0.2947103274559194,
+     "event_frame_precision": 0.6256684491978609,
+     "event_recall": 0.5344827586206896,
+     "n_events": 58,
+     "median_latency_s": 0.8666658401489258,
+     "false_alarms_per_min": 0.8800000279744475,
+     "flicker_per_min": 16.971047275251507,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.021297674224994803
+    }
+   },
+   {
+    "model": "mc_cnn_gru_balanced_v2",
+    "seed": 0,
+    "params": 65096,
+    "test": {
+     "accuracy": 0.8396740740740741,
+     "macro_f1": 0.48602716060954515,
+     "per_class_f1": [
+      0.8923099955087579,
+      0.8966666666666666,
+      0.3689839572192513,
+      0.14931237721021612,
+      0.001976284584980237,
+      0.6069136824673981
+     ],
+     "event_frame_recall": 0.34571788413098237,
+     "event_frame_precision": 0.6940581542351454,
+     "event_recall": 0.5344827586206896,
+     "n_events": 58,
+     "median_latency_s": 0.5333328247070312,
+     "false_alarms_per_min": 0.8800000279744475,
+     "flicker_per_min": 15.474387987985233,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.017826800756101262
+    }
+   },
+   {
+    "model": "mc_cnn_gru_balanced_v2",
+    "seed": 1,
+    "params": 65096,
+    "test": {
+     "accuracy": 0.8346666666666667,
+     "macro_f1": 0.47720106274679,
+     "per_class_f1": [
+      0.8874116749144447,
+      0.8919172932330827,
+      0.27256425582785415,
+      0.22459893048128343,
+      0.0,
+      0.5867142220240749
+     ],
+     "event_frame_recall": 0.2777078085642317,
+     "event_frame_precision": 0.6826625386996904,
+     "event_recall": 0.5,
+     "n_events": 58,
+     "median_latency_s": 0.9333333969116211,
+     "false_alarms_per_min": 0.6133333528306756,
+     "flicker_per_min": 15.5278401053876,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.028102889023003747
+    }
+   },
+   {
+    "model": "mc_cnn_gru_balanced_v2",
+    "seed": 2,
+    "params": 65096,
+    "test": {
+     "accuracy": 0.8218962962962963,
+     "macro_f1": 0.47811348125709,
+     "per_class_f1": [
+      0.8791131267321743,
+      0.8862005760670333,
+      0.31708749266001174,
+      0.22807017543859648,
+      0.0,
+      0.5582095166447245
+     ],
+     "event_frame_recall": 0.3249370277078086,
+     "event_frame_precision": 0.6458072590738423,
+     "event_recall": 0.4827586206896552,
+     "n_events": 58,
+     "median_latency_s": 0.7999999523162842,
+     "false_alarms_per_min": 0.7733333579169387,
+     "flicker_per_min": 14.031180818121324,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.0147676295457063
+    }
+   },
+   {
+    "model": "mc_cnn_gru_semantic_v2",
+    "seed": 0,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8396740740740741,
+     "macro_f1": 0.4825874106380208,
+     "per_class_f1": [
+      0.8923197954567804,
+      0.8981867444768653,
+      0.35334309419228893,
+      0.17102966841186737,
+      0.0,
+      0.5806451612903226
+     ],
+     "event_frame_recall": 0.371536523929471,
+     "event_frame_precision": 0.5705996131528046,
+     "event_recall": 0.5689655172413793,
+     "n_events": 58,
+     "median_latency_s": 0.46666812896728516,
+     "false_alarms_per_min": 1.1733333706325966,
+     "flicker_per_min": 17.425390273171626,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.03636131858472472
+    }
+   },
+   {
+    "model": "mc_cnn_gru_semantic_v2",
+    "seed": 1,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8361185185185185,
+     "macro_f1": 0.46253340554535444,
+     "per_class_f1": [
+      0.8894655666266801,
+      0.8929337308436633,
+      0.2916902204635387,
+      0.1191806331471136,
+      0.0,
+      0.5819302821911312
+     ],
+     "event_frame_recall": 0.2890428211586902,
+     "event_frame_precision": 0.6392757660167131,
+     "event_recall": 0.4827586206896552,
+     "n_events": 58,
+     "median_latency_s": 0.8666658401489258,
+     "false_alarms_per_min": 0.6400000203450528,
+     "flicker_per_min": 16.169265514216004,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.019632212946150043
+    }
+   },
+   {
+    "model": "mc_cnn_gru_semantic_v2",
+    "seed": 2,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8363259259259259,
+     "macro_f1": 0.4848311620410035,
+     "per_class_f1": [
+      0.8901567091087169,
+      0.8957390846922673,
+      0.24187256176853056,
+      0.30402010050251255,
+      0.005836575875486381,
+      0.5713619402985075
+     ],
+     "event_frame_recall": 0.3035264483627204,
+     "event_frame_precision": 0.646112600536193,
+     "event_recall": 0.5517241379310345,
+     "n_events": 58,
+     "median_latency_s": 0.8666658401489258,
+     "false_alarms_per_min": 0.8000000254313159,
+     "flicker_per_min": 15.046771048766297,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.016816765397566314
+    }
+   },
+   {
+    "model": "mc_cnn_gru_balanced_v1",
+    "seed": 0,
+    "params": 65096,
+    "test": {
+     "accuracy": 0.8237925925925926,
+     "macro_f1": 0.44542749813209387,
+     "per_class_f1": [
+      0.882893371466174,
+      0.894855734675018,
+      0.19095477386934673,
+      0.14507772020725387,
+      0.0,
+      0.558783388574771
+     ],
+     "event_frame_recall": 0.22418136020151133,
+     "event_frame_precision": 0.45524296675191817,
+     "event_recall": 0.4482758620689655,
+     "n_events": 58,
+     "median_latency_s": 1.1666665077209473,
+     "false_alarms_per_min": 0.7200000228881843,
+     "flicker_per_min": 14.752784403053278,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.03007295880273535
+    }
+   },
+   {
+    "model": "mc_cnn_gru_balanced_v1",
+    "seed": 1,
+    "params": 65096,
+    "test": {
+     "accuracy": 0.8295703703703704,
+     "macro_f1": 0.42090112910423305,
+     "per_class_f1": [
+      0.8851172373197292,
+      0.8965088573500466,
+      0.14997202014549524,
+      0.03180914512922465,
+      0.0,
+      0.5619995146809027
+     ],
+     "event_frame_recall": 0.18073047858942065,
+     "event_frame_precision": 0.40883190883190884,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.3999996185302734,
+     "false_alarms_per_min": 0.66666668785943,
+     "flicker_per_min": 13.095768763579903,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.024167257180920367
+    }
+   },
+   {
+    "model": "mc_cnn_gru_balanced_v1",
+    "seed": 2,
+    "params": 65096,
+    "test": {
+     "accuracy": 0.8250962962962963,
+     "macro_f1": 0.4533493899143631,
+     "per_class_f1": [
+      0.8829010945666108,
+      0.8936616029334731,
+      0.18045977011494252,
+      0.20414201183431951,
+      0.01841620626151013,
+      0.5405156537753223
+     ],
+     "event_frame_recall": 0.22481108312342568,
+     "event_frame_precision": 0.4311594202898551,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.0,
+     "false_alarms_per_min": 0.8266666929456931,
+     "flicker_per_min": 17.478842390573995,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.025562386436815618
+    }
+   },
+   {
+    "model": "driving_pretrained_zero_shot",
+    "seed": 0,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.2700444444444444,
+     "macro_f1": 0.12868240743004844,
+     "per_class_f1": [
+      0.5929187951382773,
+      0.0017567831348819052,
+      0.0811642877134061,
+      0.04412802257712783,
+      0.05212655601659751,
+      0.0
+     ],
+     "event_frame_recall": 0.7518891687657431,
+     "event_frame_precision": 0.06793354574419663,
+     "event_recall": 0.9655172413793104,
+     "n_events": 58,
+     "median_latency_s": -0.4666661024093628,
+     "false_alarms_per_min": 7.600000241597501,
+     "flicker_per_min": 50.05790794731665,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.4612695270458857
+    }
+   },
+   {
+    "model": "robot_10pct_scratch",
+    "seed": 0,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8057185185185185,
+     "macro_f1": 0.3981345707100769,
+     "per_class_f1": [
+      0.8591311263545084,
+      0.867172393276811,
+      0.14800759013282733,
+      0.0,
+      0.0,
+      0.5144963144963145
+     ],
+     "event_frame_recall": 0.12909319899244331,
+     "event_frame_precision": 0.4812206572769953,
+     "event_recall": 0.3275862068965517,
+     "n_events": 58,
+     "median_latency_s": 1.3333330154418945,
+     "false_alarms_per_min": 0.5866666853162983,
+     "flicker_per_min": 19.884187673680508,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.052811217777817346
+    }
+   },
+   {
+    "model": "robot_10pct_finetune_from_driving",
+    "seed": 0,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8032296296296296,
+     "macro_f1": 0.4128543992851668,
+     "per_class_f1": [
+      0.8612632975456355,
+      0.8679301895284293,
+      0.17788180222352254,
+      0.16498316498316498,
+      0.001962708537782139,
+      0.4031052328924669
+     ],
+     "event_frame_recall": 0.2216624685138539,
+     "event_frame_precision": 0.49230769230769234,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.1333341598510742,
+     "false_alarms_per_min": 0.5866666853162983,
+     "flicker_per_min": 19.05567985394382,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.03510815585189394
+    }
+   },
+   {
+    "model": "driving_pretrained_zero_shot",
+    "seed": 1,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.2700444444444444,
+     "macro_f1": 0.12868240743004844,
+     "per_class_f1": [
+      0.5929187951382773,
+      0.0017567831348819052,
+      0.0811642877134061,
+      0.04412802257712783,
+      0.05212655601659751,
+      0.0
+     ],
+     "event_frame_recall": 0.7518891687657431,
+     "event_frame_precision": 0.06793354574419663,
+     "event_recall": 0.9655172413793104,
+     "n_events": 58,
+     "median_latency_s": -0.4666661024093628,
+     "false_alarms_per_min": 7.600000241597501,
+     "flicker_per_min": 50.05790794731665,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.4612695270458857
+    }
+   },
+   {
+    "model": "robot_10pct_scratch",
+    "seed": 1,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.7891555555555556,
+     "macro_f1": 0.36004710991782657,
+     "per_class_f1": [
+      0.8444060261793035,
+      0.8477286959872826,
+      0.06513693560325684,
+      0.0,
+      0.0,
+      0.4030110017371164
+     ],
+     "event_frame_recall": 0.05100755667506297,
+     "event_frame_precision": 0.413265306122449,
+     "event_recall": 0.3275862068965517,
+     "n_events": 58,
+     "median_latency_s": 1.4666662216186523,
+     "false_alarms_per_min": 0.3200000101725264,
+     "flicker_per_min": 18.387528386414232,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.04265493332456661
+    }
+   },
+   {
+    "model": "robot_10pct_finetune_from_driving",
+    "seed": 1,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8124148148148148,
+     "macro_f1": 0.4245682106738204,
+     "per_class_f1": [
+      0.8683439179286762,
+      0.882984679594849,
+      0.20389461626575028,
+      0.1712538226299694,
+      0.0,
+      0.42093222762367744
+     ],
+     "event_frame_recall": 0.24055415617128464,
+     "event_frame_precision": 0.47044334975369456,
+     "event_recall": 0.43103448275862066,
+     "n_events": 58,
+     "median_latency_s": 1.066666603088379,
+     "false_alarms_per_min": 0.8800000279744475,
+     "flicker_per_min": 19.00222773654145,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.03601858448629025
+    }
+   },
+   {
+    "model": "driving_pretrained_zero_shot",
+    "seed": 2,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.2700444444444444,
+     "macro_f1": 0.12868240743004844,
+     "per_class_f1": [
+      0.5929187951382773,
+      0.0017567831348819052,
+      0.0811642877134061,
+      0.04412802257712783,
+      0.05212655601659751,
+      0.0
+     ],
+     "event_frame_recall": 0.7518891687657431,
+     "event_frame_precision": 0.06793354574419663,
+     "event_recall": 0.9655172413793104,
+     "n_events": 58,
+     "median_latency_s": -0.4666661024093628,
+     "false_alarms_per_min": 7.600000241597501,
+     "flicker_per_min": 50.05790794731665,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.4612695270458857
+    }
+   },
+   {
+    "model": "robot_10pct_scratch",
+    "seed": 2,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.794962962962963,
+     "macro_f1": 0.4093035032025944,
+     "per_class_f1": [
+      0.8516315216565831,
+      0.8487208557204121,
+      0.20708154506437768,
+      0.0,
+      0.0,
+      0.5483870967741935
+     ],
+     "event_frame_recall": 0.18954659949622166,
+     "event_frame_precision": 0.4245416078984485,
+     "event_recall": 0.39655172413793105,
+     "n_events": 58,
+     "median_latency_s": 1.1999998092651367,
+     "false_alarms_per_min": 0.8000000254313159,
+     "flicker_per_min": 19.884187673680508,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.037955470047173666
+    }
+   },
+   {
+    "model": "robot_10pct_finetune_from_driving",
+    "seed": 2,
+    "params": 56360,
+    "test": {
+     "accuracy": 0.8117629629629629,
+     "macro_f1": 0.4200647916368992,
+     "per_class_f1": [
+      0.8673602709895959,
+      0.8827261563651249,
+      0.1687344913151365,
+      0.2191358024691358,
+      0.0,
+      0.38243202868240217
+     ],
+     "event_frame_recall": 0.2128463476070529,
+     "event_frame_precision": 0.5029761904761905,
+     "event_recall": 0.41379310344827586,
+     "n_events": 58,
+     "median_latency_s": 1.1666669845581055,
+     "false_alarms_per_min": 0.5866666853162983,
+     "flicker_per_min": 16.115813396813635,
+     "gt_flicker_per_min": 6.200445618674566,
+     "ece": 0.023295690868518956
+    }
+   }
+  ]
+ },
+ "export": {
+  "synthetic_driving": {
+   "episodes": 20,
+   "frames": 9000
+  },
+  "synthetic_robot": {
+   "episodes": 20,
+   "frames": 9000
+  },
+  "comma_curated": {
+   "episodes": 56,
+   "frames": 4000,
+   "budget": 0.2
+  }
+ },
+ "elapsed_s": 744.3
+}

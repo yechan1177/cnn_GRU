@@ -1,0 +1,133 @@
+{
+ "scorer_driving": {
+  "spec": {
+   "name": "scorer_v1v2_w16",
+   "architecture": "multichannel_cnn_gru",
+   "feature_version": "v1v2",
+   "grouping": "semantic",
+   "loss": "ce",
+   "window": 16,
+   "hidden_dim": 96,
+   "cnn_channels": 24,
+   "dropout": 0.1,
+   "epochs": 14,
+   "lr": 0.001,
+   "batch_size": 512,
+   "patience": 4,
+   "boundary_weight": 0.5,
+   "boundary_tol": 2,
+   "action_weight": 0.0,
+   "hybrid_gate": false,
+   "ema_smoothing": false,
+   "extra": {}
+  },
+  "temperature": 1.1402016844582339,
+  "val_macro_f1": 0.6822067604234373,
+  "val_hazard_auroc": 0.9471929416017815,
+  "params": 57512,
+  "train_seconds": 625.6785805750001,
+  "train_episodes": 595,
+  "source": "main_15fps_mid",
+  "labels": [
+   "normal_drive",
+   "front_vehicle_follow",
+   "brake_warning",
+   "hard_brake_risk",
+   "post_brake_recovery",
+   "dense_traffic"
+  ]
+ },
+ "scorer_robot": {
+  "spec": {
+   "name": "scorer_v1v2_w16",
+   "architecture": "multichannel_cnn_gru",
+   "feature_version": "v1v2",
+   "grouping": "semantic",
+   "loss": "ce",
+   "window": 16,
+   "hidden_dim": 96,
+   "cnn_channels": 24,
+   "dropout": 0.1,
+   "epochs": 14,
+   "lr": 0.001,
+   "batch_size": 512,
+   "patience": 4,
+   "boundary_weight": 0.5,
+   "boundary_tol": 2,
+   "action_weight": 0.0,
+   "hybrid_gate": false,
+   "ema_smoothing": false,
+   "extra": {}
+  },
+  "temperature": 1.0364851317741894,
+  "val_macro_f1": 0.5671453598025634,
+  "val_hazard_auroc": 0.9335181245602326,
+  "params": 57512,
+  "train_seconds": 301.67481511999995,
+  "train_episodes": 425,
+  "source": "robot_main_15fps_mid",
+  "labels": [
+   "normal_drive",
+   "front_vehicle_follow",
+   "brake_warning",
+   "hard_brake_risk",
+   "post_brake_recovery",
+   "dense_traffic"
+  ]
+ },
+ "tune_driving": {
+  "lam": 0.5,
+  "reservoir": 0.9,
+  "criterion": "검증 성공률(충돌 없음 + 전문가 대비 진행 80% 이상) 최대, 동률이면 속도 오차 최소",
+  "grid": [
+   {
+    "lam": 0.0,
+    "reservoir": 0.25,
+    "success": 0.35714285714285715,
+    "speed_error": 9.473648238490084
+   },
+   {
+    "lam": 0.0,
+    "reservoir": 0.5,
+    "success": 0.5476190476190477,
+    "speed_error": 7.700772832595815
+   },
+   {
+    "lam": 0.0,
+    "reservoir": 0.75,
+    "success": 0.38095238095238093,
+    "speed_error": 8.47572692406699
+   },
+   {
+    "lam": 0.0,
+    "reservoir": 0.9,
+    "success": 0.6428571428571429,
+    "speed_error": 2.2769284495517352
+   },
+   {
+    "lam": 0.5,
+    "reservoir": 0.25,
+    "success": 0.47619047619047616,
+    "speed_error": 6.435826624866051
+   },
+   {
+    "lam": 0.5,
+    "reservoir": 0.5,
+    "success": 0.6428571428571429,
+    "speed_error": 4.738676287470823
+   },
+   {
+    "lam": 0.5,
+    "reservoir": 0.75,
+    "success": 0.8095238095238095,
+    "speed_error": 2.9115122390364006
+   },
+   {
+    "lam": 0.5,
+    "reservoir": 0.9,
+    "success": 0.8333333333333334,
+    "speed_error": 1.8569426962831828
+   }
+  ]
+ }
+}
