@@ -390,6 +390,8 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
     if rt_path.exists():
         rt = json.loads(rt_path.read_text(encoding="utf-8"))
         stats["robot_retune"] = rt
+        stats["robot_retune_best_val"] = max(g["success"] for g in rt["grid"])
+        stats["robot_retune_random_val"] = rt.get("random_val_success")
         rs = groups.get(("robot", "test", "ours", 0.02, steps, True, rt["lam"], rt["reservoir"]))
         if rs:
             s_rt = summarize_condition(rs, expert("robot", "test"), True)
