@@ -345,6 +345,10 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
             if ours is not None and m not in ("ours", "random"):
                 hboot[f"ours_vs_{m}_b{b:.2f}"] = hierarchical_bootstrap(ours["_succ"], s_m["_succ"])
     stats["hboot"] = hboot
+    for b in budgets:
+        o, r_ = summ.get(("driving", "ours", b)), summ.get(("driving", "random", b))
+        if o is not None and r_ is not None:
+            stats[f"seed_diffs:ours_vs_random:{b:.2f}"] = [float(x) for x in (o["_succ"].mean(1) - r_["_succ"].mean(1))]
     for (dom, m, b), s in summ.items():
         for key in ("success", "hazard_success", "collision", "collision_moving", "speed_error", "headway_error", "rms_jerk", "mae", "mae_hazard", "hazard_frame_recall", "hazard_share", "hazard_event_recall", "label_entropy_norm", "progress"):
             stats[f"{dom}:{m}:{b:.2f}:{key}"] = s[key][0]
@@ -411,6 +415,12 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
             stats[f"abl:{key}:success_sd"] = s["success"][1]
             stats[f"abl:{key}:collision"] = s["collision"][0]
             stats[f"abl:{key}:speed_error"] = s["speed_error"][0]
+        # 저자 구현 계층 부트스트랩(심사 N10): λ 효과(ρ=0.9), ρ=0.75 대 0.9
+        absucc = {(l, r): s_["_succ"] for l, r, s_ in abl}
+        if (0.5, 0.9) in absucc and (0.0, 0.9) in absucc:
+            hboot["abl_lam05_vs_lam0_r0.90"] = hierarchical_bootstrap(absucc[(0.5, 0.9)], absucc[(0.0, 0.9)])
+        if (0.5, 0.9) in absucc and (0.5, 0.75) in absucc:
+            hboot["abl_r0.90_vs_r0.75"] = hierarchical_bootstrap(absucc[(0.5, 0.9)], absucc[(0.5, 0.75)])
         if abl_rows:
             _write_table(tables / "vla_ablation", ["구성", "성공률", "위험 시나리오 성공률", "충돌률", "속도 오차(m/s)", "위험 프레임 회수율"], abl_rows)
             _ablation_figure(root, abl, main_b)
@@ -475,6 +485,20 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
             rb_rand = summ.get(("robot", "random", 0.02))
             if rb_rand:
                 boot["robot_retuned_vs_random_b0.02"] = paired_bootstrap(s_rt["_succ"], rb_rand["_succ"])
+    # AMR robot_crowded 진단(심사 M8/N10): 전문가 이동 거리 음수 에피소드 수, 해당 시나리오 제외 성공률
+    ex_r = expert("robot", "test")
+    stats["robot_expert_negative_distance"] = int(sum(1 for e in ex_r["episodes"] if e["distance"] < 0))
+    stats["robot_n_test"] = len(ex_r["episodes"])
+    for m in ("ours", "random", "full"):
+        rs = groups.get(("robot", "test", m, 1.0 if m == "full" else 0.02, steps, True, None, None))
+        if rs:
+            vals = []
+            for r in rs:
+                eps = r["closed_loop_episodes"]
+                ok = episode_success(eps, ex_r, True)
+                mask = np.array([e["scenario"] != "robot_crowded" for e in eps])
+                vals.append(float(ok[mask].mean()))
+            stats[f"robot:{m}:no_crowded_success"] = float(np.mean(vals))
     if robot_rows:
         _write_table(tables / "vla_robot", ["방법", "성공률", "위험 시나리오 성공률", "주행 중 충돌률", "속도 오차(m/s)", "개루프 MAE", "위험 프레임 회수율"], robot_rows)
         rb_ours, rb_rand = summ.get(("robot", "ours", 0.02)), summ.get(("robot", "random", 0.02))
@@ -684,7 +708,11 @@ def build_confirm_report(root: Path) -> dict[str, Any]:
     secondary = {k: v["p_le0"] for k, v in tests.items() if k[:2] in ("H2", "H3")}
     adj = holm(secondary)
     for k in tests:
-        tests[k]["p_holm"] = adj.get(k, tests[k]["p_le0"] if k.startswith("H1") else None)
+        tests[k]["p_holm"] = adj.get(k)  # H1(1차)과 탐색 비교는 보정 대상이 아니다
+        st = tests[k]["seed_t"]
+        n = tests[k].get("n_common_seeds", 0)
+        se = (st["hi"] - st["lo"]) / (2 * _T975.get(n - 1, 2.0)) if n > 1 else float("nan")
+        tests[k]["mde_seed"] = 2.8 * se  # 시드 대응 차이 기준 최소 검출 효과 근사(양측 α=0.05, 검정력 0.8)
     stats: dict[str, Any] = {"confirm_tests": tests, "confirm_n_episodes": len(ex["episodes"])}
     labels = {
         "ours_b0.02": "CARE 2%",
@@ -721,8 +749,10 @@ def build_confirm_report(root: Path) -> dict[str, Any]:
         if t is None:
             continue
         st_ = t["seed_t"]
-        trows.append([lab, f"{t['diff']:+.3f}", f"[{t['lo']:+.3f}, {t['hi']:+.3f}]", f"{t['p_le0']:.3f}", "-" if t.get("p_holm") is None or k.startswith("X") else f"{t['p_holm']:.3f}", f"[{st_['lo']:+.3f}, {st_['hi']:+.3f}]"])
-    _write_table(root / "summary" / "tables" / "vla_confirm_tests", ["비교", "차이", "계층 부트스트랩 95% CI", "단측 p", "Holm 보정 p", "시드 대응 t 95% CI"], trows)
+        pv = "<0.001" if t["p_le0"] < 0.001 else f"{t['p_le0']:.3f}"
+        ph = "해당 없음" if t.get("p_holm") is None else f"{t['p_holm']:.3f}"
+        trows.append([lab, f"{t['diff']:+.3f}".replace("-", "−"), f"[{t['lo']:+.3f}, {t['hi']:+.3f}]".replace("-", "−"), pv, ph, f"[{st_['lo']:+.3f}, {st_['hi']:+.3f}]".replace("-", "−"), f"{t['mde_seed']:.3f}"])
+    _write_table(root / "summary" / "tables" / "vla_confirm_tests", ["비교", "차이", "계층 부트스트랩 95% CI", "단측 p", "Holm 보정 p", "시드 대응 t 95% CI", "검출 가능 차이(근사)"], trows)
     path = root / "summary" / "vla_stats.json"
     base = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     base.update(stats)

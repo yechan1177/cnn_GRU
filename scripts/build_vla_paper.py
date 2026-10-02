@@ -47,6 +47,22 @@ def derived(stats: dict[str, Any]) -> dict[str, Any]:
     d["main_mde_3seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(3.0)
     d["main_mde_10seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(10.0)
     d["main_mde_7seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(7.0)
+    # 손으로 쓰던 비율을 파생 키로(심사 N18)
+    yo, ym, pt, po = stats.get("cost_yolo640_ms"), stats.get("cost_yolo320_ms"), stats.get("cost_scorer_torch_ms"), stats.get("cost_scorer_onnx_ms")
+    if yo and po:
+        d["cost_ratio_onnx_yolo640"] = po / yo
+    if ym and pt:
+        d["cost_ratio_torch_yolo320"] = pt / ym
+    rs = stats.get("driving:random:0.02:hazard_share")
+    shares = [stats.get(f"driving:{m}:0.02:hazard_share") for m in ("action_trigger", "event", "oracle", "offline_loss")]
+    shares = [x for x in shares if isinstance(x, (int, float))]
+    if rs and shares:
+        d["risk_share_ratio_min"] = min(shares) / rs
+        d["risk_share_ratio_max"] = max(shares) / rs
+    succ = [stats.get(f"driving:{m}:0.02:success") for m in ("action_trigger", "event", "oracle", "offline_loss")]
+    succ = [x for x in succ if isinstance(x, (int, float))]
+    if succ:
+        d["risk_methods_max_success_b0.02"] = max(succ)
     tune = stats.get("tune") or {}
     d["tune_lam"] = tune.get("lam", float("nan"))
     d["tune_reservoir"] = tune.get("reservoir", float("nan"))
@@ -98,6 +114,9 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
             entry = stats["hboot"][comp]
             return entry["seed_t"][field] if kind == "hbt" else entry[field]
         # 확증 실험 검정: ct:<검정키>:<diff|lo|hi|p_le0|p_holm>, 시드 대응 t: ctt:<검정키>:<diff|lo|hi|t>
+        if key.startswith("sdiff:"):  # 시드별 차이: sdiff:<예산>:<인덱스>
+            _, b, i = key.split(":")
+            return stats[f"seed_diffs:ours_vs_random:{b}"][int(i)]
         if key.startswith("cp:"):  # 실주행 fold 대응 차이: cp:<비교>:<예산>:<지표>:<diff|lo|hi>
             _, comp, b, metric, field = key.split(":")
             return stats[f"comma_pair:{comp}:{b}:{metric}"][field]
