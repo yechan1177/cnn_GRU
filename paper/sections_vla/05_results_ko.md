@@ -122,7 +122,7 @@
 
 방법 × 예산 {{s:ol_cl_n_conditions:0}}개 조건에서 개루프 지표와 폐루프 성공률의 스피어만 순위상관을 구했다(그림 7).
 
-- **전체 행동 MAE**: 성공률과 강하게 음의 상관을 보였다($\rho_s$={{s:ol_cl_spearman_mae:2}}, 순열 검정 $p$={{s:ol_cl_spearman_mae_p:4}}).
+- **전체 행동 MAE**: 성공률과 강하게 음의 상관을 보였다($\rho_s$={{s:ol_cl_spearman_mae:2}}, 순열 검정 10,000회에서 $p$<0.001).
 - **위험 구간 MAE**: 상관이 유의하지 않았다($\rho_s$={{s:ol_cl_spearman_mae_hazard:2}}, $p$={{s:ol_cl_spearman_mae_hazard_p:2}}).
 
 예를 들어 오라클은 위험 구간 MAE가 가장 낮았지만({{s:driving:oracle:0.02:mae_hazard}}), 폐루프 성공률은 최하위권이었다.
