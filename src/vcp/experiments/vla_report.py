@@ -382,15 +382,28 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
     # ---------------- 로봇 ----------------
     robot_rows = []
     for m in METHOD_ORDER + ["full"]:
-        s = summ.get(("robot", m, 1.0 if m == "full" else 0.10))
+        s = summ.get(("robot", m, 1.0 if m == "full" else 0.02))
         if s is None:
             continue
         robot_rows.append([METHOD_LABELS[m], _fmt(*s["success"]), _fmt(*s["hazard_success"]), _fmt(*s["collision_moving"]), _fmt(*s["speed_error"], digits=3), _fmt(*s["mae"], digits=3), _fmt(*s["hazard_frame_recall"])])
+    rt_path = root / "cache" / "retune_robot.json"
+    if rt_path.exists():
+        rt = json.loads(rt_path.read_text(encoding="utf-8"))
+        stats["robot_retune"] = rt
+        rs = groups.get(("robot", "test", "ours", 0.02, steps, True, rt["lam"], rt["reservoir"]))
+        if rs:
+            s_rt = summarize_condition(rs, expert("robot", "test"), True)
+            robot_rows.insert(-1 if robot_rows and robot_rows[-1][0] == METHOD_LABELS["full"] else len(robot_rows), [f"제안(CARE, AMR 재튜닝 λ={rt['lam']}, ρ={rt['reservoir']})", _fmt(*s_rt["success"]), _fmt(*s_rt["hazard_success"]), _fmt(*s_rt["collision_moving"]), _fmt(*s_rt["speed_error"], digits=3), _fmt(*s_rt["mae"], digits=3), _fmt(*s_rt["hazard_frame_recall"])])
+            stats["robot:ours_retuned:0.02:success"] = s_rt["success"][0]
+            stats["robot:ours_retuned:0.02:success_sd"] = s_rt["success"][1]
+            rb_rand = summ.get(("robot", "random", 0.02))
+            if rb_rand:
+                boot["robot_retuned_vs_random_b0.02"] = paired_bootstrap(s_rt["_succ"], rb_rand["_succ"])
     if robot_rows:
         _write_table(tables / "vla_robot", ["방법", "성공률", "위험 시나리오 성공률", "주행 중 충돌률", "속도 오차(m/s)", "개루프 MAE", "위험 프레임 회수율"], robot_rows)
-        rb_ours, rb_rand = summ.get(("robot", "ours", 0.10)), summ.get(("robot", "random", 0.10))
+        rb_ours, rb_rand = summ.get(("robot", "ours", 0.02)), summ.get(("robot", "random", 0.02))
         if rb_ours and rb_rand:
-            boot["robot_ours_vs_random_b0.10"] = paired_bootstrap(rb_ours["_succ"], rb_rand["_succ"])
+            boot["robot_ours_vs_random_b0.02"] = paired_bootstrap(rb_ours["_succ"], rb_rand["_succ"])
 
     # ---------------- 파일럿(검증) ----------------
     pilot_rows = []

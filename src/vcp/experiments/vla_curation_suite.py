@@ -630,6 +630,8 @@ def write_summary(cfg: CurationSuiteConfig) -> Path:
     cfg.summary.mkdir(parents=True, exist_ok=True)
     rows = []
     for p in sorted(cfg.runs.glob("*.json")):
+        if p.name.startswith("comma__"):
+            continue  # 실주행 개루프 실행은 build_comma_report에서 따로 집계한다
         r = json.loads(p.read_text(encoding="utf-8"))
         cl = r["closed_loop"]
         rows.append(
