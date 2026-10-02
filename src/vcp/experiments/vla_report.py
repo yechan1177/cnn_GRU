@@ -288,7 +288,7 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         stats[f"{dom}:{m}:{b:.2f}:n_train_frames"] = s["n_train_frames"]
 
     # 시나리오별 성공률(주 예산 10%)
-    main_b = 0.10 if 0.10 in budgets else (budgets[len(budgets) // 2] if budgets else None)
+    main_b = 0.02 if 0.02 in budgets else (budgets[len(budgets) // 2] if budgets else None)  # 주 예산(CurationSuiteConfig.main_budget)
     stats["main_budget"] = main_b
     scen_rows = []
     if main_b is not None:

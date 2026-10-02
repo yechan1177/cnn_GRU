@@ -47,6 +47,10 @@ def derived(stats: dict[str, Any]) -> dict[str, Any]:
     d["tune_lam"] = tune.get("lam", float("nan"))
     d["tune_reservoir"] = tune.get("reservoir", float("nan"))
     d["pool_scorer_auroc"] = stats.get("pool_scorer_auroc", float("nan"))
+    for b in (0.01, 0.02, 0.05, 0.10):
+        o, f = stats.get(f"driving:ours:{b:.2f}:success"), stats.get("driving:full:1.00:success")
+        if o is not None and f:
+            d[f"ratio_ours_full_b{b:.2f}"] = o / f
     return d
 
 
