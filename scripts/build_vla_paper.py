@@ -160,6 +160,7 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                 if kind == "s" and signed and isinstance(v, (int, float)) and math.isfinite(float(v)):
                     txt = f"{float(v):+.{3 if digits is None else digits}f}"
                     return txt.replace("-", "−")
+                if kind == "s":
                     out = fmt_num(v, 3 if digits is None else digits)
                     if out == "-":
                         MISSING.append(f"{body} (값 없음/NaN)")
