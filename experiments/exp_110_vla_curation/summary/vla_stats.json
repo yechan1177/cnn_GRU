@@ -2404,6 +2404,78 @@
  "comma:full:1.00:mae": 0.6022211372852325,
  "comma:full:1.00:mae_braking": 0.8841146230697632,
  "comma:full:1.00:brake_onset_auroc": 0.5230437332497357,
+ "comma_pair:ours_vs_random:0.10:mae": {
+  "diff": 0.018647325038909913,
+  "lo": -0.017598396614193917,
+  "hi": 0.05595230162143705,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_random:0.10:mae_braking": {
+  "diff": 0.06375287771224976,
+  "lo": -0.08647565960884095,
+  "hi": 0.2004244492948055,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_action_trigger:0.10:mae": {
+  "diff": -0.470420303940773,
+  "lo": -0.6048077517747878,
+  "hi": -0.34654485948383806,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_action_trigger:0.10:mae_braking": {
+  "diff": 0.45222285985946653,
+  "lo": 0.20208094514906408,
+  "hi": 0.6773215317726134,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_oracle:0.10:mae": {
+  "diff": -0.4528693348169327,
+  "lo": -0.5752836363017558,
+  "hi": -0.33290794633328913,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_oracle:0.10:mae_braking": {
+  "diff": 0.5410263627767563,
+  "lo": 0.3459912121295929,
+  "hi": 0.71589500002563,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_random:0.20:mae": {
+  "diff": -0.008718085289001466,
+  "lo": -0.04961214236915111,
+  "hi": 0.02902334921061988,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_random:0.20:mae_braking": {
+  "diff": -0.03863537609577179,
+  "lo": -0.21084654599428176,
+  "hi": 0.10097315743565546,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_action_trigger:0.20:mae": {
+  "diff": -0.26888630390167234,
+  "lo": -0.4225390374660492,
+  "hi": -0.12916866071522237,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_action_trigger:0.20:mae_braking": {
+  "diff": 0.34718628525733947,
+  "lo": 0.2315053527057171,
+  "hi": 0.46743803925812244,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_oracle:0.20:mae": {
+  "diff": -0.24538684487342835,
+  "lo": -0.38184785954654216,
+  "hi": -0.12032464481890204,
+  "n_pairs": 10
+ },
+ "comma_pair:ours_vs_oracle:0.20:mae_braking": {
+  "diff": 0.3705438822507858,
+  "lo": 0.25543961592018605,
+  "hi": 0.4865430954098701,
+  "n_pairs": 10
+ },
  "pool_episodes": 1200,
  "pool_frames": 540000,
  "pool_hazard_ratio": 0.07137037037037038,
@@ -2510,9 +2582,11 @@
  "cost_scorer_onnx_ms": 0.08533400023225113,
  "cost_yolo640_ms": 41.77528900027028,
  "cost_yolo320_ms": 18.042533999960142,
- "cost_coreset_s": 1.6319351490019471,
- "cost_ours_select_s": 0.083357078001427,
+ "cost_coreset_s": 3.316165350999654,
+ "cost_ours_select_s": 0.078527634999773,
  "cost_offline_train_min": 10.182435044454547,
+ "openloop_n_frames": 22500,
+ "openloop_n_hazard": 1543,
  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
  "cpu_count": 4,
  "torch_version": "2.14.1+cu130",

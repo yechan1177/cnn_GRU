@@ -759,6 +759,20 @@ def build_comma_report(root: Path) -> dict[str, Any]:
         rows.append([METHOD_LABELS["full"], "-", "100%", _fmt(*vals["mae"]), _fmt(*vals["mae_braking"]), _fmt(*vals["brake_onset_auroc"]), "1.000", str(len(rs))])
         for k, v in vals.items():
             stats[f"comma:full:1.00:{k}"] = v[0]
+    # fold·시드 대응 차이(같은 fold·시드에서 CARE − 무작위), 10쌍 부트스트랩 95% CI(심사 m9)
+    rng = np.random.default_rng(0)
+    for b in budgets:
+        for other in ("random", "action_trigger", "oracle"):
+            A = {(r["job"]["fold"], r["job"]["seed"]): r["open_loop"] for r in groups.get(("ours", b), [])}
+            B = {(r["job"]["fold"], r["job"]["seed"]): r["open_loop"] for r in groups.get((other, b), [])}
+            keys = sorted(set(A) & set(B))
+            if len(keys) < 3:
+                continue
+            for metric in ("mae", "mae_braking"):
+                d = np.array([A[k][metric] - B[k][metric] for k in keys])
+                bs = np.array([d[rng.integers(0, len(d), len(d))].mean() for _ in range(10000)])
+                lo, hi = np.percentile(bs, [2.5, 97.5])
+                stats[f"comma_pair:ours_vs_{other}:{b:.2f}:{metric}"] = {"diff": float(d.mean()), "lo": float(lo), "hi": float(hi), "n_pairs": len(d)}
     _write_table(root / "summary" / "tables" / "vla_comma", ["방법", "엣지 가능", "예산", "MAE(m/s²)", "제동 구간 MAE", "제동 시작 예측 AUROC", "제동 프레임 회수율", "실행 수(fold×시드)"], rows)
     path = root / "summary" / "vla_stats.json"
     base = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -889,6 +903,10 @@ def extra_stats(root: Path) -> dict[str, Any]:
         full_t = [r["train_log"]["train_time_s"] for r in runs if r["job"]["domain"] == "driving" and r["job"]["method"] == "full"]
         if full_t:
             stats["cost_offline_train_min"] = float(np.mean(full_t) / 60)
+    ol = [r.get("open_loop", {}) for r in runs if r["job"]["domain"] == "driving" and r["job"]["eval"] == "test" and r.get("open_loop")]
+    if ol:
+        stats["openloop_n_frames"] = int(ol[0].get("n_frames", 0))
+        stats["openloop_n_hazard"] = int(ol[0].get("n_hazard", 0))
     dev = device_info()
     stats["cpu_model"] = dev.get("cpu_model", dev.get("processor"))
     stats["cpu_count"] = dev.get("cpu_count")

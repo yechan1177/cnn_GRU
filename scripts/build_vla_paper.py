@@ -46,6 +46,7 @@ def derived(stats: dict[str, Any]) -> dict[str, Any]:
     d["main_sd_random_b0.02"] = sd_main
     d["main_mde_3seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(3.0)
     d["main_mde_10seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(10.0)
+    d["main_mde_7seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(7.0)
     tune = stats.get("tune") or {}
     d["tune_lam"] = tune.get("lam", float("nan"))
     d["tune_reservoir"] = tune.get("reservoir", float("nan"))
@@ -97,6 +98,9 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
             entry = stats["hboot"][comp]
             return entry["seed_t"][field] if kind == "hbt" else entry[field]
         # 확증 실험 검정: ct:<검정키>:<diff|lo|hi|p_le0|p_holm>, 시드 대응 t: ctt:<검정키>:<diff|lo|hi|t>
+        if key.startswith("cp:"):  # 실주행 fold 대응 차이: cp:<비교>:<예산>:<지표>:<diff|lo|hi>
+            _, comp, b, metric, field = key.split(":")
+            return stats[f"comma_pair:{comp}:{b}:{metric}"][field]
         if key.startswith(("ct:", "ctt:")):
             kind, comp, field = key.split(":", 2)
             entry = stats["confirm_tests"][comp]
@@ -119,7 +123,8 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                 return f"**[표 없음: {name}]**"
             if body.startswith("fig:"):
                 fname, _, caption = body[4:].partition("|")
-                return f"![{caption}](figures/{fname})\n\n{caption}"
+                num = caption.split(".")[0] if caption.startswith("그림") else fname
+                return f"![{num}](figures/{fname})\n\n{caption}"
             if body.startswith(("s:", "p:", "pp:", "b:")):
                 kind, _, rest = body.partition(":")
                 parts = rest.split(":")
