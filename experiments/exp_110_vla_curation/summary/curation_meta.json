@@ -37,6 +37,44 @@
    "dense_traffic"
   ]
  },
+ "scorer_robot": {
+  "spec": {
+   "name": "scorer_v1v2_w16",
+   "architecture": "multichannel_cnn_gru",
+   "feature_version": "v1v2",
+   "grouping": "semantic",
+   "loss": "ce",
+   "window": 16,
+   "hidden_dim": 96,
+   "cnn_channels": 24,
+   "dropout": 0.1,
+   "epochs": 14,
+   "lr": 0.001,
+   "batch_size": 512,
+   "patience": 4,
+   "boundary_weight": 0.5,
+   "boundary_tol": 2,
+   "action_weight": 0.0,
+   "hybrid_gate": false,
+   "ema_smoothing": false,
+   "extra": {}
+  },
+  "temperature": 1.0364851317741894,
+  "val_macro_f1": 0.5671453598025634,
+  "val_hazard_auroc": 0.9335181245602326,
+  "params": 57512,
+  "train_seconds": 301.67481511999995,
+  "train_episodes": 425,
+  "source": "robot_main_15fps_mid",
+  "labels": [
+   "normal_drive",
+   "front_vehicle_follow",
+   "brake_warning",
+   "hard_brake_risk",
+   "post_brake_recovery",
+   "dense_traffic"
+  ]
+ },
  "tune_driving": {
   "lam": 0.5,
   "reservoir": 0.9,
