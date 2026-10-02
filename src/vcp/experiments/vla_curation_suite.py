@@ -549,6 +549,7 @@ def expert_reference(cfg: CurationSuiteConfig, eval_set: str) -> dict[str, Any]:
 
 
 SUCCESS_PROGRESS = 0.8
+MIN_REF_DISTANCE = 1.0  # m
 
 
 def episode_success(episodes: list[dict[str, Any]], expert: dict[str, Any], moving_only: bool = False) -> np.ndarray:
@@ -563,7 +564,9 @@ def episode_success(episodes: list[dict[str, Any]], expert: dict[str, Any], movi
     out = []
     for e in episodes:
         d_ref = ref[(e["scenario"], e["seed"])]  # 평가 사양이 다르면 KeyError(조용한 오판정 방지)
-        progress_ok = e["distance"] >= SUCCESS_PROGRESS * d_ref
+        # 전문가 이동 거리가 MIN_REF_DISTANCE 미만이면(AMR robot_crowded에서 충돌 되밀림으로 음수가 되는 경우 등)
+        # 진행 기준이 성립하지 않으므로 무충돌만으로 판정한다(심사 M8).
+        progress_ok = True if d_ref < MIN_REF_DISTANCE else e["distance"] >= SUCCESS_PROGRESS * d_ref
         out.append((not e[key]) and progress_ok)
     return np.asarray(out, dtype=bool)
 

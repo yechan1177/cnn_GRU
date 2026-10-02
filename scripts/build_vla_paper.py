@@ -34,15 +34,18 @@ def derived(stats: dict[str, Any]) -> dict[str, Any]:
     """원고에 쓰는 파생 수치."""
 
     d: dict[str, Any] = {}
-    steps = stats.get("steps", 3000)
+    pilot_steps = 3000  # 시드 반복 파일럿은 T=3000에서 수행했다(심사 M2: T=6000 키를 읽던 오류 수정)
     for m, b in (("full", 1.0), ("random", 0.10), ("oracle", 0.10)):
-        d[f"pilot_sd_{m}"] = stats.get(f"pilot:{m}:{b:.2f}:{steps}:success_sd", float("nan"))
-    n = stats.get("driving_n_test", 147) or 147
-    sds = [v for v in (d["pilot_sd_random"], d["pilot_sd_oracle"]) if isinstance(v, (int, float)) and math.isfinite(v)]
-    sd_seed = max(sds) if sds else float("nan")
-    # 대응 차이의 표준오차: 시드 간 변동(평균 3개) 기준 sqrt(2)*sd/sqrt(3)
-    d["pilot_se_diff"] = math.sqrt(2.0) * sd_seed / math.sqrt(3.0) if math.isfinite(sd_seed) else float("nan")
-    d["pilot_mde"] = 2.8 * d["pilot_se_diff"] if math.isfinite(d["pilot_se_diff"]) else float("nan")  # α=0.05 양측, 검정력 0.8
+        d[f"pilot_sd_{m}"] = stats.get(f"pilot:{m}:{b:.2f}:{pilot_steps}:success_sd", float("nan"))
+    sds = [v for v in (d["pilot_sd_full"], d["pilot_sd_random"], d["pilot_sd_oracle"]) if isinstance(v, (int, float)) and math.isfinite(v)]
+    sd_pilot = max(sds) if sds else float("nan")
+    # 시드 3개 평균 차이의 표준오차 ≈ √2·sd/√3, 최소 검출 효과 ≈ 2.8·SE(양측 α=0.05, 검정력 0.8)
+    d["pilot_se_diff"] = math.sqrt(2.0) * sd_pilot / math.sqrt(3.0)
+    d["pilot_mde"] = 2.8 * d["pilot_se_diff"]
+    sd_main = stats.get("driving:random:0.02:success_sd", float("nan"))
+    d["main_sd_random_b0.02"] = sd_main
+    d["main_mde_3seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(3.0)
+    d["main_mde_10seeds"] = 2.8 * math.sqrt(2.0) * sd_main / math.sqrt(10.0)
     tune = stats.get("tune") or {}
     d["tune_lam"] = tune.get("lam", float("nan"))
     d["tune_reservoir"] = tune.get("reservoir", float("nan"))
@@ -120,7 +123,10 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                     return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]"
                 v = lookup(key)
                 if kind == "s":
-                    return fmt_num(v, 3 if digits is None else digits)
+                    out = fmt_num(v, 3 if digits is None else digits)
+                    if out == "-":
+                        MISSING.append(f"{body} (값 없음/NaN)")
+                    return out
                 if kind == "p":
                     return (fmt_num(100 * v, 1 if digits is None else digits) + "%") if isinstance(v, (int, float)) and math.isfinite(v) else "-"
                 return fmt_num(100 * v, 1 if digits is None else digits) if isinstance(v, (int, float)) else "-"

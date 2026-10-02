@@ -103,6 +103,49 @@ def paired_bootstrap(a: np.ndarray, b: np.ndarray, n_boot: int = 4000, seed: int
     return {"diff": float(da.mean()), "lo": float(lo), "hi": float(hi), "p_le0": float((boots <= 0).mean())}
 
 
+_T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228, 12: 2.179, 15: 2.131, 20: 2.086}
+
+
+def hierarchical_bootstrap(a: np.ndarray, b: np.ndarray, n_boot: int = 10000, seed: int = 0) -> dict[str, float]:
+    """시드·에피소드 2단계 대응 부트스트랩(심사 M1).
+
+    a, b: [시드, 에피소드] 성공 행렬. 행(시드 번호)과 열(평가 에피소드)이 두 조건에서 대응한다.
+    1단계로 시드를, 2단계로 에피소드를 복원 추출해 평균 차이의 분포를 만든다. p_le0은 단측(차이 ≤ 0) 확률이다.
+    """
+
+    rng = np.random.default_rng(seed)
+    S, E = a.shape
+    d = a - b
+    si = rng.integers(0, S, size=(n_boot, S))
+    ei = rng.integers(0, E, size=(n_boot, E))
+    boots = np.array([d[si[k]][:, ei[k]].mean() for k in range(n_boot)])
+    lo, hi = np.percentile(boots, [2.5, 97.5])
+    return {"diff": float(d.mean()), "lo": float(lo), "hi": float(hi), "p_le0": float((boots <= 0).mean()), "n_seeds": int(S)}
+
+
+def seed_t(a: np.ndarray, b: np.ndarray) -> dict[str, float]:
+    """시드 수준 대응 t(보조 분석): 시드별 성공률 차이의 평균과 95% CI."""
+
+    d = a.mean(1) - b.mean(1)
+    n = len(d)
+    m, sd = float(d.mean()), float(d.std(ddof=1)) if n > 1 else 0.0
+    se = sd / np.sqrt(n) if n > 1 else float("nan")
+    crit = _T975.get(n - 1, 2.0)
+    return {"diff": m, "lo": m - crit * se, "hi": m + crit * se, "t": m / se if se and np.isfinite(se) and se > 0 else float("nan"), "df": n - 1}
+
+
+def holm(pvals: dict[str, float]) -> dict[str, float]:
+    """Holm 단계적 보정 p값."""
+
+    keys = sorted(pvals, key=lambda k: pvals[k])
+    m = len(keys)
+    out, running = {}, 0.0
+    for i, k in enumerate(keys):
+        running = max(running, min(1.0, (m - i) * pvals[k]))
+        out[k] = running
+    return out
+
+
 def _rank(x: np.ndarray) -> np.ndarray:
     order = np.argsort(x, kind="mergesort")
     r = np.empty(len(x), dtype=float)
@@ -155,6 +198,7 @@ def summarize_condition(rs: list[dict[str, Any]], expert: dict[str, Any], moving
         "mae_hazard": ms([o.get("mae_hazard") for o in ol]),
         "mae_hard_brake": ms([o.get("mae_hard_brake") for o in ol]),
         "hazard_frame_recall": ms([s.get("hazard_frame_recall") for s in sel]),
+        "hazard_share": ms([(s.get("hazard_frame_recall", 0) * s.get("n_hazard_frames", 0) / max(1, s.get("n_selected", 1))) for s in sel]),
         "hazard_event_recall": ms([s.get("hazard_event_recall") for s in sel]),
         "label_entropy_norm": ms([s.get("label_entropy_norm") for s in sel]),
         "group_coverage": ms([s.get("group_coverage") for s in sel]),
@@ -264,6 +308,13 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         stats["ol_cl_spearman_mae_hazard"] = r2
         stats["ol_cl_spearman_mae_hazard_p"] = p2
         stats["ol_cl_n_conditions"] = len(pairs)
+        within = np.asarray([(s["mae"][0], s["mae_hazard"][0], s["success"][0]) for (d, m, b), s in summ.items() if d == "driving" and b == 0.02 and np.isfinite(s["mae"][0])])
+        if len(within) >= 5:
+            r1w, p1w = spearman(within[:, 0], within[:, 2])
+            r2w, p2w = spearman(within[:, 1], within[:, 2])
+            stats["ol_cl_within2_mae"], stats["ol_cl_within2_mae_p"] = r1w, p1w
+            stats["ol_cl_within2_mae_hazard"], stats["ol_cl_within2_mae_hazard_p"] = r2w, p2w
+            stats["ol_cl_within2_n"] = len(within)
         _olcl_figure(root, summ)
 
     # 대응 부트스트랩: 각 방법 vs 무작위(같은 예산), ours vs 각 방법
@@ -281,8 +332,21 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         if ours is not None and full is not None:
             boot[f"ours_vs_full_b{b:.2f}"] = paired_bootstrap(ours["_succ"], full["_succ"])
     stats["bootstrap"] = boot
+    hboot: dict[str, Any] = {}
+    for b in budgets:
+        base = summ.get(("driving", "random", b))
+        ours = summ.get(("driving", "ours", b))
+        for m in METHOD_ORDER:
+            s_m = summ.get(("driving", m, b))
+            if s_m is None:
+                continue
+            if base is not None and m != "random":
+                hboot[f"{m}_vs_random_b{b:.2f}"] = hierarchical_bootstrap(s_m["_succ"], base["_succ"]) | {"seed_t": seed_t(s_m["_succ"], base["_succ"])}
+            if ours is not None and m not in ("ours", "random"):
+                hboot[f"ours_vs_{m}_b{b:.2f}"] = hierarchical_bootstrap(ours["_succ"], s_m["_succ"])
+    stats["hboot"] = hboot
     for (dom, m, b), s in summ.items():
-        for key in ("success", "hazard_success", "collision", "collision_moving", "speed_error", "headway_error", "rms_jerk", "mae", "mae_hazard", "hazard_frame_recall", "hazard_event_recall", "label_entropy_norm", "progress"):
+        for key in ("success", "hazard_success", "collision", "collision_moving", "speed_error", "headway_error", "rms_jerk", "mae", "mae_hazard", "hazard_frame_recall", "hazard_share", "hazard_event_recall", "label_entropy_norm", "progress"):
             stats[f"{dom}:{m}:{b:.2f}:{key}"] = s[key][0]
             stats[f"{dom}:{m}:{b:.2f}:{key}_sd"] = s[key][1]
         stats[f"{dom}:{m}:{b:.2f}:n_train_frames"] = s["n_train_frames"]
@@ -313,6 +377,16 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
                 stats[f"driving:{m}:scen:{sc}"] = float(np.mean(vals))
             scen_rows.append(row)
         _write_table(tables / "vla_scenarios_driving", ["방법"] + scen_names, scen_rows)
+        # 풀의 시나리오 빈도로 가중한 성공률(테스트는 위험 시나리오가 과대표집됨, 심사 m19)
+        pm = root / "cache" / "pool_driving.meta.json"
+        if pm.exists():
+            pool_scen = [e["scenario"] for e in json.loads(pm.read_text(encoding="utf-8"))["episodes"]]
+            w = {sc: pool_scen.count(sc) / len(pool_scen) for sc in scen_names}
+            for m in METHOD_ORDER + ["full"]:
+                vals = [stats.get(f"driving:{m}:scen:{sc}") for sc in scen_names]
+                if all(v is not None for v in vals):
+                    stats[f"driving:{m}:weighted_success"] = float(sum(w[sc] * v for sc, v in zip(scen_names, vals)))
+            stats["pool_scenario_weights"] = w
 
     # ---------------- 혼합 비율·불확실성 절제(테스트, 주 예산) ----------------
     tune = json.loads((root / "cache" / "tune_driving.json").read_text(encoding="utf-8")) if (root / "cache" / "tune_driving.json").exists() else {}
@@ -395,7 +469,7 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         rs = groups.get(("robot", "test", "ours", 0.02, steps, True, rt["lam"], rt["reservoir"]))
         if rs:
             s_rt = summarize_condition(rs, expert("robot", "test"), True)
-            robot_rows.insert(-1 if robot_rows and robot_rows[-1][0] == METHOD_LABELS["full"] else len(robot_rows), [f"제안(CARE, AMR 재튜닝 λ={rt['lam']}, ρ={rt['reservoir']})", _fmt(*s_rt["success"]), _fmt(*s_rt["hazard_success"]), _fmt(*s_rt["collision_moving"]), _fmt(*s_rt["speed_error"], digits=3), _fmt(*s_rt["mae"], digits=3), _fmt(*s_rt["hazard_frame_recall"])])
+            # 재튜닝 결과는 원 CARE와 같은 설정·시드의 재실행이므로 표에 중복 행을 넣지 않는다(심사 M8)
             stats["robot:ours_retuned:0.02:success"] = s_rt["success"][0]
             stats["robot:ours_retuned:0.02:success_sd"] = s_rt["success"][1]
             rb_rand = summ.get(("robot", "random", 0.02))
@@ -406,6 +480,7 @@ def build_report(root: Path, steps: int | None = None) -> dict[str, Any]:
         rb_ours, rb_rand = summ.get(("robot", "ours", 0.02)), summ.get(("robot", "random", 0.02))
         if rb_ours and rb_rand:
             boot["robot_ours_vs_random_b0.02"] = paired_bootstrap(rb_ours["_succ"], rb_rand["_succ"])
+            hboot["robot_ours_vs_random_b0.02"] = hierarchical_bootstrap(rb_ours["_succ"], rb_rand["_succ"])
 
     # ---------------- 파일럿(검증) ----------------
     pilot_rows = []
@@ -572,6 +647,89 @@ def _ablation_figure(root: Path, abl: list[tuple[float, float, dict[str, Any]]],
     plt.close(fig)
 
 
+def build_confirm_report(root: Path) -> dict[str, Any]:
+    """사전 등록 확증 실험(docs/32) 분석: 계층 부트스트랩, Holm 보정."""
+
+    runs_path = root / "summary" / "curation_runs.json"
+    runs = [r for r in json.loads(runs_path.read_text(encoding="utf-8")) if r["job"]["eval"] == "confirm"]
+    if not runs:
+        return {}
+    groups = group_runs(runs)
+    ex = expert_reference(CurationSuiteConfig(root=root, domain="driving"), "confirm")
+    conds: dict[str, dict[str, Any]] = {}
+    for k, rs in groups.items():
+        dom, ev, m, b, st, lang, lam, res = k
+        name = f"{m}_b{b:.2f}" + (f"_r{res}" if res is not None else "")
+        conds[name] = summarize_condition(rs, ex, False) | {"_seeds": [r["job"]["seed"] for r in rs]}
+
+    def cmp(a: str, b: str) -> dict[str, Any] | None:
+        if a not in conds or b not in conds:
+            return None
+        sa, sb = conds[a]["_seeds"], conds[b]["_seeds"]
+        common = sorted(set(sa) & set(sb))
+        A = conds[a]["_succ"][[sa.index(x) for x in common]]
+        B = conds[b]["_succ"][[sb.index(x) for x in common]]
+        return hierarchical_bootstrap(A, B) | {"seed_t": seed_t(A, B), "n_common_seeds": len(common)}
+
+    tests = {
+        "H1_ours_vs_random_b0.02": cmp("ours_b0.02", "random_b0.02"),
+        "H2_ours_vs_random_b0.01": cmp("ours_b0.01", "random_b0.01"),
+        "H3a_ours_vs_mix_trigger": cmp("ours_b0.02", "mix_trigger_b0.02"),
+        "H3b_ours_vs_mix_oracle": cmp("ours_b0.02", "mix_oracle_b0.02"),
+        "H3c_ours_vs_mix_uncert": cmp("ours_b0.02", "mix_uncert_b0.02"),
+        "X_mix_trigger_vs_random": cmp("mix_trigger_b0.02", "random_b0.02"),
+        "X_rho095_vs_ours": cmp("ours_b0.02_r0.95", "ours_b0.02"),
+    }
+    tests = {k: v for k, v in tests.items() if v is not None}
+    secondary = {k: v["p_le0"] for k, v in tests.items() if k[:2] in ("H2", "H3")}
+    adj = holm(secondary)
+    for k in tests:
+        tests[k]["p_holm"] = adj.get(k, tests[k]["p_le0"] if k.startswith("H1") else None)
+    stats: dict[str, Any] = {"confirm_tests": tests, "confirm_n_episodes": len(ex["episodes"])}
+    labels = {
+        "ours_b0.02": "CARE 2%",
+        "random_b0.02": "무작위 2%",
+        "ours_b0.01": "CARE 1%",
+        "random_b0.01": "무작위 1%",
+        "mix_trigger_b0.02": "저장소 ρ=0.9 + 감속 트리거 점수 2%",
+        "mix_oracle_b0.02": "저장소 ρ=0.9 + 오라클 점수 2%",
+        "mix_uncert_b0.02": "저장소 ρ=0.9 + 불확실성만 2%",
+        "ours_b0.02_r0.95": "CARE ρ=0.95 2%(탐색)",
+    }
+    rows = []
+    for name, lab in labels.items():
+        c = conds.get(name)
+        if c is None:
+            continue
+        rows.append([lab, str(c["n_seeds"]), _fmt(*c["success"]), _fmt(*c["hazard_success"]), _fmt(*c["collision"]), _fmt(*c["speed_error"], digits=2), _fmt(*c["hazard_share"])])
+        stats[f"confirm:{name}:success"] = c["success"][0]
+        stats[f"confirm:{name}:success_sd"] = c["success"][1]
+        stats[f"confirm:{name}:n_seeds"] = c["n_seeds"]
+    _write_table(root / "summary" / "tables" / "vla_confirm", ["조건", "시드 수", "성공률", "위험 시나리오 성공률", "충돌률", "속도 오차(m/s)", "선택 데이터 내 위험 비중"], rows)
+    trows = []
+    names = {
+        "H1_ours_vs_random_b0.02": "H1: CARE − 무작위(2%)",
+        "H2_ours_vs_random_b0.01": "H2: CARE − 무작위(1%)",
+        "H3a_ours_vs_mix_trigger": "H3a: CARE − 감속 트리거 혼합",
+        "H3b_ours_vs_mix_oracle": "H3b: CARE − 오라클 혼합",
+        "H3c_ours_vs_mix_uncert": "H3c: CARE − 불확실성 혼합",
+        "X_mix_trigger_vs_random": "(탐색) 감속 트리거 혼합 − 무작위",
+        "X_rho095_vs_ours": "(탐색) ρ=0.95 − ρ=0.9",
+    }
+    for k, lab in names.items():
+        t = tests.get(k)
+        if t is None:
+            continue
+        st_ = t["seed_t"]
+        trows.append([lab, f"{t['diff']:+.3f}", f"[{t['lo']:+.3f}, {t['hi']:+.3f}]", f"{t['p_le0']:.3f}", "-" if t.get("p_holm") is None or k.startswith("X") else f"{t['p_holm']:.3f}", f"[{st_['lo']:+.3f}, {st_['hi']:+.3f}]"])
+    _write_table(root / "summary" / "tables" / "vla_confirm_tests", ["비교", "차이", "계층 부트스트랩 95% CI", "단측 p", "Holm 보정 p", "시드 대응 t 95% CI"], trows)
+    path = root / "summary" / "vla_stats.json"
+    base = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    base.update(stats)
+    path.write_text(json.dumps(base, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+    return stats
+
+
 def build_comma_report(root: Path) -> dict[str, Any]:
     runs = [json.loads(p.read_text(encoding="utf-8")) for p in sorted((root / "runs").glob("comma__*.json"))]
     if not runs:
@@ -615,7 +773,7 @@ def extra_stats(root: Path) -> dict[str, Any]:
     from ..vla.pool import load_pool
     from .latency import device_info
     from .metrics import auroc
-    from .vla_curation_suite import HAZARD_IDS, pool_path
+    from .vla_curation_suite import HAZARD_IDS, pool_path  # noqa: F811
 
     stats: dict[str, Any] = {}
     cache = root / "cache"
@@ -651,6 +809,44 @@ def extra_stats(root: Path) -> dict[str, Any]:
         stats[f"{pre}_style_counts"] = {s: styles.count(s) for s in sorted(set(styles))}
         scen = [e["scenario"] for e in meta["episodes"]]
         stats[f"{pre}_scenario_counts"] = {s: scen.count(s) for s in sorted(set(scen))}
+    # 점수기 선행 시간(심사 M9): 위험 사건마다 "e_t>0.5 최초 시각"과 "자차 가속도 < -1 m/s² 최초 시각"을 비교
+    cfg_l = CurationSuiteConfig(root=root, domain="driving")
+    pl = pool_path(cfg_l)
+    sc_path = cache / "scores_driving.npz"
+    if (pl.parent / f"{pl.name}.npz").exists() and sc_path.exists():
+        pool, _ = load_pool(pl)
+        z = np.load(sc_path)
+        haz = np.isin(pool["y"], HAZARD_IDS)
+        ep, t, a, e = pool["ep"], pool["t"], pool["ego_a"], z["event_score"]
+        fps = 15.0
+        leads, n_ev, n_score_only, n_decel_only = [], 0, 0, 0
+        starts = np.where(haz & ~np.concatenate([[False], haz[:-1]]) | (haz & np.concatenate([[True], ep[1:] != ep[:-1]])))[0]
+        for st in starts:
+            end = st
+            while end + 1 < len(haz) and haz[end + 1] and ep[end + 1] == ep[st]:
+                end += 1
+            lo = st
+            while lo - 1 >= 0 and ep[lo - 1] == ep[st] and st - (lo - 1) <= int(3 * fps):
+                lo -= 1
+            win = np.arange(lo, end + 1)
+            n_ev += 1
+            s_idx = win[e[win] > 0.5]
+            d_idx = win[a[win] < -1.0]
+            if len(s_idx) and len(d_idx):
+                leads.append(float(t[d_idx[0]] - t[s_idx[0]]))
+            elif len(s_idx):
+                n_score_only += 1
+            elif len(d_idx):
+                n_decel_only += 1
+        if leads:
+            arr = np.asarray(leads)
+            stats["lead_n_events"] = n_ev
+            stats["lead_n_both"] = len(arr)
+            stats["lead_median_s"] = float(np.median(arr))
+            stats["lead_q25_s"], stats["lead_q75_s"] = (float(x) for x in np.percentile(arr, [25, 75]))
+            stats["lead_frac_score_first"] = float((arr > 0).mean())
+            stats["lead_n_score_only"] = n_score_only
+            stats["lead_n_decel_only"] = n_decel_only
     for dom in ("driving", "robot"):
         p = cache / f"scorer_{dom}.json"
         if p.exists():
@@ -722,6 +918,7 @@ def main() -> None:
     args = ap.parse_args()
     build_report(Path(args.root), args.steps)
     build_comma_report(Path(args.root))
+    build_confirm_report(Path(args.root))
     extra_stats(Path(args.root))
 
 

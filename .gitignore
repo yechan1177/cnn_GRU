@@ -98,6 +98,7 @@ paper/*
 !paper/figures/
 !paper/refs/
 !paper/sections_vla/
+!paper/review/
 paper/figures/*
 !paper/figures/*.png
 !paper/figures/*.svg

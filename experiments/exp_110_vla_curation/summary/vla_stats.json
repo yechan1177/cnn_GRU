@@ -3,7 +3,7 @@
  "driving_expert_success": 1.0,
  "driving_expert_collision": 0.0,
  "driving_n_test": 147,
- "robot_expert_success": 0.8194444444444444,
+ "robot_expert_success": 0.9444444444444444,
  "robot_expert_collision": 0.18055555555555555,
  "robot_n_test": 72,
  "budgets": [
@@ -17,6 +17,11 @@
  "ol_cl_spearman_mae_hazard": 0.3461017392923153,
  "ol_cl_spearman_mae_hazard_p": 0.0636,
  "ol_cl_n_conditions": 29,
+ "ol_cl_within2_mae": -0.9030303030303028,
+ "ol_cl_within2_mae_p": 0.0008,
+ "ol_cl_within2_mae_hazard": 0.7212121212121211,
+ "ol_cl_within2_mae_hazard_p": 0.025,
+ "ol_cl_within2_n": 10,
  "bootstrap": {
   "random_vs_random_b0.01": {
    "diff": 0.0,
@@ -331,16 +336,501 @@
    "p_le0": 1.0
   },
   "robot_retuned_vs_random_b0.02": {
-   "diff": -0.09259259259259259,
-   "lo": -0.162037037037037,
-   "hi": -0.027777777777777776,
-   "p_le0": 0.99775
+   "diff": -0.032407407407407406,
+   "lo": -0.11574074074074073,
+   "hi": 0.05555555555555555,
+   "p_le0": 0.75825
   },
   "robot_ours_vs_random_b0.02": {
-   "diff": -0.09259259259259259,
-   "lo": -0.162037037037037,
-   "hi": -0.027777777777777776,
-   "p_le0": 0.99775
+   "diff": -0.032407407407407406,
+   "lo": -0.11574074074074073,
+   "hi": 0.05555555555555555,
+   "p_le0": 0.75825
+  }
+ },
+ "hboot": {
+  "action_trigger_vs_random_b0.01": {
+   "diff": -0.5147392290249433,
+   "lo": -0.6122448979591837,
+   "hi": -0.41496598639455784,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.5147392290249434,
+    "lo": -0.701663540120305,
+    "hi": -0.32781491792958184,
+    "t": -11.849303547061695,
+    "df": 2
+   }
+  },
+  "ours_vs_action_trigger_b0.01": {
+   "diff": 0.6009070294784581,
+   "lo": 0.49654195011337876,
+   "hi": 0.7074829931972789,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "uncertainty_vs_random_b0.01": {
+   "diff": -0.14965986394557823,
+   "lo": -0.2653061224489796,
+   "hi": -0.027210884353741496,
+   "p_le0": 0.9922,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.14965986394557826,
+    "lo": -0.357333734696758,
+    "hi": 0.05801400680560148,
+    "t": -3.100950505850601,
+    "df": 2
+   }
+  },
+  "ours_vs_uncertainty_b0.01": {
+   "diff": 0.23582766439909297,
+   "lo": 0.09297052154195011,
+   "hi": 0.36961451247165533,
+   "p_le0": 0.0004,
+   "n_seeds": 3
+  },
+  "event_vs_random_b0.01": {
+   "diff": -0.5102040816326531,
+   "lo": -0.6145124716553289,
+   "hi": -0.4036281179138322,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.5102040816326531,
+    "lo": -0.7219637314837838,
+    "hi": -0.29844443178152236,
+    "t": -10.367452745642058,
+    "df": 2
+   }
+  },
+  "ours_vs_event_b0.01": {
+   "diff": 0.5963718820861678,
+   "lo": 0.4965986394557823,
+   "hi": 0.6961451247165533,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "ours_vs_random_b0.01": {
+   "diff": 0.08616780045351474,
+   "lo": -0.034013605442176874,
+   "hi": 0.19954648526077098,
+   "p_le0": 0.0761,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": 0.0861678004535147,
+    "lo": -0.15123924868819266,
+    "hi": 0.3235748495952221,
+    "t": 1.5617903794008936,
+    "df": 2
+   }
+  },
+  "oracle_vs_random_b0.01": {
+   "diff": -0.42630385487528344,
+   "lo": -0.5510204081632653,
+   "hi": -0.30385487528344673,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.4263038548752835,
+    "lo": -0.6893912022038686,
+    "hi": -0.1632165075466983,
+    "t": -6.97253405059147,
+    "df": 2
+   }
+  },
+  "ours_vs_oracle_b0.01": {
+   "diff": 0.5124716553287982,
+   "lo": 0.3922902494331066,
+   "hi": 0.6167800453514739,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "uniform_vs_random_b0.02": {
+   "diff": 0.04308390022675737,
+   "lo": -0.14965986394557823,
+   "hi": 0.20640589569160914,
+   "p_le0": 0.3078,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": 0.04308390022675738,
+    "lo": -0.4142651537373698,
+    "hi": 0.5004329541908845,
+    "t": 0.4053578357030521,
+    "df": 2
+   }
+  },
+  "ours_vs_uniform_b0.02": {
+   "diff": 0.06349206349206349,
+   "lo": -0.013605442176870748,
+   "hi": 0.14965986394557823,
+   "p_le0": 0.0582,
+   "n_seeds": 3
+  },
+  "action_trigger_vs_random_b0.02": {
+   "diff": -0.6077097505668935,
+   "lo": -0.7369614512471655,
+   "hi": -0.47619047619047616,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.6077097505668935,
+    "lo": -0.9054294672979333,
+    "hi": -0.30999003383585366,
+    "t": -8.783345239615798,
+    "df": 2
+   }
+  },
+  "ours_vs_action_trigger_b0.02": {
+   "diff": 0.7142857142857143,
+   "lo": 0.6462585034013606,
+   "hi": 0.7755102040816326,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "rule_ittc_vs_random_b0.02": {
+   "diff": -0.23356009070294784,
+   "lo": -0.34467120181405897,
+   "hi": -0.11564625850340136,
+   "p_le0": 0.9999,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.2335600907029478,
+    "lo": -0.427974302972272,
+    "hi": -0.039145878433623604,
+    "t": -5.169421816253505,
+    "df": 2
+   }
+  },
+  "ours_vs_rule_ittc_b0.02": {
+   "diff": 0.3401360544217687,
+   "lo": 0.22675736961451248,
+   "hi": 0.4489795918367347,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "uncertainty_vs_random_b0.02": {
+   "diff": -0.34467120181405897,
+   "lo": -0.5170068027210885,
+   "hi": -0.17687074829931973,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.34467120181405897,
+    "lo": -0.7418572738168521,
+    "hi": 0.052514870188734075,
+    "t": -3.734068956464985,
+    "df": 2
+   }
+  },
+  "ours_vs_uncertainty_b0.02": {
+   "diff": 0.4512471655328798,
+   "lo": 0.36507936507936506,
+   "hi": 0.5374149659863946,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "coreset_vs_random_b0.02": {
+   "diff": -0.29931972789115646,
+   "lo": -0.4603174603174603,
+   "hi": -0.14512471655328799,
+   "p_le0": 0.9998,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.2993197278911564,
+    "lo": -0.6534194974236656,
+    "hi": 0.054780041641352806,
+    "t": -3.6373160898016335,
+    "df": 2
+   }
+  },
+  "ours_vs_coreset_b0.02": {
+   "diff": 0.40589569160997735,
+   "lo": 0.3242630385487528,
+   "hi": 0.4852607709750567,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "event_vs_random_b0.02": {
+   "diff": -0.5850340136054422,
+   "lo": -0.7346938775510204,
+   "hi": -0.4421768707482993,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.5850340136054423,
+    "lo": -0.9280718243168053,
+    "hi": -0.24199620289407914,
+    "t": -7.338553599452613,
+    "df": 2
+   }
+  },
+  "ours_vs_event_b0.02": {
+   "diff": 0.691609977324263,
+   "lo": 0.6235827664399093,
+   "hi": 0.7551020408163265,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "ours_vs_random_b0.02": {
+   "diff": 0.10657596371882086,
+   "lo": -0.04314058956916095,
+   "hi": 0.2494897959183665,
+   "p_le0": 0.0827,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": 0.10657596371882083,
+    "lo": -0.25166702769705696,
+    "hi": 0.4648189551346986,
+    "t": 1.2801265701516817,
+    "df": 2
+   }
+  },
+  "offline_loss_vs_random_b0.02": {
+   "diff": -0.6167800453514739,
+   "lo": -0.7346938775510204,
+   "hi": -0.5011337868480725,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.616780045351474,
+    "lo": -0.8704716553287983,
+    "hi": -0.36308843537414975,
+    "t": -10.461538461538463,
+    "df": 2
+   }
+  },
+  "ours_vs_offline_loss_b0.02": {
+   "diff": 0.7233560090702947,
+   "lo": 0.6439909297052154,
+   "hi": 0.7913832199546486,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "oracle_vs_random_b0.02": {
+   "diff": -0.54421768707483,
+   "lo": -0.6848072562358276,
+   "hi": -0.40816326530612246,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.54421768707483,
+    "lo": -0.854004568476488,
+    "hi": -0.23443080567317198,
+    "t": -7.559289460184546,
+    "df": 2
+   }
+  },
+  "ours_vs_oracle_b0.02": {
+   "diff": 0.6507936507936508,
+   "lo": 0.5714285714285714,
+   "hi": 0.7210884353741497,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "action_trigger_vs_random_b0.05": {
+   "diff": -0.6848072562358276,
+   "lo": -0.764172335600907,
+   "hi": -0.6009070294784581,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.6848072562358277,
+    "lo": -0.8035107808066816,
+    "hi": -0.5661037316649739,
+    "t": -24.824247083108926,
+    "df": 2
+   }
+  },
+  "ours_vs_action_trigger_b0.05": {
+   "diff": 0.6575963718820862,
+   "lo": 0.5714285714285714,
+   "hi": 0.7392290249433107,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "uncertainty_vs_random_b0.05": {
+   "diff": -0.36507936507936506,
+   "lo": -0.46485260770975056,
+   "hi": -0.2585034013605442,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.36507936507936506,
+    "lo": -0.47760684091806904,
+    "hi": -0.2525518892406611,
+    "t": -13.960470509338323,
+    "df": 2
+   }
+  },
+  "ours_vs_uncertainty_b0.05": {
+   "diff": 0.3378684807256236,
+   "lo": 0.23129251700680273,
+   "hi": 0.4444444444444444,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "event_vs_random_b0.05": {
+   "diff": -0.655328798185941,
+   "lo": -0.7369614512471655,
+   "hi": -0.562358276643991,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.6553287981859409,
+    "lo": -0.8010373990992333,
+    "hi": -0.5096201972726485,
+    "t": -19.35287142227208,
+    "df": 2
+   }
+  },
+  "ours_vs_event_b0.05": {
+   "diff": 0.6281179138321995,
+   "lo": 0.5374149659863946,
+   "hi": 0.7142857142857143,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "ours_vs_random_b0.05": {
+   "diff": -0.027210884353741496,
+   "lo": -0.1360544217687075,
+   "hi": 0.07709750566893424,
+   "p_le0": 0.6978,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.02721088435374149,
+    "lo": -0.26381452324164256,
+    "hi": 0.20939275453415956,
+    "t": -0.49487165930539306,
+    "df": 2
+   }
+  },
+  "oracle_vs_random_b0.05": {
+   "diff": -0.7188208616780045,
+   "lo": -0.7845804988662132,
+   "hi": -0.6485260770975056,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.7188208616780045,
+    "lo": -0.7613522497824388,
+    "hi": -0.6762894735735703,
+    "t": -72.72478763696822,
+    "df": 2
+   }
+  },
+  "ours_vs_oracle_b0.05": {
+   "diff": 0.691609977324263,
+   "lo": 0.5736961451247166,
+   "hi": 0.7913832199546486,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "action_trigger_vs_random_b0.10": {
+   "diff": -0.5782312925170068,
+   "lo": -0.6621315192743764,
+   "hi": -0.49206349206349204,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.5782312925170068,
+    "lo": -0.6660476190476191,
+    "hi": -0.49041496598639445,
+    "t": -28.3333333333333,
+    "df": 2
+   }
+  },
+  "ours_vs_action_trigger_b0.10": {
+   "diff": 0.5600907029478458,
+   "lo": 0.47619047619047616,
+   "hi": 0.6394557823129252,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "uncertainty_vs_random_b0.10": {
+   "diff": -0.24036281179138322,
+   "lo": -0.3333333333333333,
+   "hi": -0.14512471655328799,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.24036281179138322,
+    "lo": -0.35906633636223706,
+    "hi": -0.1216592872205294,
+    "t": -8.713146327183928,
+    "df": 2
+   }
+  },
+  "ours_vs_uncertainty_b0.10": {
+   "diff": 0.2222222222222222,
+   "lo": 0.1292517006802721,
+   "hi": 0.31065759637188206,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "event_vs_random_b0.10": {
+   "diff": -0.6122448979591837,
+   "lo": -0.6984126984126984,
+   "hi": -0.5192743764172335,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.6122448979591838,
+    "lo": -0.7398390622724865,
+    "hi": -0.48465073364588107,
+    "t": -20.647416048350582,
+    "df": 2
+   }
+  },
+  "ours_vs_event_b0.10": {
+   "diff": 0.5941043083900227,
+   "lo": 0.46258503401360546,
+   "hi": 0.7097505668934241,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "ours_vs_random_b0.10": {
+   "diff": -0.018140589569160998,
+   "lo": -0.09297052154195011,
+   "hi": 0.05215419501133787,
+   "p_le0": 0.7074,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.01814058956916102,
+    "lo": -0.1557852265771029,
+    "hi": 0.11950404743878086,
+    "t": -0.5671049640066688,
+    "df": 2
+   }
+  },
+  "oracle_vs_random_b0.10": {
+   "diff": -0.6303854875283447,
+   "lo": -0.7074829931972789,
+   "hi": -0.5487528344671202,
+   "p_le0": 1.0,
+   "n_seeds": 3,
+   "seed_t": {
+    "diff": -0.6303854875283447,
+    "lo": -0.6986870748299319,
+    "hi": -0.5620839002267575,
+    "t": -39.71428571428575,
+    "df": 2
+   }
+  },
+  "ours_vs_oracle_b0.10": {
+   "diff": 0.6122448979591837,
+   "lo": 0.5102040816326531,
+   "hi": 0.7097505668934241,
+   "p_le0": 0.0,
+   "n_seeds": 3
+  },
+  "robot_ours_vs_random_b0.02": {
+   "diff": -0.032407407407407406,
+   "lo": -0.19444444444444445,
+   "hi": 0.125,
+   "p_le0": 0.6735,
+   "n_seeds": 3
   }
  },
  "driving:action_trigger:0.01:success": 0.034013605442176874,
@@ -363,6 +853,8 @@
  "driving:action_trigger:0.01:mae_hazard_sd": 0.07560900422758313,
  "driving:action_trigger:0.01:hazard_frame_recall": 0.09540736896730669,
  "driving:action_trigger:0.01:hazard_frame_recall_sd": 1.6996749443881478e-17,
+ "driving:action_trigger:0.01:hazard_share": 0.6809259259259259,
+ "driving:action_trigger:0.01:hazard_share_sd": 0.0,
  "driving:action_trigger:0.01:hazard_event_recall": 0.11368573497465605,
  "driving:action_trigger:0.01:hazard_event_recall_sd": 0.0,
  "driving:action_trigger:0.01:label_entropy_norm": 0.5039648624542145,
@@ -390,6 +882,8 @@
  "driving:action_trigger:0.02:mae_hazard_sd": 0.023167357538633488,
  "driving:action_trigger:0.02:hazard_frame_recall": 0.1898546964193046,
  "driving:action_trigger:0.02:hazard_frame_recall_sd": 0.0,
+ "driving:action_trigger:0.02:hazard_share": 0.6774999999999999,
+ "driving:action_trigger:0.02:hazard_share_sd": 1.3597399555105182e-16,
  "driving:action_trigger:0.02:hazard_event_recall": 0.2107168718320058,
  "driving:action_trigger:0.02:hazard_event_recall_sd": 0.0,
  "driving:action_trigger:0.02:label_entropy_norm": 0.5771952632119781,
@@ -417,6 +911,8 @@
  "driving:action_trigger:0.05:mae_hazard_sd": 0.04394909750136853,
  "driving:action_trigger:0.05:hazard_frame_recall": 0.45064867669953296,
  "driving:action_trigger:0.05:hazard_frame_recall_sd": 0.0,
+ "driving:action_trigger:0.05:hazard_share": 0.6432592592592593,
+ "driving:action_trigger:0.05:hazard_share_sd": 0.0,
  "driving:action_trigger:0.05:hazard_event_recall": 0.46777697320782047,
  "driving:action_trigger:0.05:hazard_event_recall_sd": 6.798699777552591e-17,
  "driving:action_trigger:0.05:label_entropy_norm": 0.7438649206374274,
@@ -444,6 +940,8 @@
  "driving:action_trigger:0.10:mae_hazard_sd": 0.009773907174116888,
  "driving:action_trigger:0.10:hazard_frame_recall": 0.8386870783601453,
  "driving:action_trigger:0.10:hazard_frame_recall_sd": 0.0,
+ "driving:action_trigger:0.10:hazard_share": 0.598574074074074,
+ "driving:action_trigger:0.10:hazard_share_sd": 0.0,
  "driving:action_trigger:0.10:hazard_event_recall": 0.8515568428674873,
  "driving:action_trigger:0.10:hazard_event_recall_sd": 0.0,
  "driving:action_trigger:0.10:label_entropy_norm": 0.8775561025677017,
@@ -471,6 +969,8 @@
  "driving:coreset:0.02:mae_hazard_sd": 0.02886696993956289,
  "driving:coreset:0.02:hazard_frame_recall": 0.0987891368275385,
  "driving:coreset:0.02:hazard_frame_recall_sd": 0.0005469438420260302,
+ "driving:coreset:0.02:hazard_share": 0.3525308641975309,
+ "driving:coreset:0.02:hazard_share_sd": 0.0019517792288595525,
  "driving:coreset:0.02:hazard_event_recall": 0.14627081824764662,
  "driving:coreset:0.02:hazard_event_recall_sd": 0.0045220839959438045,
  "driving:coreset:0.02:label_entropy_norm": 0.8830503729914391,
@@ -498,6 +998,8 @@
  "driving:event:0.01:mae_hazard_sd": 0.012269386990740793,
  "driving:event:0.01:hazard_frame_recall": 0.10910742086144266,
  "driving:event:0.01:hazard_frame_recall_sd": 0.0,
+ "driving:event:0.01:hazard_share": 0.7787037037037038,
+ "driving:event:0.01:hazard_share_sd": 1.3597399555105182e-16,
  "driving:event:0.01:hazard_event_recall": 0.12020275162925416,
  "driving:event:0.01:hazard_event_recall_sd": 0.0,
  "driving:event:0.01:label_entropy_norm": 0.5764700309380962,
@@ -525,6 +1027,8 @@
  "driving:event:0.02:mae_hazard_sd": 0.025288583950202632,
  "driving:event:0.02:hazard_frame_recall": 0.20765438505448885,
  "driving:event:0.02:hazard_frame_recall_sd": 0.0,
+ "driving:event:0.02:hazard_share": 0.7410185185185186,
+ "driving:event:0.02:hazard_share_sd": 0.0,
  "driving:event:0.02:hazard_event_recall": 0.22302679217958002,
  "driving:event:0.02:hazard_event_recall_sd": 0.0,
  "driving:event:0.02:label_entropy_norm": 0.7038276573664559,
@@ -552,6 +1056,8 @@
  "driving:event:0.05:mae_hazard_sd": 0.011086339652482664,
  "driving:event:0.05:hazard_frame_recall": 0.47719252724442135,
  "driving:event:0.05:hazard_frame_recall_sd": 6.798699777552591e-17,
+ "driving:event:0.05:hazard_share": 0.6811481481481482,
+ "driving:event:0.05:hazard_share_sd": 0.0,
  "driving:event:0.05:hazard_event_recall": 0.47501810282404056,
  "driving:event:0.05:hazard_event_recall_sd": 0.0,
  "driving:event:0.05:label_entropy_norm": 0.825544335448576,
@@ -579,6 +1085,8 @@
  "driving:event:0.10:mae_hazard_sd": 0.0031633290312612296,
  "driving:event:0.10:hazard_frame_recall": 0.7806953814218994,
  "driving:event:0.10:hazard_frame_recall_sd": 1.3597399555105182e-16,
+ "driving:event:0.10:hazard_share": 0.5571851851851852,
+ "driving:event:0.10:hazard_share_sd": 0.0,
  "driving:event:0.10:hazard_event_recall": 0.7639391745112237,
  "driving:event:0.10:hazard_event_recall_sd": 0.0,
  "driving:event:0.10:label_entropy_norm": 0.9124335957465041,
@@ -606,6 +1114,8 @@
  "driving:full:1.00:mae_hazard_sd": 0.13612325916326834,
  "driving:full:1.00:hazard_frame_recall": 1.0,
  "driving:full:1.00:hazard_frame_recall_sd": 0.0,
+ "driving:full:1.00:hazard_share": 0.07137037037037038,
+ "driving:full:1.00:hazard_share_sd": 0.0,
  "driving:full:1.00:hazard_event_recall": 1.0,
  "driving:full:1.00:hazard_event_recall_sd": 0.0,
  "driving:full:1.00:label_entropy_norm": 0.7102787594520427,
@@ -633,6 +1143,8 @@
  "driving:offline_loss:0.02:mae_hazard_sd": 0.07857036215468259,
  "driving:offline_loss:0.02:hazard_frame_recall": 0.17016087182148418,
  "driving:offline_loss:0.02:hazard_frame_recall_sd": 0.0,
+ "driving:offline_loss:0.02:hazard_share": 0.6072222222222222,
+ "driving:offline_loss:0.02:hazard_share_sd": 0.0,
  "driving:offline_loss:0.02:hazard_event_recall": 0.22881969587255613,
  "driving:offline_loss:0.02:hazard_event_recall_sd": 0.0,
  "driving:offline_loss:0.02:label_entropy_norm": 0.826109544083009,
@@ -660,6 +1172,8 @@
  "driving:oracle:0.01:mae_hazard_sd": 0.09566691488018898,
  "driving:oracle:0.01:hazard_frame_recall": 0.1401141670991178,
  "driving:oracle:0.01:hazard_frame_recall_sd": 0.0,
+ "driving:oracle:0.01:hazard_share": 1.0,
+ "driving:oracle:0.01:hazard_share_sd": 0.0,
  "driving:oracle:0.01:hazard_event_recall": 0.12309920347574221,
  "driving:oracle:0.01:hazard_event_recall_sd": 0.0014482259232440275,
  "driving:oracle:0.01:label_entropy_norm": 0.37352354330669263,
@@ -687,6 +1201,8 @@
  "driving:oracle:0.02:mae_hazard_sd": 0.04987592319564563,
  "driving:oracle:0.02:hazard_frame_recall": 0.2763362740010379,
  "driving:oracle:0.02:hazard_frame_recall_sd": 0.0,
+ "driving:oracle:0.02:hazard_share": 0.9861111111111112,
+ "driving:oracle:0.02:hazard_share_sd": 0.0,
  "driving:oracle:0.02:hazard_event_recall": 0.2440260680666184,
  "driving:oracle:0.02:hazard_event_recall_sd": 0.0,
  "driving:oracle:0.02:label_entropy_norm": 0.4274436210904941,
@@ -714,6 +1230,8 @@
  "driving:oracle:0.05:mae_hazard_sd": 0.025371615648497024,
  "driving:oracle:0.05:hazard_frame_recall": 0.6048780487804878,
  "driving:oracle:0.05:hazard_frame_recall_sd": 0.0,
+ "driving:oracle:0.05:hazard_share": 0.8634074074074074,
+ "driving:oracle:0.05:hazard_share_sd": 0.0,
  "driving:oracle:0.05:hazard_event_recall": 0.6099444846729423,
  "driving:oracle:0.05:hazard_event_recall_sd": 0.0004180668133161607,
  "driving:oracle:0.05:label_entropy_norm": 0.6505769752241348,
@@ -741,6 +1259,8 @@
  "driving:oracle:0.10:mae_hazard_sd": 0.01674430240269556,
  "driving:oracle:0.10:hazard_frame_recall": 0.9282563570316554,
  "driving:oracle:0.10:hazard_frame_recall_sd": 0.0,
+ "driving:oracle:0.10:hazard_share": 0.6625,
+ "driving:oracle:0.10:hazard_share_sd": 0.0,
  "driving:oracle:0.10:hazard_event_recall": 0.923485397055274,
  "driving:oracle:0.10:hazard_event_recall_sd": 0.0008361336266323214,
  "driving:oracle:0.10:label_entropy_norm": 0.849525718975805,
@@ -768,6 +1288,8 @@
  "driving:ours:0.01:mae_hazard_sd": 0.10895336932082705,
  "driving:ours:0.01:hazard_frame_recall": 0.0194430029406677,
  "driving:ours:0.01:hazard_frame_recall_sd": 0.0024573576637888094,
+ "driving:ours:0.01:hazard_share": 0.13876543209876543,
+ "driving:ours:0.01:hazard_share_sd": 0.01753825265970754,
  "driving:ours:0.01:hazard_event_recall": 0.03089548636253922,
  "driving:ours:0.01:hazard_event_recall_sd": 0.0018223109908932552,
  "driving:ours:0.01:label_entropy_norm": 0.7728837585204701,
@@ -795,6 +1317,8 @@
  "driving:ours:0.02:mae_hazard_sd": 0.06821134288572599,
  "driving:ours:0.02:hazard_frame_recall": 0.03667185608026293,
  "driving:ours:0.02:hazard_frame_recall_sd": 0.0013821127386568518,
+ "driving:ours:0.02:hazard_share": 0.13086419753086423,
+ "driving:ours:0.02:hazard_share_sd": 0.004932094902577325,
  "driving:ours:0.02:hazard_event_recall": 0.05648081100651701,
  "driving:ours:0.02:hazard_event_recall_sd": 0.0014482259232440275,
  "driving:ours:0.02:label_entropy_norm": 0.7917509912577895,
@@ -822,6 +1346,8 @@
  "driving:ours:0.05:mae_hazard_sd": 0.027790699991591873,
  "driving:ours:0.05:hazard_frame_recall": 0.09873724269157585,
  "driving:ours:0.05:hazard_frame_recall_sd": 0.0052437691285441975,
+ "driving:ours:0.05:hazard_share": 0.14093827160493827,
+ "driving:ours:0.05:hazard_share_sd": 0.007484994896818264,
  "driving:ours:0.05:hazard_event_recall": 0.14458122133719528,
  "driving:ours:0.05:hazard_event_recall_sd": 0.009831239128368967,
  "driving:ours:0.05:label_entropy_norm": 0.7878281022730874,
@@ -849,6 +1375,8 @@
  "driving:ours:0.10:mae_hazard_sd": 0.026941821694938518,
  "driving:ours:0.10:hazard_frame_recall": 0.18886870783601453,
  "driving:ours:0.10:hazard_frame_recall_sd": 0.0013683234949076486,
+ "driving:ours:0.10:hazard_share": 0.13479629629629628,
+ "driving:ours:0.10:hazard_share_sd": 0.0009765775461803882,
  "driving:ours:0.10:hazard_event_recall": 0.26430123099203473,
  "driving:ours:0.10:hazard_event_recall_sd": 0.010059698761368424,
  "driving:ours:0.10:label_entropy_norm": 0.7845495753917305,
@@ -876,6 +1404,8 @@
  "driving:random:0.01:mae_hazard_sd": 0.2347703964289685,
  "driving:random:0.01:hazard_frame_recall": 0.012333506313786541,
  "driving:random:0.01:hazard_frame_recall_sd": 0.0035192808374795944,
+ "driving:random:0.01:hazard_share": 0.0880246913580247,
+ "driving:random:0.01:hazard_share_sd": 0.025117237680826587,
  "driving:random:0.01:hazard_event_recall": 0.02317161477190442,
  "driving:random:0.01:hazard_event_recall_sd": 0.004522083995943807,
  "driving:random:0.01:label_entropy_norm": 0.749174852382917,
@@ -903,6 +1433,8 @@
  "driving:random:0.02:mae_hazard_sd": 0.24964297097140423,
  "driving:random:0.02:hazard_frame_recall": 0.023879951565473106,
  "driving:random:0.02:hazard_frame_recall_sd": 0.001655807895964708,
+ "driving:random:0.02:hazard_share": 0.08521604938271606,
+ "driving:random:0.02:hazard_share_sd": 0.005908781139859245,
  "driving:random:0.02:hazard_event_recall": 0.04417089065894279,
  "driving:random:0.02:hazard_event_recall_sd": 0.004344677769732078,
  "driving:random:0.02:label_entropy_norm": 0.7357688217627603,
@@ -930,6 +1462,8 @@
  "driving:random:0.05:mae_hazard_sd": 0.10808065743290689,
  "driving:random:0.05:hazard_frame_recall": 0.054817505621864736,
  "driving:random:0.05:hazard_frame_recall_sd": 0.002794865797251712,
+ "driving:random:0.05:hazard_share": 0.07824691358024692,
+ "driving:random:0.05:hazard_share_sd": 0.0039894121417067005,
  "driving:random:0.05:hazard_event_recall": 0.10016895969104513,
  "driving:random:0.05:hazard_event_recall_sd": 0.0008361336266323294,
  "driving:random:0.05:label_entropy_norm": 0.7242428862323737,
@@ -957,6 +1491,8 @@
  "driving:random:0.10:mae_hazard_sd": 0.06618165642321475,
  "driving:random:0.10:hazard_frame_recall": 0.10382286801591421,
  "driving:random:0.10:hazard_frame_recall_sd": 0.002010911718540319,
+ "driving:random:0.10:hazard_share": 0.07409876543209877,
+ "driving:random:0.10:hazard_share_sd": 0.0014351951413434031,
  "driving:random:0.10:hazard_event_recall": 0.1819937243543326,
  "driving:random:0.10:hazard_event_recall_sd": 0.002926467693213167,
  "driving:random:0.10:label_entropy_norm": 0.7189601536388773,
@@ -984,6 +1520,8 @@
  "driving:rule_ittc:0.02:mae_hazard_sd": 0.06513557307036996,
  "driving:rule_ittc:0.02:hazard_frame_recall": 0.10897768552153607,
  "driving:rule_ittc:0.02:hazard_frame_recall_sd": 0.0,
+ "driving:rule_ittc:0.02:hazard_share": 0.3888888888888889,
+ "driving:rule_ittc:0.02:hazard_share_sd": 0.0,
  "driving:rule_ittc:0.02:hazard_event_recall": 0.12889210716871832,
  "driving:rule_ittc:0.02:hazard_event_recall_sd": 0.0,
  "driving:rule_ittc:0.02:label_entropy_norm": 0.8183016675653273,
@@ -1011,6 +1549,8 @@
  "driving:uncertainty:0.01:mae_hazard_sd": 0.050982021136219226,
  "driving:uncertainty:0.01:hazard_frame_recall": 0.07247016087182148,
  "driving:uncertainty:0.01:hazard_frame_recall_sd": 0.0,
+ "driving:uncertainty:0.01:hazard_share": 0.5172222222222222,
+ "driving:uncertainty:0.01:hazard_share_sd": 0.0,
  "driving:uncertainty:0.01:hazard_event_recall": 0.10209992758870384,
  "driving:uncertainty:0.01:hazard_event_recall_sd": 0.0,
  "driving:uncertainty:0.01:label_entropy_norm": 0.9315798701571195,
@@ -1038,6 +1578,8 @@
  "driving:uncertainty:0.02:mae_hazard_sd": 0.027728090600932856,
  "driving:uncertainty:0.02:hazard_frame_recall": 0.14615983393876492,
  "driving:uncertainty:0.02:hazard_frame_recall_sd": 0.0,
+ "driving:uncertainty:0.02:hazard_share": 0.5215740740740741,
+ "driving:uncertainty:0.02:hazard_share_sd": 0.0,
  "driving:uncertainty:0.02:hazard_event_recall": 0.20275162925416365,
  "driving:uncertainty:0.02:hazard_event_recall_sd": 0.0,
  "driving:uncertainty:0.02:label_entropy_norm": 0.9351487741264638,
@@ -1065,6 +1607,8 @@
  "driving:uncertainty:0.05:mae_hazard_sd": 0.017189648429835686,
  "driving:uncertainty:0.05:hazard_frame_recall": 0.34724961079398026,
  "driving:uncertainty:0.05:hazard_frame_recall_sd": 0.0,
+ "driving:uncertainty:0.05:hazard_share": 0.49566666666666664,
+ "driving:uncertainty:0.05:hazard_share_sd": 0.0,
  "driving:uncertainty:0.05:hazard_event_recall": 0.44677769732078204,
  "driving:uncertainty:0.05:hazard_event_recall_sd": 0.0,
  "driving:uncertainty:0.05:label_entropy_norm": 0.9266348848256403,
@@ -1092,6 +1636,8 @@
  "driving:uncertainty:0.10:mae_hazard_sd": 0.03607109682969581,
  "driving:uncertainty:0.10:hazard_frame_recall": 0.5821484172288531,
  "driving:uncertainty:0.10:hazard_frame_recall_sd": 0.0,
+ "driving:uncertainty:0.10:hazard_share": 0.4154814814814815,
+ "driving:uncertainty:0.10:hazard_share_sd": 0.0,
  "driving:uncertainty:0.10:hazard_event_recall": 0.6937002172338885,
  "driving:uncertainty:0.10:hazard_event_recall_sd": 0.0,
  "driving:uncertainty:0.10:label_entropy_norm": 0.9529946795041533,
@@ -1119,6 +1665,8 @@
  "driving:uniform:0.02:mae_hazard_sd": 0.28274860051988293,
  "driving:uniform:0.02:hazard_frame_recall": 0.025194603009859887,
  "driving:uniform:0.02:hazard_frame_recall_sd": 0.003170642526287521,
+ "driving:uniform:0.02:hazard_share": 0.08990740740740742,
+ "driving:uniform:0.02:hazard_share_sd": 0.011314496570659353,
  "driving:uniform:0.02:hazard_event_recall": 0.04706734250543084,
  "driving:uniform:0.02:hazard_event_recall_sd": 0.0019158228175703048,
  "driving:uniform:0.02:label_entropy_norm": 0.7449161379891285,
@@ -1126,8 +1674,8 @@
  "driving:uniform:0.02:progress": 0.7045040131376857,
  "driving:uniform:0.02:progress_sd": 0.009272850881651255,
  "driving:uniform:0.02:n_train_frames": 10800,
- "robot:action_trigger:0.02:success": 0.07407407407407408,
- "robot:action_trigger:0.02:success_sd": 0.008018753738744798,
+ "robot:action_trigger:0.02:success": 0.12037037037037036,
+ "robot:action_trigger:0.02:success_sd": 0.016037507477489613,
  "robot:action_trigger:0.02:hazard_success": 0.08333333333333333,
  "robot:action_trigger:0.02:hazard_success_sd": 0.027777777777777776,
  "robot:action_trigger:0.02:collision": 0.1898148148148148,
@@ -1146,6 +1694,8 @@
  "robot:action_trigger:0.02:mae_hazard_sd": 0.03786120355616021,
  "robot:action_trigger:0.02:hazard_frame_recall": 0.18880974501909775,
  "robot:action_trigger:0.02:hazard_frame_recall_sd": 0.0,
+ "robot:action_trigger:0.02:hazard_share": 0.33870370370370373,
+ "robot:action_trigger:0.02:hazard_share_sd": 0.0,
  "robot:action_trigger:0.02:hazard_event_recall": 0.3666026871401152,
  "robot:action_trigger:0.02:hazard_event_recall_sd": 0.0,
  "robot:action_trigger:0.02:label_entropy_norm": 0.8307826010129856,
@@ -1153,8 +1703,8 @@
  "robot:action_trigger:0.02:progress": 0.2103337284676161,
  "robot:action_trigger:0.02:progress_sd": 0.026926164506072714,
  "robot:action_trigger:0.02:n_train_frames": 5400,
- "robot:event:0.02:success": 0.05555555555555555,
- "robot:event:0.02:success_sd": 0.013888888888888892,
+ "robot:event:0.02:success": 0.1388888888888889,
+ "robot:event:0.02:success_sd": 0.013888888888888895,
  "robot:event:0.02:hazard_success": 0.07407407407407407,
  "robot:event:0.02:hazard_success_sd": 0.016037507477489603,
  "robot:event:0.02:collision": 0.19907407407407407,
@@ -1173,6 +1723,8 @@
  "robot:event:0.02:mae_hazard_sd": 0.04532159420300865,
  "robot:event:0.02:hazard_frame_recall": 0.3588314235573449,
  "robot:event:0.02:hazard_frame_recall_sd": 0.0,
+ "robot:event:0.02:hazard_share": 0.6437037037037037,
+ "robot:event:0.02:hazard_share_sd": 0.0,
  "robot:event:0.02:hazard_event_recall": 0.22648752399232244,
  "robot:event:0.02:hazard_event_recall_sd": 3.3993498887762956e-17,
  "robot:event:0.02:label_entropy_norm": 0.7953062248022781,
@@ -1180,8 +1732,8 @@
  "robot:event:0.02:progress": 0.14133467285960338,
  "robot:event:0.02:progress_sd": 0.02012875268051757,
  "robot:event:0.02:n_train_frames": 5400,
- "robot:full:1.00:success": 0.4444444444444444,
- "robot:full:1.00:success_sd": 0.0,
+ "robot:full:1.00:success": 0.46759259259259256,
+ "robot:full:1.00:success_sd": 0.016037507477489613,
  "robot:full:1.00:hazard_success": 0.4166666666666667,
  "robot:full:1.00:hazard_success_sd": 0.08333333333333334,
  "robot:full:1.00:collision": 0.39814814814814814,
@@ -1200,6 +1752,8 @@
  "robot:full:1.00:mae_hazard_sd": 0.014750041682421847,
  "robot:full:1.00:hazard_frame_recall": 1.0,
  "robot:full:1.00:hazard_frame_recall_sd": 0.0,
+ "robot:full:1.00:hazard_share": 0.03587777777777778,
+ "robot:full:1.00:hazard_share_sd": 0.0,
  "robot:full:1.00:hazard_event_recall": 1.0,
  "robot:full:1.00:hazard_event_recall_sd": 0.0,
  "robot:full:1.00:label_entropy_norm": 0.6077130402056721,
@@ -1207,8 +1761,8 @@
  "robot:full:1.00:progress": 0.539201119864377,
  "robot:full:1.00:progress_sd": 0.015404602674597171,
  "robot:full:1.00:n_train_frames": 270000,
- "robot:oracle:0.02:success": 0.009259259259259259,
- "robot:oracle:0.02:success_sd": 0.008018753738744801,
+ "robot:oracle:0.02:success": 0.11574074074074074,
+ "robot:oracle:0.02:success_sd": 0.016037507477489603,
  "robot:oracle:0.02:hazard_success": 0.018518518518518517,
  "robot:oracle:0.02:hazard_success_sd": 0.016037507477489603,
  "robot:oracle:0.02:collision": 0.16203703703703703,
@@ -1227,6 +1781,8 @@
  "robot:oracle:0.02:mae_hazard_sd": 0.007008492113762546,
  "robot:oracle:0.02:hazard_frame_recall": 0.5029420873335398,
  "robot:oracle:0.02:hazard_frame_recall_sd": 0.0,
+ "robot:oracle:0.02:hazard_share": 0.9022222222222224,
+ "robot:oracle:0.02:hazard_share_sd": 0.0,
  "robot:oracle:0.02:hazard_event_recall": 0.29750479846449135,
  "robot:oracle:0.02:hazard_event_recall_sd": 0.0,
  "robot:oracle:0.02:label_entropy_norm": 0.5427695676028259,
@@ -1234,8 +1790,8 @@
  "robot:oracle:0.02:progress": 0.05122215968736523,
  "robot:oracle:0.02:progress_sd": 0.0190843958680462,
  "robot:oracle:0.02:n_train_frames": 5400,
- "robot:ours:0.02:success": 0.26851851851851855,
- "robot:ours:0.02:success_sd": 0.028912027770362968,
+ "robot:ours:0.02:success": 0.3425925925925926,
+ "robot:ours:0.02:success_sd": 0.0446465313008933,
  "robot:ours:0.02:hazard_success": 0.25,
  "robot:ours:0.02:hazard_success_sd": 0.048112522432468836,
  "robot:ours:0.02:collision": 0.375,
@@ -1254,6 +1810,8 @@
  "robot:ours:0.02:mae_hazard_sd": 0.0071794925805719004,
  "robot:ours:0.02:hazard_frame_recall": 0.04731426998382712,
  "robot:ours:0.02:hazard_frame_recall_sd": 0.005153636261510944,
+ "robot:ours:0.02:hazard_share": 0.08487654320987655,
+ "robot:ours:0.02:hazard_share_sd": 0.009245050826899354,
  "robot:ours:0.02:hazard_event_recall": 0.054382597568777995,
  "robot:ours:0.02:hazard_event_recall_sd": 0.00726667734587367,
  "robot:ours:0.02:label_entropy_norm": 0.6707652911413978,
@@ -1261,8 +1819,8 @@
  "robot:ours:0.02:progress": 0.43250126869532535,
  "robot:ours:0.02:progress_sd": 0.0453275000651877,
  "robot:ours:0.02:n_train_frames": 5400,
- "robot:random:0.02:success": 0.3611111111111111,
- "robot:random:0.02:success_sd": 0.09722222222222221,
+ "robot:random:0.02:success": 0.375,
+ "robot:random:0.02:success_sd": 0.08333333333333331,
  "robot:random:0.02:hazard_success": 0.2962962962962963,
  "robot:random:0.02:hazard_success_sd": 0.15298807075794726,
  "robot:random:0.02:collision": 0.375,
@@ -1281,6 +1839,8 @@
  "robot:random:0.02:mae_hazard_sd": 0.033573060246724594,
  "robot:random:0.02:hazard_frame_recall": 0.020095660851312758,
  "robot:random:0.02:hazard_frame_recall_sd": 0.010047064412011626,
+ "robot:random:0.02:hazard_share": 0.036049382716049384,
+ "robot:random:0.02:hazard_share_sd": 0.018023317214658635,
  "robot:random:0.02:hazard_event_recall": 0.029430582213691617,
  "robot:random:0.02:hazard_event_recall_sd": 0.007991040305052332,
  "robot:random:0.02:label_entropy_norm": 0.5999952148343096,
@@ -1288,8 +1848,8 @@
  "robot:random:0.02:progress": 0.5007104638156045,
  "robot:random:0.02:progress_sd": 0.07919779820209223,
  "robot:random:0.02:n_train_frames": 5400,
- "robot:uncertainty:0.02:success": 0.11574074074074074,
- "robot:uncertainty:0.02:success_sd": 0.02121562821738815,
+ "robot:uncertainty:0.02:success": 0.14351851851851852,
+ "robot:uncertainty:0.02:success_sd": 0.021215628217388142,
  "robot:uncertainty:0.02:hazard_success": 0.10185185185185186,
  "robot:uncertainty:0.02:hazard_success_sd": 0.03207501495497922,
  "robot:uncertainty:0.02:collision": 0.33796296296296297,
@@ -1308,6 +1868,8 @@
  "robot:uncertainty:0.02:mae_hazard_sd": 0.013333130794163157,
  "robot:uncertainty:0.02:hazard_frame_recall": 0.06080313822648911,
  "robot:uncertainty:0.02:hazard_frame_recall_sd": 0.0,
+ "robot:uncertainty:0.02:hazard_share": 0.10907407407407406,
+ "robot:uncertainty:0.02:hazard_share_sd": 1.6996749443881478e-17,
  "robot:uncertainty:0.02:hazard_event_recall": 0.07869481765834933,
  "robot:uncertainty:0.02:hazard_event_recall_sd": 0.0,
  "robot:uncertainty:0.02:label_entropy_norm": 0.7485065742694751,
@@ -1315,8 +1877,8 @@
  "robot:uncertainty:0.02:progress": 0.3002667124028566,
  "robot:uncertainty:0.02:progress_sd": 0.04005154280245189,
  "robot:uncertainty:0.02:n_train_frames": 5400,
- "robot:uniform:0.02:success": 0.27777777777777773,
- "robot:uniform:0.02:success_sd": 0.0773300605948614,
+ "robot:uniform:0.02:success": 0.3055555555555556,
+ "robot:uniform:0.02:success_sd": 0.05007710104811095,
  "robot:uniform:0.02:hazard_success": 0.25,
  "robot:uniform:0.02:hazard_success_sd": 0.02777777777777779,
  "robot:uniform:0.02:collision": 0.35185185185185186,
@@ -1335,6 +1897,8 @@
  "robot:uniform:0.02:mae_hazard_sd": 0.0332974071447398,
  "robot:uniform:0.02:hazard_frame_recall": 0.019304222153401468,
  "robot:uniform:0.02:hazard_frame_recall_sd": 0.002405529100388365,
+ "robot:uniform:0.02:hazard_share": 0.03462962962962963,
+ "robot:uniform:0.02:hazard_share_sd": 0.004315251925085571,
  "robot:uniform:0.02:hazard_event_recall": 0.030070377479206656,
  "robot:uniform:0.02:hazard_event_recall_sd": 0.0011081579063140596,
  "robot:uniform:0.02:label_entropy_norm": 0.6004509610475869,
@@ -1420,6 +1984,26 @@
  "driving:full:scen:lead_brake": 0.8253968253968255,
  "driving:full:scen:stop_and_go": 0.9365079365079364,
  "driving:full:scen:vru_crossing": 0.5555555555555555,
+ "driving:random:weighted_success": 0.6187566137566136,
+ "driving:uniform:weighted_success": 0.6882142857142857,
+ "driving:action_trigger:weighted_success": 0.02444444444444444,
+ "driving:rule_ittc:weighted_success": 0.40070105820105817,
+ "driving:uncertainty:weighted_success": 0.2451587301587301,
+ "driving:coreset:weighted_success": 0.33433862433862427,
+ "driving:event:weighted_success": 0.04523809523809524,
+ "driving:ours:weighted_success": 0.7372354497354496,
+ "driving:offline_loss:weighted_success": 0.016507936507936506,
+ "driving:oracle:weighted_success": 0.069510582010582,
+ "driving:full:weighted_success": 0.8811111111111111,
+ "pool_scenario_weights": {
+  "cut_in": 0.1625,
+  "dense_traffic": 0.09833333333333333,
+  "follow": 0.13833333333333334,
+  "free_drive": 0.135,
+  "lead_brake": 0.23166666666666666,
+  "stop_and_go": 0.08083333333333333,
+  "vru_crossing": 0.15333333333333332
+ },
  "abl:random:success": 0.6439909297052154,
  "abl:random:success_sd": 0.12345267654255053,
  "abl:random:collision": 0.1927437641723356,
@@ -1541,8 +2125,8 @@
  },
  "robot_retune_best_val": 0.2777777777777778,
  "robot_retune_random_val": 0.3055555555555556,
- "robot:ours_retuned:0.02:success": 0.26851851851851855,
- "robot:ours_retuned:0.02:success_sd": 0.028912027770362968,
+ "robot:ours_retuned:0.02:success": 0.3425925925925926,
+ "robot:ours_retuned:0.02:success_sd": 0.0446465313008933,
  "pilot:action_trigger:0.01:6000:success": 0.047619047619047616,
  "pilot:action_trigger:0.01:6000:success_sd": 0.0,
  "pilot:action_trigger:0.01:6000:n": 1,
@@ -1901,6 +2485,14 @@
   "robot_human_crossing": 129,
   "robot_human_headon": 72
  },
+ "lead_n_events": 1381,
+ "lead_n_both": 1228,
+ "lead_median_s": 0.0,
+ "lead_q25_s": -0.5999999046325684,
+ "lead_q75_s": 0.46666717529296875,
+ "lead_frac_score_first": 0.43973941368078173,
+ "lead_n_score_only": 30,
+ "lead_n_decel_only": 107,
  "scorer_val_macro_f1": 0.6822067604234373,
  "scorer_val_hazard_auroc": 0.9471929416017815,
  "scorer_params": 57512,
@@ -1918,8 +2510,8 @@
  "cost_scorer_onnx_ms": 0.08533400023225113,
  "cost_yolo640_ms": 41.77528900027028,
  "cost_yolo320_ms": 18.042533999960142,
- "cost_coreset_s": 0.7865831349990913,
- "cost_ours_select_s": 0.041929535000235774,
+ "cost_coreset_s": 1.6319351490019471,
+ "cost_ours_select_s": 0.083357078001427,
  "cost_offline_train_min": 10.182435044454547,
  "cpu_model": "Intel(R) Xeon(R) Processor @ 2.80GHz",
  "cpu_count": 4,
