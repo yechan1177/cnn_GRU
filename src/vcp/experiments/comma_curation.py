@@ -159,6 +159,24 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
     method = job["method"]
     if method == "full":
         mask = pool_clip >= 0
+    elif method in ("random_shared", "care", "mix_trigger"):
+        # v3 공유 저장소 선별(docs/33 M1). 풀 밖 프레임은 프레임마다 다른 그룹이라 클립이 생기지 않는다.
+        from ..vla.curation import select_shared
+
+        rng = np.random.default_rng(1000 + job["seed"])
+        group = np.where(pool_seg >= 0, pool_seg, -1 - np.arange(n))
+        score = {"random_shared": None, "care": F["event_score"], "mix_trigger": (-d["accel"]).astype(np.float32)}[method]
+        mask = select_shared(
+            score,
+            job["budget"] * F["pool_mask"].sum() / n,
+            group,
+            CLIP_LEN,
+            rng,
+            reservoir=float(job.get("reservoir", cfg.reservoir)),
+            entropy=F["entropy"] if method == "care" else None,
+            lam=float(job.get("lam", cfg.lam)) if method == "care" else 0.0,
+        )
+        mask &= pool_clip >= 0
     else:
         rng = np.random.default_rng(1000 + job["seed"])
         group = np.where(pool_seg >= 0, pool_seg, -1 - np.arange(n))
@@ -177,8 +195,17 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
         mask &= pool_clip >= 0
     train_idx = np.where(mask)[0]
     tokens = np.tile(encode_instruction(INSTRUCTION), (n, 1))
-    data = PolicyData(images=ArrayImageSource(d["frames"]), group=pool_clip, ego_v=d["speed"], action=d["accel"], tokens=tokens, domain="driving")
-    pcfg = PolicyConfig(chunk=CHUNK, steps=job["steps"], batch=cfg.batch, seed=job["seed"], threads=1)
+    use_feat = bool(job.get("use_features", False))  # v3: 검출 특징 토큰(YOLO 검출 기반 v1+v2) 입력
+    data = PolicyData(
+        images=ArrayImageSource(d["frames"]),
+        group=pool_clip,
+        ego_v=d["speed"],
+        action=d["accel"],
+        tokens=tokens,
+        domain="driving",
+        **({"features": d["X_v1v2"].astype(np.float32)} if use_feat else {}),
+    )
+    pcfg = PolicyConfig(chunk=CHUNK, steps=job["steps"], batch=cfg.batch, seed=job["seed"], threads=1, **({"use_features": True} if use_feat else {}))
     model, log = train_policy(data, train_idx, pcfg)
     # 평가: 테스트 블록(연속 구간)을 그룹으로
     test_seg = _segments(F["test_mask"])
