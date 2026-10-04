@@ -450,7 +450,7 @@ def main() -> None:
     elif args.stage == "comma":
         from .comma_v3 import run_comma_v3
 
-        run_comma_v3(cfg)
+        run_comma_v3(cfg, **({"seeds": (0,), "budgets": (0.10,), "steps": cfg.steps} if args.quick else {}))
 
 
 if __name__ == "__main__":

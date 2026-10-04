@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -65,8 +66,12 @@ def _pair(a: tuple[np.ndarray, list[int]], b: tuple[np.ndarray, list[int]]) -> t
     return a[0][[a[1].index(s) for s in common]], b[0][[b[1].index(s) for s in common]]
 
 
-def build_v3_report(root: Path) -> dict[str, Any]:
-    cfg = V3Config(root=root)
+def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -> dict[str, Any]:
+    cfg = V3Config(root=root, quick=quick)
+    if quick:
+        cfg = replace(cfg, pool_episodes=24, testpool_episodes=6, val_per_cell=1, test_per_cell=1, cf_per_cell=1, steps=60, batch=32)
+    if steps is not None:  # 스모크(--quick) 결과 집계용
+        cfg.steps = int(steps)
     runs = _load_runs(root)
     G = _group(runs)
     steps = cfg.steps
@@ -249,8 +254,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="experiments/exp_120_vla_v3")
+    ap.add_argument("--steps", type=int, default=None, help="집계할 학습 단계 수(기본: V3Config.steps)")
+    ap.add_argument("--quick", action="store_true", help="스모크 설정(크기·단계 수)으로 집계")
     a = ap.parse_args()
-    build_v3_report(Path(a.root))
+    build_v3_report(Path(a.root), a.steps, a.quick)
 
 
 if __name__ == "__main__":
