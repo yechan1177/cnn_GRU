@@ -142,3 +142,32 @@ def predict_open_loop(model, data: PolicyData, idx: np.ndarray) -> np.ndarray   
 - 구현 확장(시그니처 변경 없음, 모두 기본값): `PolicyConfig`에 `huber_beta`, `front_weight`, `warmup_steps`, `grad_clip`,
   `n_curve_bins`, `device` 필드, `PoolImageSource(..., size=None, max_cache=100_000)`와 `from_pool(arrays, domain)`,
   `PolicyData.observation(idx)`(PolicyFn 입력 형식 dict), `predict_open_loop(..., batch_size=512)`. 세부는 `docs/31_VLA_lite_정책.md`.
+
+## v3 추가 계약(2026-10-04, docs/33)
+
+### 관측에 검출 특징 토큰 추가(A10·A11 공통)
+- `PolicyFn` 입력 dict에 `"features"`: float32 [B, 2, 32]를 추가한다.
+  - 프레임 t와 t−HISTORY_OFFSET의 v1+v2 특징을 이어 붙인 것이다(`X_v1v2`와 같은 순서: v1 16 + v2 16).
+  - 에피소드 초반 경계 규칙은 영상과 같다(t−2가 없으면 프레임 0을 쓴다).
+- 특징은 노이즈 검출(FrameDetections)에서 `build_feature_extractor("v1"/"v2", conf_threshold=0.45, max_det=30)`로 인과적으로 계산한다. pool.py와 같은 방식이다.
+- 정책이 특징을 쓰지 않으면(`use_features=False`) 이 키를 무시한다.
+
+### A10(시뮬레이터)
+- `SimEnv(..., collision_pushback: bool = True)`: False면 충돌 시 자차를 뒤로 밀지 않는다(속도만 장애물 속도 이하로 제한).
+- 스타일 지정 시 초기 속도는 `v0_scenario * U(0.85, 1.0)`이다(목표 속도와 분리). 난수 소비 순서는 그대로다.
+  - 하위 호환 플래그: `SimEnv(..., decouple_initial_speed: bool = True)`. 기존 동작은 False.
+- `PoolConfig`에 `collision_pushback: bool = True`, `decouple_initial_speed: bool = False`를 추가한다. v3는 False/True로 생성한다.
+- `make_test_specs(domain, n_per_cell, seed_base, counterfactual: bool = False)`
+  - True면 시드마다 세 스타일 사양을 모두 만든다(시나리오 × 시드 × 3스타일).
+- `run_closed_loop(..., collision_pushback: bool = True, decouple_initial_speed: bool = False)`
+  - 위 플래그를 환경에 전달하고, obs에 `"features"`를 넣는다.
+
+### A11(정책·선별)
+- `PolicyConfig.use_features: bool = False`, `feature_dim: int = 32`.
+  - 특징 [B,2,32]를 평탄화해 MLP(64→64)로 보낸 뒤 헤드 입력에 결합한다.
+- `PolicyData.features: np.ndarray | None`([N,32])
+  - `observation(idx)`가 t, t−2 규칙으로 `"features"` [B,2,32]를 만든다.
+- `curation.select_shared(method_score: np.ndarray | None, budget_ratio, group, clip_len, rng, reservoir: float, entropy=None, lam=0.0) -> mask`
+  - 저장소 클립 수 R = round(ρ·K)를 먼저 `rng`로 뽑는다. 시드가 같으면 방법과 무관하게 같은 클립이 뽑힌다.
+  - 나머지 K−R개는 남은 클립 가운데 클립 점수(max(score) + λ·mean(entropy)) 상위로 채운다.
+  - `method_score=None`이면 무작위로 채운다(무작위 기준선).
