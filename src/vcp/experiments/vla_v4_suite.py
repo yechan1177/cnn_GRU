@@ -42,11 +42,15 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "p5": {"proprio_history": 8, "proprio_stride": 2},  # 자차 운동 이력(v3 실영상 진단 후 추가, docs/36 2.0b)
     # 지시문 수치 목표 인코딩(주행 개발 세트 반사실 진단 후 추가, docs/36 2.0c). "전부"에 더한 조합으로만 평가한다
     "all_p6": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "hazard_weight": 2.0, "goal_encoding": True},
+    # 목표 속도 잔차 헤드(P6 반사실 결과 후 추가, docs/36 2.0d). 이득은 도메인별(variant_params에서 채움)
+    "all_p7": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "hazard_weight": 2.0, "goal_encoding": True, "goal_residual_gain": None},
     # S1(점수 몫 에피소드 상한)은 개발 실험 전에 기각했다: v3 CARE 2% 점수 몫 36클립이 이미 서로 다른 36개 에피소드에서
     # 나와 c=1이 선택을 바꾸지 않는다(A15 측정, docs/30 7절). 트리거 혼합만 바뀌어 비교 기준선만 달라진다.
     "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "hazard_weight": 2.0},
 }
-POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride", "goal_encoding")
+POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride", "goal_encoding", "goal_residual_gain")
+# P7 이득(정규화 단위) = 물리 이득 0.5 s⁻¹ × 속도 스케일 / 가속도 스케일(주행 30/4, AMR 3/1)
+GOAL_RESIDUAL_GAIN = {"driving": 0.5 * 30.0 / 4.0, "robot": 0.5 * 3.0 / 1.0}
 
 
 @dataclass(slots=True)
@@ -166,7 +170,10 @@ def variant_params(name: str, cfg: V4Config) -> dict[str, Any]:
         if not p.exists():
             raise FileNotFoundError(f"v4 채택 조합({p})이 없습니다. stage_dev를 먼저 실행하세요.")
         return dict(json.loads(p.read_text(encoding="utf-8"))["params"])
-    return dict(VARIANTS[name])
+    params = dict(VARIANTS[name])
+    if params.get("goal_residual_gain", 0.0) is None:
+        params["goal_residual_gain"] = GOAL_RESIDUAL_GAIN[cfg.domain]
+    return params
 
 
 def policy_data(cfg: V4Config, P: dict[str, Any], params: dict[str, Any]) -> Any:
@@ -319,11 +326,11 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
     expert_reference(cfg, "dev")
     if not robot:
         expert_reference(cfg, "devcf")
-    variants = ("v3", "p2", "p3", "p4", "p5", "all", "all_p6") if robot else ("v3", "p2", "p3", "t1", "p4", "p5", "all", "all_p6")
+    variants = ("v3", "p2", "p3", "p4", "p5", "all", "all_p6", "all_p7") if robot else ("v3", "p2", "p3", "t1", "p4", "p5", "all", "all_p6", "all_p7")
     jobs = [make_job(cfg, v, "care", 0.02, s, "dev") for v in variants for s in DEV_SEEDS]
     jobs += [make_job(cfg, v, "full", 1.0, 0, "dev") for v in ("v3", "all")]
     if not robot:
-        jobs += [make_job(cfg, v, "care", 0.02, s, "devcf", use_language=lang) for v in ("v3", "t1", "all", "all_p6") for s in DEV_SEEDS[:2] for lang in (True, False)]
+        jobs += [make_job(cfg, v, "care", 0.02, s, "devcf", use_language=lang) for v in ("v3", "t1", "all", "all_p6", "all_p7") for s in DEV_SEEDS[:2] for lang in (True, False)]
     res = run_jobs(cfg, jobs)
     succ: dict[str, list[float]] = {}
     full: dict[str, float] = {}
@@ -353,8 +360,12 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
     if best == "all" and "all_p6" in mean and mean["all_p6"] >= mean["all"]:
         if robot or float(np.nanmean(se[("all_p6", True)])) <= float(np.nanmean(se[("all", True)])):
             best = "all_p6"
-    params = dict(VARIANTS[best])  # "전부"(·"전부+P6")는 T1을 포함한 상태로 측정했으므로 그대로 쓴다
-    if best not in ("all", "all_p6") and t1:
+    # P7: "전부+P6"이 뽑혔고 "전부+P7"의 개발 성공률이 그 이상이며 (주행) 반사실 언어 있음 속도 오차가 그 이하이면 바꾼다
+    if best == "all_p6" and "all_p7" in mean and mean["all_p7"] >= mean["all_p6"]:
+        if robot or float(np.nanmean(se[("all_p7", True)])) <= float(np.nanmean(se[("all_p6", True)])):
+            best = "all_p7"
+    params = variant_params(best, cfg)  # "전부" 계열은 T1을 포함한 상태로 측정했으므로 그대로 쓴다
+    if best not in ("all", "all_p6", "all_p7") and t1:
         params.update(VARIANTS["t1"])
     adopt = {"best": best, "t1": t1}
     choice = {

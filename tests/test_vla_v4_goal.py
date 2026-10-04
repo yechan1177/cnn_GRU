@@ -36,3 +36,21 @@ def test_goal_disabled_without_language_and_by_default() -> None:
     m2 = VLALitePolicy.from_config(PolicyConfig(goal_encoding=True), vocab_size=len(VOCAB))
     out = m2(torch.rand(2, 6, 64, 64), torch.from_numpy(np.stack([encode_instruction("drive at 60 km/h")] * 2)), torch.zeros(2, 1))
     assert out.shape == (2, m2.chunk)
+
+
+def test_goal_residual_base_action() -> None:
+    """P7: 기준 행동 = clip(gain·(g − v), ±clip) × 있음, 빈 지시는 0, gain=0이면 출력 불변."""
+
+    m = VLALitePolicy(vocab_size=len(VOCAB), goal_encoding=True, goal_residual_gain=2.0, goal_residual_clip=0.5)
+    tok = torch.from_numpy(np.stack([encode_instruction("drive at 60 km/h"), np.zeros(24, np.int64)]))
+    prop = torch.tensor([[0.5], [0.1]])
+    base = m.goal_base_action(tok, prop)
+    assert torch.allclose(base[0], torch.tensor([max(-0.5, min(0.5, 2.0 * (60 / 108 - 0.5)))]), atol=1e-6)
+    assert base[1].item() == 0.0
+    m0 = VLALitePolicy(vocab_size=len(VOCAB), goal_encoding=True)
+    torch.manual_seed(0)
+    img = torch.rand(2, 6, 64, 64)
+    m.load_state_dict(m0.state_dict())
+    diff = m(img, tok, prop) - m0(img, tok, prop)
+    assert torch.allclose(diff, base.expand_as(diff), atol=1e-6)
+    assert VLALitePolicy(vocab_size=len(VOCAB), goal_residual_gain=2.0).goal_residual_gain == 0.0  # P6 없으면 꺼짐

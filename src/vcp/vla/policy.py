@@ -153,6 +153,8 @@ class PolicyConfig:
     proprio_history: int = 1         # P5: 자차 속도 이력 프레임 수 Hp(1이면 현재 속도만, v3와 같음)
     proprio_stride: int = 2          # P5: 속도 이력 간격(프레임)
     goal_encoding: bool = False      # P6: 지시문의 목표 속도 숫자를 결정적으로 읽어 [g, 있음, g − v_t]를 입력(언어 사용 시만)
+    goal_residual_gain: float = 0.0  # P7: 잔차 행동 기준 a0 = clip(gain·(g − v_t), ±goal_residual_clip)(정규화 단위). 0이면 끔
+    goal_residual_clip: float = 0.5  # P7: 기준 행동 상한(정규화 가속도 단위)
 
     def __post_init__(self) -> None:
         """v4 확장 필드 검사(잘못된 값은 학습 전에 바로 알린다)."""
@@ -267,6 +269,8 @@ class VLALitePolicy(nn.Module):
         aux_classes: int = 0,
         proprio_stride: int = 2,
         goal_encoding: bool = False,
+        goal_residual_gain: float = 0.0,
+        goal_residual_clip: float = 0.5,
     ) -> None:
         super().__init__()
         if feature_encoder not in FEATURE_ENCODERS:
@@ -303,6 +307,9 @@ class VLALitePolicy(nn.Module):
         # P6 수치 목표 인코딩: 언어를 쓰는 모델에서만 켠다(언어 절제 모델은 목표도 받지 않는다)
         self.goal_encoding = bool(goal_encoding) and self.use_language
         self.goal_hidden = 16 if self.goal_encoding else 0
+        # P7 목표 속도 잔차 헤드: 목표 표가 필요하므로 P6(goal_encoding)이 켜진 모델에서만 쓴다. 학습 파라미터는 없다.
+        self.goal_residual_gain = float(goal_residual_gain) if self.goal_encoding else 0.0
+        self.goal_residual_clip = float(goal_residual_clip)
 
         chans = (in_channels,) + tuple(widths)
         self.blocks = nn.ModuleList(
@@ -375,6 +382,8 @@ class VLALitePolicy(nn.Module):
             proprio_dim=cfg.proprio_history,
             proprio_stride=cfg.proprio_stride,
             goal_encoding=cfg.goal_encoding,
+            goal_residual_gain=cfg.goal_residual_gain,
+            goal_residual_clip=cfg.goal_residual_clip,
         )
 
     def encode_features(self, features: torch.Tensor | None) -> torch.Tensor:
@@ -444,6 +453,13 @@ class VLALitePolicy(nn.Module):
             parts.append(self.goal_mlp(self.encode_goal(tokens, proprio[:, :1])))
         return torch.cat(parts, dim=-1)
 
+    def goal_base_action(self, tokens: torch.Tensor, proprio: torch.Tensor) -> torch.Tensor:
+        """P7 기준 행동 [B,1] = clip(gain·(g − v_t), ±clip) × 있음. 지시문에 목표 숫자가 없으면 0."""
+
+        g, has, _ = self.encode_goal(tokens, proprio[:, :1]).unbind(1)
+        base = (self.goal_residual_gain * (g - proprio[:, 0])).clamp(-self.goal_residual_clip, self.goal_residual_clip) * has
+        return base[:, None]
+
     def encode_goal(self, tokens: torch.Tensor, v_now: torch.Tensor) -> torch.Tensor:
         """P6: 토큰 [B,L] → [g, 있음(0/1), g − v_t] [B,3]. g는 지시문 숫자 토큰의 정규화 목표 속도(없으면 0).
 
@@ -492,6 +508,8 @@ class VLALitePolicy(nn.Module):
             raise ValueError("보조 헤드가 없는 모델입니다(aux_classes=0, PolicyConfig.aux_weight=0).")
         fused = self.fuse(image, tokens, proprio, features)
         action = self.head(fused)
+        if self.goal_residual_gain > 0:  # P7: 정책 출력 = 해석적 목표 속도 추종 기준 + 학습 잔차
+            action = action + self.goal_base_action(tokens, proprio)
         if return_aux:
             return action, self.aux_head(fused)
         return action
