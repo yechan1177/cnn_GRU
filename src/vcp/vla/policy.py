@@ -150,6 +150,8 @@ class PolicyConfig:
     aux_weight: float = 0.0          # P3: 위험 맥락 보조 헤드 손실 가중치 α(0이면 보조 헤드 없음)
     aux_classes: int = 6             # P3: 맥락 클래스 수(PolicyData.aux_targets [N, aux_classes])
     lang_dropout: float = 0.0        # T1: 학습 중 표본별로 지시문을 빈 지시(PAD만)로 바꿀 확률 p
+    proprio_history: int = 1         # P5: 자차 속도 이력 프레임 수 Hp(1이면 현재 속도만, v3와 같음)
+    proprio_stride: int = 2          # P5: 속도 이력 간격(프레임)
 
     def __post_init__(self) -> None:
         """v4 확장 필드 검사(잘못된 값은 학습 전에 바로 알린다)."""
@@ -166,6 +168,8 @@ class PolicyConfig:
             raise ValueError(f"aux_weight > 0이면 aux_classes는 2 이상이어야 합니다: {self.aux_classes}")
         if not (0.0 <= self.lang_dropout <= 1.0):
             raise ValueError(f"lang_dropout은 [0, 1] 범위여야 합니다: {self.lang_dropout}")
+        if int(self.proprio_history) < 1 or int(self.proprio_stride) < 1:
+            raise ValueError(f"proprio_history({self.proprio_history}), proprio_stride({self.proprio_stride})는 1 이상이어야 합니다.")
 
 
 FEATURE_ENCODERS: tuple[str, ...] = ("mlp", "gru")
@@ -260,6 +264,7 @@ class VLALitePolicy(nn.Module):
         feature_stride: int = 2,
         feature_encoder: str = "mlp",
         aux_classes: int = 0,
+        proprio_stride: int = 2,
     ) -> None:
         super().__init__()
         if feature_encoder not in FEATURE_ENCODERS:
@@ -290,6 +295,9 @@ class VLALitePolicy(nn.Module):
         self.feature_stride = int(feature_stride)
         self.feature_encoder = str(feature_encoder)
         self.aux_classes = int(aux_classes)
+        # P5 자차 운동 이력: proprio_dim = Hp(이력 프레임 수). 관측 생성 규칙(stride)도 함께 보관한다.
+        self.proprio_history = int(proprio_dim)
+        self.proprio_stride = int(proprio_stride)
 
         chans = (in_channels,) + tuple(widths)
         self.blocks = nn.ModuleList(
@@ -351,6 +359,8 @@ class VLALitePolicy(nn.Module):
             feature_stride=cfg.feature_stride,
             feature_encoder=cfg.feature_encoder,
             aux_classes=cfg.aux_classes if cfg.aux_weight > 0 else 0,
+            proprio_dim=cfg.proprio_history,
+            proprio_stride=cfg.proprio_stride,
         )
 
     def encode_features(self, features: torch.Tensor | None) -> torch.Tensor:
@@ -376,6 +386,22 @@ class VLALitePolicy(nn.Module):
         _, h_n = self.feat_gru(x)             # h_n [1,B,hidden]
         return h_n[-1]
 
+    def prep_proprio(self, proprio: torch.Tensor) -> torch.Tensor:
+        """P5 전처리: [B,Hp] 정규화 속도 이력(k=0 현재) → [v_t, 10·(v_t − v_{t−s}), 10·(v_{t−s} − v_{t−2s}), …].
+
+        Hp=1이면 입력을 그대로 돌려준다(v3와 같음). 차분은 정규화 속도 단위가 작아 10배로 키운다.
+
+        Raises:
+            ValueError: 입력 형태가 [B, proprio_history]가 아닐 때.
+        """
+
+        if proprio.ndim != 2 or proprio.shape[1] != self.proprio_history:
+            raise ValueError(f"proprio 형태가 [B,{self.proprio_history}]가 아닙니다: {tuple(proprio.shape)}")
+        if self.proprio_history == 1:
+            return proprio
+        diff = (proprio[:, :-1] - proprio[:, 1:]) * 10.0
+        return torch.cat([proprio[:, :1], diff], dim=1)
+
     def fuse(
         self,
         image: torch.Tensor,
@@ -396,7 +422,7 @@ class VLALitePolicy(nn.Module):
         if x.shape[-2:] != (self.grid, self.grid):  # 64×64 입력에서는 이미 grid×grid라 풀링을 건너뛴다(CPU 역전파 비용 절감)
             x = self.pool(x)
         vis = F.relu(self.vis_fc(x.flatten(1)))
-        prop = self.proprio_mlp(proprio)
+        prop = self.proprio_mlp(self.prep_proprio(proprio))
         if self.use_features:
             feat = self.encode_features(features)
             return torch.cat([vis, lang, prop, feat], dim=-1)
@@ -674,7 +700,9 @@ class PolicyData:
 
         return self.action[self.chunk_index(idx, chunk)]
 
-    def observation(self, idx: np.ndarray, history: int = 2, stride: int = 2) -> dict[str, np.ndarray]:
+    def observation(
+        self, idx: np.ndarray, history: int = 2, stride: int = 2, proprio_history: int = 1, proprio_stride: int = 2
+    ) -> dict[str, np.ndarray]:
         """계약 PolicyFn 입력과 같은 형식의 배치 관측 dict.
 
         키: "image" uint8 [B,H,W,6](프레임 t, t−HISTORY_OFFSET; history·stride와 무관), "tokens" int64 [B,L],
@@ -687,7 +715,11 @@ class PolicyData:
         frames = self.images.get(np.concatenate([idx, prev]))
         b = len(idx)
         image = _stack_batch(frames[:b], frames[b:])
-        prop = np.asarray(_obs().proprio(self.ego_v[idx], self.domain), dtype=np.float32).reshape(b, 1)
+        if proprio_history == 1:
+            prop = np.asarray(_obs().proprio(self.ego_v[idx], self.domain), dtype=np.float32).reshape(b, 1)
+        else:  # P5: [B,Hp] 속도 이력(특징 이력과 같은 잘라 냄 규칙, feature_group이 있으면 그 기준)
+            pidx = self.feature_index(idx, proprio_history, proprio_stride)
+            prop = np.asarray(_obs().proprio(self.ego_v[pidx], self.domain), dtype=np.float32).reshape(b, proprio_history)
         out = {"image": image, "tokens": self.tokens[idx], "proprio": prop}
         if self.features is not None:
             out["features"] = self.features[self.feature_index(idx, history, stride)]
@@ -716,7 +748,8 @@ def _to_tensor_batch(obs: dict[str, np.ndarray], device: torch.device) -> tuple[
     # NHWC uint8을 permute하면 메모리상 channels_last NCHW가 된다(모델의 conv 배치와 같다).
     image = torch.from_numpy(np.ascontiguousarray(obs["image"])).to(device).permute(0, 3, 1, 2).float().mul_(1.0 / 255.0)
     tokens = torch.from_numpy(np.asarray(obs["tokens"], dtype=np.int64)).to(device)
-    prop = torch.from_numpy(np.asarray(obs["proprio"], dtype=np.float32).reshape(-1, 1)).to(device)
+    p = np.asarray(obs["proprio"], dtype=np.float32)
+    prop = torch.from_numpy(p.reshape(len(p), -1) if p.ndim >= 2 else p.reshape(-1, 1)).to(device)
     return image, tokens, prop
 
 
@@ -944,7 +977,10 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
         t0 = time.perf_counter()
         for step in range(cfg.steps):
             idx = train_idx[rng.integers(0, len(train_idx), size=cfg.batch)]
-            obs = data.observation(idx, history=cfg.feature_history, stride=cfg.feature_stride)
+            obs = data.observation(
+                idx, history=cfg.feature_history, stride=cfg.feature_stride,
+                proprio_history=cfg.proprio_history, proprio_stride=cfg.proprio_stride,
+            )
             if cfg.augment:
                 obs = augment_observation(obs, aug_rng)
                 if cfg.use_features:
@@ -1042,6 +1078,8 @@ def make_policy_fn(model: VLALitePolicy, domain: str) -> PolicyFn:
     fn.feature_history = int(model.feature_history)
     fn.feature_stride = int(model.feature_stride)
     fn.use_features = bool(model.use_features)
+    fn.proprio_history = int(model.proprio_history)  # P5: 폐루프가 "proprio" [B,Hp] 이력을 만든다
+    fn.proprio_stride = int(model.proprio_stride)
     return policy_fn
 
 
@@ -1060,7 +1098,10 @@ def predict_open_loop(model: VLALitePolicy, data: PolicyData, idx: np.ndarray, b
     model.eval()
     with torch.no_grad():
         for s in range(0, len(idx), batch_size):
-            obs = data.observation(idx[s : s + batch_size], history=model.feature_history, stride=model.feature_stride)
+            obs = data.observation(
+                idx[s : s + batch_size], history=model.feature_history, stride=model.feature_stride,
+                proprio_history=model.proprio_history, proprio_stride=model.proprio_stride,
+            )
             image, tokens, prop = _to_tensor_batch(obs, device)
             outs.append((model(image, tokens, prop, _features_tensor(obs, model, device)) * a_scale).cpu().numpy())
     if not outs:

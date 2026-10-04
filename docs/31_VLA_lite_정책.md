@@ -302,3 +302,15 @@ v3 → v4 → v4 → v3 순서로 교대 측정했다. 기록: `experiments/exp_
 - 지시문 드롭아웃: p=0이면 기본과 동일(난수 미소비), p=1이면 모든 표본이 빈 지시이고 토큰을 모두 PAD로 바꾼 데이터의 학습과
   비트 단위로 같음, 같은 시드 → 같은 결과, 다른 시드 → 다른 결과, use_language=False에서 효과 없음.
 - v4 기본 조합 전체: 학습·추론 동작과 결정성.
+
+## 12. v4 P5 자차 운동 이력(docs/36 2.0b)
+- 동기: v3 실영상에서 제동 시작 AUROC가 정책 0.528, CARE 점수기 0.518로 우연 수준이었다. 현재 자차 가속도(−a_t) 하나만으로는 0.802였다. 정책의 고유 감각 입력이 현재 속도 하나뿐이라 최근 속도 변화를 볼 수 없었다.
+- 구조
+  - `PolicyConfig.proprio_history`(Hp, 기본 1)와 `proprio_stride`(s, 기본 2)를 추가했다.
+  - 관측 "proprio"는 [B,Hp] 정규화 속도 이력이다. k=0이 현재 프레임이고, 특징 이력과 같은 잘라 냄 규칙을 쓴다. `feature_group`이 있으면 그 기준이며, 속도도 프레임당 1 float라 프리롤로 저장한다고 둔다.
+  - 모델은 `prep_proprio`로 입력을 [v_t, 10·(v_t − v_{t−s}), …]로 바꾼 뒤 기존 proprio MLP(입력 차원 Hp)에 넣는다.
+  - 폐루프는 `make_policy_fn`이 붙인 `proprio_history`/`proprio_stride` 속성을 읽어 에피소드별 속도 이력을 만든다(에피소드 시작 전은 프레임 0 값). 결과 config에 두 값을 기록한다.
+  - Hp=1이면 v3·v4 기본과 비트 단위로 같다(`test_defaults_bit_identical_to_v3_reference` 포함 전체 142개 테스트 통과).
+- 위험: 자차 운동 이력은 모방학습에서 관성 추종(copycat) 문제를 일으킬 수 있다(Codevilla et al. 2019; Wen et al. 2020). 그래서 채택은 다른 후보와 같은 규칙으로 개발 세트 폐루프 성공률로 정한다.
+- 실영상 보고에는 정책 없이 −a_t만 쓰는 기준선 AUROC(`baseline_neg_accel_auroc`)를 함께 기록한다. K7을 넘더라도 그것이 영상 덕분인지 구분하기 위해서다.
+- 검증(`tests/test_vla_v4_proprio.py`, 5건): 관측 형태·잘라 냄·프리롤, 전처리, 설정 검사, 폐루프 이력 일치, 합성 문제(행동 = 속도 변화율)에서 Hp=8이 Hp=1보다 MAE가 확실히 낮음.

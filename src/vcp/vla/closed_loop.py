@@ -332,6 +332,10 @@ def run_closed_loop(
     # 검출 특징 버퍼(인덱스 k = 프레임 max(t − k·s, 0), 기본 2/2는 영상과 같은 t, t−2 규칙).
     # 전문가 참조는 관측을 쓰지 않으므로 계산하지 않는다
     feat_hist = FeatureHistory(b, history=feat_h, stride=feat_s) if policy_fn is not None else None
+    # P5 자차 운동 이력(v4): policy_fn.proprio_history > 1이면 "proprio" [B,Hp] = 프레임 max(t − k·s, 0)의 정규화 속도
+    prop_h = int(getattr(policy_fn, "proprio_history", 1) or 1) if policy_fn is not None else 1
+    prop_s = int(getattr(policy_fn, "proprio_stride", 2) or 2) if policy_fn is not None else 2
+    v_hist: list[np.ndarray] = []
     t_render = t_policy = t_features = 0.0
 
     for t in range(n_frames - 1):
@@ -353,6 +357,10 @@ def run_closed_loop(
                 "proprio": proprio(np.asarray([info.ego_v for info in infos], dtype=np.float32), domain),
                 "features": features,
             }
+            if prop_h > 1:
+                v_hist.append(obs["proprio"][:, 0])
+                ks = [max(t - k * prop_s, 0) for k in range(prop_h)]
+                obs["proprio"] = np.stack([v_hist[j] for j in ks], axis=1).astype(np.float32)
             tp = time.perf_counter()
             # render_s는 기존처럼 렌더링 + 관측 배치 구성 시간, features_s는 특징 갱신 시간
             t_features += dt_feat
@@ -384,6 +392,8 @@ def run_closed_loop(
             "decouple_initial_speed": bool(decouple_initial_speed),
             "feature_history": feat_h,
             "feature_stride": feat_s,
+            "proprio_history": prop_h,
+            "proprio_stride": prop_s,
         },
         "counterfactual": counterfactual,
         "episodes": episodes,

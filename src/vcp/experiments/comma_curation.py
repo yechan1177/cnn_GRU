@@ -209,7 +209,7 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
     if float(job.get("hazard_weight") or 0.0) > 0:
         # v4 P4 위험 가중 손실: 점수기 제동 확률로 1 + β·e_t
         extra_data["loss_weight"] = (1.0 + float(job["hazard_weight"]) * F["event_score"]).astype(np.float32)
-    if int(pparams.get("feature_history", 2)) > 2:
+    if int(pparams.get("feature_history", 2)) > 2 or int(pparams.get("proprio_history", 1)) > 1:
         # 특징 프리롤(docs/36 2.1): 특징 이력은 연속 구간(세그먼트) 시작에서 자른다. 영상·행동은 클립 안에서만 쓴다.
         extra_data["feature_group"] = np.where(pool_seg >= 0, pool_seg, -1 - np.arange(n))
     data = PolicyData(
@@ -250,6 +250,8 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
             "mae_first": float(err[:, 0].mean()),
             "mae_braking": float(err[brake_now].mean()) if brake_now.any() else float("nan"),
             "brake_onset_auroc": auroc(-pred[onset_mask].mean(1), future_brake[onset_mask]),
+            # 정책 없이 현재 자차 가속도만 쓰는 기준선(같은 시험 프레임·onset 정의, docs/36 2.0b)
+            "baseline_neg_accel_auroc": auroc(-d["accel"][test_idx][onset_mask], future_brake[onset_mask]),
             "n_test": int(len(test_idx)),
         },
         "seconds": time.perf_counter() - t0,

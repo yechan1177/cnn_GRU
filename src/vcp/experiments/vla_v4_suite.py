@@ -39,11 +39,12 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "p3": {"aux_weight": 0.2},
     "t1": {"lang_dropout": 0.15},
     "p4": {"hazard_weight": 2.0},
+    "p5": {"proprio_history": 8, "proprio_stride": 2},  # 자차 운동 이력(v3 실영상 진단 후 추가, docs/36 2.0b)
     # S1(점수 몫 에피소드 상한)은 개발 실험 전에 기각했다: v3 CARE 2% 점수 몫 36클립이 이미 서로 다른 36개 에피소드에서
     # 나와 c=1이 선택을 바꾸지 않는다(A15 측정, docs/30 7절). 트리거 혼합만 바뀌어 비교 기준선만 달라진다.
     "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "hazard_weight": 2.0},
 }
-POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout")
+POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride")
 
 
 @dataclass(slots=True)
@@ -316,7 +317,7 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
     expert_reference(cfg, "dev")
     if not robot:
         expert_reference(cfg, "devcf")
-    variants = ("v3", "p2", "p3", "p4", "all") if robot else ("v3", "p2", "p3", "t1", "p4", "all")
+    variants = ("v3", "p2", "p3", "p4", "p5", "all") if robot else ("v3", "p2", "p3", "t1", "p4", "p5", "all")
     jobs = [make_job(cfg, v, "care", 0.02, s, "dev") for v in variants for s in DEV_SEEDS]
     jobs += [make_job(cfg, v, "full", 1.0, 0, "dev") for v in ("v3", "all")]
     if not robot:
@@ -337,8 +338,8 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
     mean = {v: float(np.mean(x)) for v, x in succ.items()}
     # 측정한 후보(v3, 단일 개선, 전부) 중 개발 세트 성공률 최대를 고른다(동률이면 구성 요소가 적은 쪽, 그다음 v3 우선).
     # T1은 주행 반사실 개발 세트로 따로 정해 단일 개선 후보에 더한다("전부" 후보는 T1을 포함해 측정했다).
-    cands = [v for v in ("v3", "p2", "p3", "p4", "all") if v in mean]
-    order = {"v3": 0, "p2": 1, "p3": 1, "p4": 1, "all": 3}
+    cands = [v for v in ("v3", "p2", "p3", "p4", "p5", "all") if v in mean]
+    order = {"v3": 0, "p2": 1, "p3": 1, "p4": 1, "p5": 1, "all": 3}
     best = max(cands, key=lambda v: (round(mean[v], 6), -order[v]))
     if robot:
         dc = cfg.cache / "v4_choice_driving.json"
