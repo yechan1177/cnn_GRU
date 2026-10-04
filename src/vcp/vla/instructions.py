@@ -196,6 +196,30 @@ def _build_vocab() -> dict[str, int]:
 VOCAB: dict[str, int] = _build_vocab()
 
 
+def goal_value_table(speed_scales: dict[str, float] | None = None) -> np.ndarray:
+    """어휘 id → 정규화 목표 속도 값 float32 [len(VOCAB)](숫자 토큰이 아니면 NaN). v4 P6 수치 목표 인코딩.
+
+    - 주행 지시문의 정수 토큰("60")은 km/h → m/s(÷3.6) → ÷주행 속도 스케일(기본 30 m/s)
+    - 로봇 지시문의 소수 토큰("0.8")은 m/s → ÷로봇 속도 스케일(기본 3 m/s)
+    두 도메인의 숫자 표기가 겹치지 않으므로(정수 10~150 / 소수 0.1~3.0) 도메인 정보 없이 값이 정해진다.
+    정규화는 `obs.proprio`의 속도 정규화와 같아 현재 속도와 바로 비교할 수 있다.
+    """
+
+    sc = {"driving": 30.0, "robot": 3.0} if speed_scales is None else speed_scales
+    table = np.full(len(VOCAB), np.nan, dtype=np.float32)
+    for word, idx in VOCAB.items():
+        if word.isdigit():
+            table[idx] = float(word) / 3.6 / sc["driving"]
+        elif _is_decimal(word):
+            table[idx] = float(word) / sc["robot"]
+    return table
+
+
+def _is_decimal(word: str) -> bool:
+    head, dot, tail = word.partition(".")
+    return bool(dot) and head.isdigit() and tail.isdigit()
+
+
 def encode_instruction(text: str, max_len: int = 24) -> np.ndarray:
     """지시문을 int64 [max_len] 토큰 id로 바꾼다(뒤를 PAD로 채우고 넘치면 자른다)."""
 

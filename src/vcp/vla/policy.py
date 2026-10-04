@@ -152,6 +152,7 @@ class PolicyConfig:
     lang_dropout: float = 0.0        # T1: 학습 중 표본별로 지시문을 빈 지시(PAD만)로 바꿀 확률 p
     proprio_history: int = 1         # P5: 자차 속도 이력 프레임 수 Hp(1이면 현재 속도만, v3와 같음)
     proprio_stride: int = 2          # P5: 속도 이력 간격(프레임)
+    goal_encoding: bool = False      # P6: 지시문의 목표 속도 숫자를 결정적으로 읽어 [g, 있음, g − v_t]를 입력(언어 사용 시만)
 
     def __post_init__(self) -> None:
         """v4 확장 필드 검사(잘못된 값은 학습 전에 바로 알린다)."""
@@ -265,6 +266,7 @@ class VLALitePolicy(nn.Module):
         feature_encoder: str = "mlp",
         aux_classes: int = 0,
         proprio_stride: int = 2,
+        goal_encoding: bool = False,
     ) -> None:
         super().__init__()
         if feature_encoder not in FEATURE_ENCODERS:
@@ -298,6 +300,9 @@ class VLALitePolicy(nn.Module):
         # P5 자차 운동 이력: proprio_dim = Hp(이력 프레임 수). 관측 생성 규칙(stride)도 함께 보관한다.
         self.proprio_history = int(proprio_dim)
         self.proprio_stride = int(proprio_stride)
+        # P6 수치 목표 인코딩: 언어를 쓰는 모델에서만 켠다(언어 절제 모델은 목표도 받지 않는다)
+        self.goal_encoding = bool(goal_encoding) and self.use_language
+        self.goal_hidden = 16 if self.goal_encoding else 0
 
         chans = (in_channels,) + tuple(widths)
         self.blocks = nn.ModuleList(
@@ -318,7 +323,7 @@ class VLALitePolicy(nn.Module):
         self.proprio_mlp = nn.Sequential(
             nn.Linear(proprio_dim, proprio_hidden), nn.ReLU(), nn.Linear(proprio_hidden, proprio_hidden), nn.ReLU()
         )
-        self.fused_dim = vis_dim + lang_dim + proprio_hidden + self.feature_hidden
+        self.fused_dim = vis_dim + lang_dim + proprio_hidden + self.feature_hidden + self.goal_hidden
         self.head = nn.Sequential(
             nn.Linear(self.fused_dim, head_hidden),
             nn.ReLU(),
@@ -342,6 +347,14 @@ class VLALitePolicy(nn.Module):
                 self.feat_gru = nn.GRU(self.feature_hidden, self.feature_hidden, num_layers=1, batch_first=True)
         if self.aux_classes > 0:
             self.aux_head = nn.Linear(self.fused_dim, self.aux_classes)
+        if self.goal_encoding:  # P6(맨 마지막에 만든다): 목표 값 표는 버퍼(난수 소비 없음), MLP 3 → 16 → 16
+            from .instructions import goal_value_table
+
+            table = torch.from_numpy(goal_value_table())
+            if len(table) < self.vocab_size:
+                table = torch.cat([table, torch.full((self.vocab_size - len(table),), float("nan"))])
+            self.register_buffer("goal_table", table[: self.vocab_size].clone(), persistent=True)
+            self.goal_mlp = nn.Sequential(nn.Linear(3, self.goal_hidden), nn.ReLU(), nn.Linear(self.goal_hidden, self.goal_hidden), nn.ReLU())
         self.to(memory_format=torch.channels_last)
 
     @classmethod
@@ -361,6 +374,7 @@ class VLALitePolicy(nn.Module):
             aux_classes=cfg.aux_classes if cfg.aux_weight > 0 else 0,
             proprio_dim=cfg.proprio_history,
             proprio_stride=cfg.proprio_stride,
+            goal_encoding=cfg.goal_encoding,
         )
 
     def encode_features(self, features: torch.Tensor | None) -> torch.Tensor:
@@ -423,10 +437,26 @@ class VLALitePolicy(nn.Module):
             x = self.pool(x)
         vis = F.relu(self.vis_fc(x.flatten(1)))
         prop = self.proprio_mlp(self.prep_proprio(proprio))
+        parts = [vis, lang, prop]
         if self.use_features:
-            feat = self.encode_features(features)
-            return torch.cat([vis, lang, prop, feat], dim=-1)
-        return torch.cat([vis, lang, prop], dim=-1)
+            parts.append(self.encode_features(features))
+        if self.goal_encoding:
+            parts.append(self.goal_mlp(self.encode_goal(tokens, proprio[:, :1])))
+        return torch.cat(parts, dim=-1)
+
+    def encode_goal(self, tokens: torch.Tensor, v_now: torch.Tensor) -> torch.Tensor:
+        """P6: 토큰 [B,L] → [g, 있음(0/1), g − v_t] [B,3]. g는 지시문 숫자 토큰의 정규화 목표 속도(없으면 0).
+
+        숫자 토큰이 여러 개면 평균한다. 빈 지시(지시문 드롭아웃)나 숫자 없는 지시문은 (0, 0, 0)이다.
+        """
+
+        tok = torch.where(tokens >= self.vocab_size, torch.ones_like(tokens), tokens).clamp_min(0)
+        vals = self.goal_table[tok]
+        ok = torch.isfinite(vals)
+        cnt = ok.sum(1, keepdim=True).float()
+        has = (cnt > 0).float()
+        g = torch.where(ok, vals, torch.zeros_like(vals)).sum(1, keepdim=True) / cnt.clamp_min(1.0)
+        return torch.cat([g, has, (g - v_now) * has], dim=1)
 
     def encode_language(self, tokens: torch.Tensor) -> torch.Tensor:
         """토큰 [B,L] → 언어 특징 [B,lang_dim]. 어휘 밖 id는 UNK(1)로 바꾼다. 절제 모델은 0 벡터."""

@@ -72,7 +72,7 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
     kpi: dict[str, Any] = {}
 
     # ---------- 개발 세트(선택 근거) ----------
-    names = {"v3": "v3 기준", "p2": "+P2 시간 특징 인코더", "p3": "+P3 위험 보조 헤드", "t1": "+T1 지시문 드롭아웃", "p4": "+P4 위험 가중 손실", "all": "전부"}
+    names = {"v3": "v3 기준", "p2": "+P2 시간 특징 인코더", "p3": "+P3 위험 보조 헤드", "t1": "+T1 지시문 드롭아웃", "p4": "+P4 위험 가중 손실", "p5": "+P5 자차 운동 이력", "all": "전부(P2+P3+T1+P4)", "all_p6": "전부+P6 수치 목표"}
     kpi["dev_choice"] = {}
     rows = []
     for dom, dname in (("driving", "주행"), ("robot", "AMR")):
