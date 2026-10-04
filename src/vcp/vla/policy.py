@@ -9,8 +9,10 @@ from __future__ import annotations
 구성 요소
 - `VLALitePolicy`: 6채널(t, t−2) CNN + FiLM 언어 조건화 + proprio MLP → 정규화 가속도 청크 [B, chunk]
   (v3: `use_features=True`이면 검출 특징 토큰 [B,2,32] MLP 출력을 헤드 입력에 결합, docs/33 P1)
+  (v4, docs/36: 특징 이력 [B,H,D]와 GRU 시간 인코더(P2), 위험 맥락 보조 헤드(P3), 지시문 드롭아웃(T1).
+  모두 기본값에서는 v3와 비트 단위로 같다)
 - `ImageSource` / `PoolImageSource`(지연 렌더링 + LRU 상한) / `ArrayImageSource`(미리 만든 프레임)
-- `PolicyData`: 그룹(에피소드·블록) 경계를 지키는 관측(t−2 규칙)·행동 청크 조회
+- `PolicyData`: 그룹(에피소드·블록) 경계를 지키는 관측(t−2 규칙, 특징 이력 t−k·s 규칙)·행동 청크 조회
 - `train_policy`: 고정 경사 단계(steps) 학습. 데이터 양과 계산량을 분리한다.
 - `make_policy_fn`: 폐루프 평가용 배치 정책 함수(계약 `PolicyFn`)
 - `predict_open_loop`: 개루프 평가용 청크 예측(물리 단위)
@@ -141,6 +143,33 @@ class PolicyConfig:
     feature_dim: int = 32            # 프레임당 특징 차원(v1 16 + v2 16)
     feature_hidden: int = 64         # 특징 MLP 은닉·출력 차원
     feature_noise: float = 0.02      # 학습 증강: 특징에 더하는 가우시안 노이즈 σ(augment=True일 때만, 0이면 끔)
+    # --- v4(docs/36). 기본값이면 v3와 구조·초기 가중치·학습 결과가 비트 단위로 같다 ---
+    feature_history: int = 2         # P2: 특징 이력 프레임 수 H(인덱스 k = 프레임 t − k·stride, k=0이 현재)
+    feature_stride: int = 2          # P2: 특징 이력 간격 s(프레임)
+    feature_encoder: str = "mlp"     # P2: "mlp"(H프레임 평탄화 MLP, H=2이면 v3) | "gru"(Linear+ReLU → GRU 1층)
+    aux_weight: float = 0.0          # P3: 위험 맥락 보조 헤드 손실 가중치 α(0이면 보조 헤드 없음)
+    aux_classes: int = 6             # P3: 맥락 클래스 수(PolicyData.aux_targets [N, aux_classes])
+    lang_dropout: float = 0.0        # T1: 학습 중 표본별로 지시문을 빈 지시(PAD만)로 바꿀 확률 p
+
+    def __post_init__(self) -> None:
+        """v4 확장 필드 검사(잘못된 값은 학습 전에 바로 알린다)."""
+
+        if self.feature_encoder not in FEATURE_ENCODERS:
+            raise ValueError(f"feature_encoder는 {FEATURE_ENCODERS} 중 하나여야 합니다: {self.feature_encoder!r}")
+        if int(self.feature_history) < 1 or int(self.feature_stride) < 1:
+            raise ValueError(
+                f"feature_history({self.feature_history}), feature_stride({self.feature_stride})는 1 이상이어야 합니다."
+            )
+        if not (self.aux_weight >= 0.0 and math.isfinite(self.aux_weight)):
+            raise ValueError(f"aux_weight는 0 이상의 유한한 값이어야 합니다: {self.aux_weight}")
+        if self.aux_weight > 0 and int(self.aux_classes) < 2:
+            raise ValueError(f"aux_weight > 0이면 aux_classes는 2 이상이어야 합니다: {self.aux_classes}")
+        if not (0.0 <= self.lang_dropout <= 1.0):
+            raise ValueError(f"lang_dropout은 [0, 1] 범위여야 합니다: {self.lang_dropout}")
+
+
+FEATURE_ENCODERS: tuple[str, ...] = ("mlp", "gru")
+"""P2 시간 특징 인코더 종류. "mlp"는 v3 방식(H=2이면 v3와 같음), "gru"는 v4 시간 인코더."""
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +225,16 @@ class VLALitePolicy(nn.Module):
     - 특징은 대부분 [−1,1] 근처라 별도 정규화는 두지 않고 이상치만 자른다.
     - 특징 모듈은 다른 모든 모듈을 만든 **뒤에** 만든다. use_features=False에서는 만들지 않으므로
       기존 모델과 파라미터 수·초기화 난수 소비·순전파가 완전히 같다.
+
+    v4 블록(docs/36, 기본값이면 v3와 같은 모듈·같은 생성 순서)
+    - P2 시간 특징 인코더: 입력 [B, feature_history=H, D](k=0이 현재 프레임 t, k는 t−k·stride).
+      - `feature_encoder="mlp"`: [B,H·D] 평탄화 → MLP(H·D → hidden → hidden). H=2이면 v3 모듈과 같다.
+      - `feature_encoder="gru"`: NaN→0, clamp(−3,3) → 시간 순서(오래된 것 → 현재)로 뒤집음 → Linear(D→hidden)+ReLU
+        → GRU(hidden→hidden, 1층) → 마지막 은닉 [B,hidden]. 출력 차원이 MLP와 같아 헤드 입력 차원이 유지된다.
+    - P3 위험 맥락 보조 헤드(`aux_classes > 0`): 헤드 첫 층 입력(융합 표현)에서 Linear(→aux_classes) 로짓.
+      학습 손실에만 쓰고 `forward`의 기본 반환(행동 청크)에는 영향이 없다(`return_aux=True`일 때만 계산).
+    - 생성 순서: 기존 모듈 → 특징 인코더(mlp 또는 gru) → 보조 헤드. 새 모듈이 늘 마지막이라
+      기존 모듈의 초기화 난수 소비가 바뀌지 않는다.
     """
 
     def __init__(
@@ -217,8 +256,18 @@ class VLALitePolicy(nn.Module):
         use_features: bool = False,
         feature_dim: int = 32,
         feature_hidden: int = 64,
+        feature_history: int = 2,
+        feature_stride: int = 2,
+        feature_encoder: str = "mlp",
+        aux_classes: int = 0,
     ) -> None:
         super().__init__()
+        if feature_encoder not in FEATURE_ENCODERS:
+            raise ValueError(f"feature_encoder는 {FEATURE_ENCODERS} 중 하나여야 합니다: {feature_encoder!r}")
+        if feature_history < 1 or feature_stride < 1:
+            raise ValueError(f"feature_history({feature_history}), feature_stride({feature_stride})는 1 이상이어야 합니다.")
+        if aux_classes < 0:
+            raise ValueError(f"aux_classes는 0 이상이어야 합니다(0 = 보조 헤드 없음): {aux_classes}")
         if vocab_size < 2:
             raise ValueError("vocab_size는 2 이상이어야 합니다(PAD=0, UNK=1).")
         if not (len(widths) == len(kernels) == len(strides)):
@@ -235,6 +284,12 @@ class VLALitePolicy(nn.Module):
         self.use_features = bool(use_features)
         self.feature_dim = int(feature_dim)
         self.feature_hidden = int(feature_hidden) if self.use_features else 0
+        # 특징 이력 규칙(관측 생성용 메타데이터). 모델 계산에는 history만 쓰고 stride는 관측 생성(predict_open_loop,
+        # 폐루프)이 학습과 같은 규칙을 쓰도록 함께 보관한다.
+        self.feature_history = int(feature_history)
+        self.feature_stride = int(feature_stride)
+        self.feature_encoder = str(feature_encoder)
+        self.aux_classes = int(aux_classes)
 
         chans = (in_channels,) + tuple(widths)
         self.blocks = nn.ModuleList(
@@ -255,8 +310,9 @@ class VLALitePolicy(nn.Module):
         self.proprio_mlp = nn.Sequential(
             nn.Linear(proprio_dim, proprio_hidden), nn.ReLU(), nn.Linear(proprio_hidden, proprio_hidden), nn.ReLU()
         )
+        self.fused_dim = vis_dim + lang_dim + proprio_hidden + self.feature_hidden
         self.head = nn.Sequential(
-            nn.Linear(vis_dim + lang_dim + proprio_hidden + self.feature_hidden, head_hidden),
+            nn.Linear(self.fused_dim, head_hidden),
             nn.ReLU(),
             nn.Linear(head_hidden, head_hidden),
             nn.ReLU(),
@@ -264,13 +320,20 @@ class VLALitePolicy(nn.Module):
         )
         nn.init.normal_(self.head[-1].weight, std=1e-3)
         nn.init.zeros_(self.head[-1].bias)
-        if self.use_features:  # 마지막에 만든다(기존 모듈의 초기화 난수 소비 순서를 바꾸지 않기 위해)
-            self.feat_mlp = nn.Sequential(
-                nn.Linear(2 * self.feature_dim, self.feature_hidden),
-                nn.ReLU(),
-                nn.Linear(self.feature_hidden, self.feature_hidden),
-                nn.ReLU(),
-            )
+        # 아래 모듈은 마지막에 만든다(기존 모듈의 초기화 난수 소비 순서를 바꾸지 않기 위해). 순서: 특징 인코더 → 보조 헤드.
+        if self.use_features:
+            if self.feature_encoder == "mlp":
+                self.feat_mlp = nn.Sequential(
+                    nn.Linear(self.feature_history * self.feature_dim, self.feature_hidden),
+                    nn.ReLU(),
+                    nn.Linear(self.feature_hidden, self.feature_hidden),
+                    nn.ReLU(),
+                )
+            else:  # "gru"
+                self.feat_in = nn.Linear(self.feature_dim, self.feature_hidden)
+                self.feat_gru = nn.GRU(self.feature_hidden, self.feature_hidden, num_layers=1, batch_first=True)
+        if self.aux_classes > 0:
+            self.aux_head = nn.Linear(self.fused_dim, self.aux_classes)
         self.to(memory_format=torch.channels_last)
 
     @classmethod
@@ -284,21 +347,60 @@ class VLALitePolicy(nn.Module):
             use_features=cfg.use_features,
             feature_dim=cfg.feature_dim,
             feature_hidden=cfg.feature_hidden,
+            feature_history=cfg.feature_history,
+            feature_stride=cfg.feature_stride,
+            feature_encoder=cfg.feature_encoder,
+            aux_classes=cfg.aux_classes if cfg.aux_weight > 0 else 0,
         )
 
     def encode_features(self, features: torch.Tensor | None) -> torch.Tensor:
-        """특징 [B,2,feature_dim] → [B,feature_hidden]. NaN은 0, 값은 [−3,3]으로 자른 뒤 MLP에 넣는다.
+        """특징 [B,H,feature_dim](H = feature_history, k=0이 현재 프레임) → [B,feature_hidden].
+
+        NaN은 0, 값은 [−3,3]으로 자른 뒤 인코더에 넣는다.
+        - "mlp": 평탄화 [B,H·D] → MLP. H=2이면 v3와 같은 계산이다.
+        - "gru": 시간 축을 뒤집어(오래된 것 → 현재) Linear+ReLU → GRU 1층 → 마지막 은닉 [B,hidden].
 
         Raises:
-            ValueError: use_features=True인데 features가 없거나 형태가 [B,2,feature_dim]이 아닐 때.
+            ValueError: use_features=True인데 features가 없거나 형태가 [B,feature_history,feature_dim]이 아닐 때.
         """
 
+        h, d = self.feature_history, self.feature_dim
         if features is None:
-            raise ValueError("use_features=True 모델에는 features [B,2,feature_dim] 입력이 필요합니다.")
-        if features.ndim != 3 or features.shape[1] != 2 or features.shape[2] != self.feature_dim:
-            raise ValueError(f"features 형태가 [B,2,{self.feature_dim}]이 아닙니다: {tuple(features.shape)}")
+            raise ValueError(f"use_features=True 모델에는 features [B,{h},{d}] 입력이 필요합니다.")
+        if features.ndim != 3 or features.shape[1] != h or features.shape[2] != d:
+            raise ValueError(f"features 형태가 [B,{h},{d}]이 아닙니다: {tuple(features.shape)}")
         f = torch.nan_to_num(features.float(), nan=0.0).clamp(-3.0, 3.0)
-        return self.feat_mlp(f.flatten(1))
+        if self.feature_encoder == "mlp":
+            return self.feat_mlp(f.flatten(1))
+        x = F.relu(self.feat_in(f.flip(1)))  # [B,H,hidden], 시간 순서(오래된 것 → 현재 프레임)
+        _, h_n = self.feat_gru(x)             # h_n [1,B,hidden]
+        return h_n[-1]
+
+    def fuse(
+        self,
+        image: torch.Tensor,
+        tokens: torch.Tensor,
+        proprio: torch.Tensor,
+        features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """융합 표현(헤드 첫 층 입력) [B, fused_dim] = concat(vis, lang, proprio[, feat])."""
+
+        lang = self.encode_language(tokens)
+        x = image.mul(4.0).sub_(2.0).contiguous(memory_format=torch.channels_last)  # (x−0.5)/0.25
+        for i, block in enumerate(self.blocks):
+            film = None
+            if self.use_language and i in self.film_blocks:
+                gamma, beta = self.film[str(i)](lang).chunk(2, dim=-1)
+                film = (gamma, beta)
+            x = block(x, film)
+        if x.shape[-2:] != (self.grid, self.grid):  # 64×64 입력에서는 이미 grid×grid라 풀링을 건너뛴다(CPU 역전파 비용 절감)
+            x = self.pool(x)
+        vis = F.relu(self.vis_fc(x.flatten(1)))
+        prop = self.proprio_mlp(proprio)
+        if self.use_features:
+            feat = self.encode_features(features)
+            return torch.cat([vis, lang, prop, feat], dim=-1)
+        return torch.cat([vis, lang, prop], dim=-1)
 
     def encode_language(self, tokens: torch.Tensor) -> torch.Tensor:
         """토큰 [B,L] → 언어 특징 [B,lang_dim]. 어휘 밖 id는 UNK(1)로 바꾼다. 절제 모델은 0 벡터."""
@@ -318,28 +420,25 @@ class VLALitePolicy(nn.Module):
         tokens: torch.Tensor,
         proprio: torch.Tensor,
         features: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        return_aux: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """image float [B,6,H,W]([0,1]), tokens int64 [B,L], proprio float [B,1] → 정규화 가속도 [B,chunk].
 
-        features float [B,2,feature_dim]은 use_features=True일 때만 쓰고(필수), False면 무시한다.
+        features float [B,feature_history,feature_dim]은 use_features=True일 때만 쓰고(필수), False면 무시한다.
+        `return_aux=True`이면 (행동 [B,chunk], 보조 로짓 [B,aux_classes])를 반환한다. 기본(False)은 행동만
+        반환하며 보조 헤드를 계산하지 않는다(추론 비용 0).
+
+        Raises:
+            ValueError: return_aux=True인데 보조 헤드가 없을 때(aux_classes=0).
         """
 
-        lang = self.encode_language(tokens)
-        x = image.mul(4.0).sub_(2.0).contiguous(memory_format=torch.channels_last)  # (x−0.5)/0.25
-        for i, block in enumerate(self.blocks):
-            film = None
-            if self.use_language and i in self.film_blocks:
-                gamma, beta = self.film[str(i)](lang).chunk(2, dim=-1)
-                film = (gamma, beta)
-            x = block(x, film)
-        if x.shape[-2:] != (self.grid, self.grid):  # 64×64 입력에서는 이미 grid×grid라 풀링을 건너뛴다(CPU 역전파 비용 절감)
-            x = self.pool(x)
-        vis = F.relu(self.vis_fc(x.flatten(1)))
-        prop = self.proprio_mlp(proprio)
-        if self.use_features:
-            feat = self.encode_features(features)
-            return self.head(torch.cat([vis, lang, prop, feat], dim=-1))
-        return self.head(torch.cat([vis, lang, prop], dim=-1))
+        if return_aux and self.aux_classes <= 0:
+            raise ValueError("보조 헤드가 없는 모델입니다(aux_classes=0, PolicyConfig.aux_weight=0).")
+        fused = self.fuse(image, tokens, proprio, features)
+        action = self.head(fused)
+        if return_aux:
+            return action, self.aux_head(fused)
+        return action
 
 
 def count_parameters(model: nn.Module) -> int:
@@ -468,10 +567,19 @@ class PolicyData:
     - `ego_v` [N]: 자차 속도(m/s), `action` [N]: 물리 단위 가속도 행동(m/s²)
     - `tokens` [N,L] int64: 지시문 토큰, `domain`: "driving" | "robot"
     - `features` [N,D] float32 | None(v3): 프레임별 검출 특징(v1+v2, 보통 D=32). 있으면 관측에 `"features"`를 넣는다.
+    - `aux_targets` [N,C] float32 | None(v4 P3): 프레임별 맥락 확률(CARE 점수기 출력, 각 행의 합 1, 음수 없음).
+      보조 헤드 학습 타깃(현재 프레임 t의 행)이며 관측 dict에는 넣지 않는다(추론 입력이 아님).
+    - `feature_group` [N] | None(v4 특징 프리롤): 특징 이력의 잘라 냄 기준 그룹(보통 에피소드 id, 같은 값이 연속 구간).
+      None이면 `group`을 쓴다(v3와 같음). 학습 데이터의 `group`이 클립 id여도 `feature_group`=에피소드 id를 주면
+      특징 이력이 클립 시작 이전(같은 에피소드의 앞 프레임 = 특징 프리롤)까지 이어져 폐루프(에피소드 시작에서
+      잘라 냄)와 같은 규칙이 된다. 영상·행동 청크는 계속 `group` 기준이다. 이 경우 `features`는 프리롤 프레임을
+      포함한 전체 길이 N 배열이어야 하고, 학습 인덱스(train_idx)는 클립 프레임만 고르면 된다.
 
     경계 규칙
     - 관측 = stack_frames(t, t−HISTORY_OFFSET). t−2가 같은 연속 구간의 시작보다 앞이면 구간 첫 프레임을 쓴다.
-    - 특징 = [features[t], features[t−HISTORY_OFFSET]] → [B,2,D]. t−2 인덱스는 영상과 같은 규칙(`prev_index`)을 쓴다.
+    - 특징 이력(v4) = features[t − k·stride], k = 0..history−1 → [B,history,D]. 같은 연속 구간(`feature_group`이
+      있으면 그 구간, 없으면 `group` 구간) 시작보다 앞이면 구간 첫 프레임으로 잘라 낸다(영상 `prev_index`와 같은
+      규칙). history=2, stride=2, feature_group=None(기본)이면 v3의 [features[t], features[t−2]]와 같은 배열이다.
     - 행동 청크 = action[t : t+chunk], 구간 끝을 넘는 자리는 구간 마지막 값으로 채운다.
     """
 
@@ -482,7 +590,10 @@ class PolicyData:
     tokens: np.ndarray
     domain: str
     features: np.ndarray | None = None
+    aux_targets: np.ndarray | None = None
+    feature_group: np.ndarray | None = None
     _first: np.ndarray = field(init=False, repr=False)
+    _feat_first: np.ndarray = field(init=False, repr=False)
     _last: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -503,7 +614,24 @@ class PolicyData:
                 raise ValueError(f"features는 [N={n}, D]이어야 합니다: {self.features.shape}")
             if not np.isfinite(self.features).all():
                 logger.warning("features에 유한하지 않은 값이 있습니다. 모델 입력에서 NaN은 0, ±inf는 ±3으로 처리됩니다.")
+        if self.aux_targets is not None:
+            self.aux_targets = np.asarray(self.aux_targets, dtype=np.float32)
+            q = self.aux_targets
+            if q.ndim != 2 or len(q) != n or q.shape[1] < 2:
+                raise ValueError(f"aux_targets는 [N={n}, C≥2]이어야 합니다: {q.shape}")
+            if not np.isfinite(q).all() or (q < 0).any():
+                raise ValueError("aux_targets는 유한하고 음수가 없는 확률이어야 합니다.")
+            dev = float(np.abs(q.sum(axis=1) - 1.0).max()) if n else 0.0
+            if dev > 1e-3:
+                raise ValueError(f"aux_targets 각 행의 합이 1이어야 합니다(최대 편차 {dev:.4g}).")
         self._first, self._last = _run_bounds(self.group)
+        if self.feature_group is not None:
+            self.feature_group = np.asarray(self.feature_group)
+            if self.feature_group.ndim != 1 or len(self.feature_group) != n:
+                raise ValueError(f"feature_group은 [N={n}]이어야 합니다: {self.feature_group.shape}")
+            self._feat_first = _run_bounds(self.feature_group)[0]
+        else:
+            self._feat_first = self._first
 
     def __len__(self) -> int:
         return int(len(self.group))
@@ -513,6 +641,22 @@ class PolicyData:
 
         idx = np.asarray(idx, dtype=np.int64)
         return np.maximum(idx - int(_obs().HISTORY_OFFSET), self._first[idx])
+
+    def feature_index(self, idx: np.ndarray, history: int = 2, stride: int = 2) -> np.ndarray:
+        """[len(idx), history] 특징 이력 인덱스. 열 k = t − k·stride.
+
+        같은 구간 시작보다 앞이면 구간 첫 프레임으로 잘라 낸다. 구간은 `feature_group`이 있으면 그 기준
+        (특징 프리롤 허용), 없으면 `group` 기준이다.
+
+        Raises:
+            ValueError: history < 1 또는 stride < 1일 때.
+        """
+
+        if history < 1 or stride < 1:
+            raise ValueError(f"history({history}), stride({stride})는 1 이상이어야 합니다.")
+        idx = np.asarray(idx, dtype=np.int64)
+        offs = np.arange(history, dtype=np.int64) * int(stride)
+        return np.maximum(idx[:, None] - offs[None, :], self._feat_first[idx][:, None])
 
     def chunk_index(self, idx: np.ndarray, chunk: int) -> np.ndarray:
         """[len(idx), chunk] 행동 인덱스. 구간 끝을 넘으면 구간 마지막 인덱스로 채운다."""
@@ -525,11 +669,12 @@ class PolicyData:
 
         return self.action[self.chunk_index(idx, chunk)]
 
-    def observation(self, idx: np.ndarray) -> dict[str, np.ndarray]:
+    def observation(self, idx: np.ndarray, history: int = 2, stride: int = 2) -> dict[str, np.ndarray]:
         """계약 PolicyFn 입력과 같은 형식의 배치 관측 dict.
 
-        키: "image" uint8 [B,H,W,6], "tokens" int64 [B,L], "proprio" float32 [B,1],
-        그리고 `features`가 있으면 "features" float32 [B,2,D](0번 = 프레임 t, 1번 = t−HISTORY_OFFSET).
+        키: "image" uint8 [B,H,W,6](프레임 t, t−HISTORY_OFFSET; history·stride와 무관), "tokens" int64 [B,L],
+        "proprio" float32 [B,1], 그리고 `features`가 있으면 "features" float32 [B,history,D]
+        (k번 = 프레임 t − k·stride, 구간 시작에서 잘라 냄. 기본값이면 v3의 [B,2,D]와 같은 배열).
         """
 
         idx = np.asarray(idx, dtype=np.int64)
@@ -540,7 +685,7 @@ class PolicyData:
         prop = np.asarray(_obs().proprio(self.ego_v[idx], self.domain), dtype=np.float32).reshape(b, 1)
         out = {"image": image, "tokens": self.tokens[idx], "proprio": prop}
         if self.features is not None:
-            out["features"] = np.stack([self.features[idx], self.features[prev]], axis=1)
+            out["features"] = self.features[self.feature_index(idx, history, stride)]
         return out
 
 
@@ -571,7 +716,9 @@ def _to_tensor_batch(obs: dict[str, np.ndarray], device: torch.device) -> tuple[
 
 
 def _features_tensor(obs: dict[str, np.ndarray], model: "VLALitePolicy", device: torch.device) -> torch.Tensor | None:
-    """모델이 특징을 쓰면 obs["features"] → float [B,2,D] 텐서, 쓰지 않으면 None(키가 있어도 무시).
+    """모델이 특징을 쓰면 obs["features"] → float [B,H,D] 텐서, 쓰지 않으면 None(키가 있어도 무시).
+
+    형태 검사([B, feature_history, feature_dim])는 `VLALitePolicy.encode_features`가 한다.
 
     Raises:
         ValueError: use_features=True 모델인데 관측에 "features"가 없을 때.
@@ -581,10 +728,41 @@ def _features_tensor(obs: dict[str, np.ndarray], model: "VLALitePolicy", device:
         return None
     if "features" not in obs or obs["features"] is None:
         raise ValueError(
-            "use_features=True 정책에는 관측 dict의 'features' float32 [B,2,%d]가 필요합니다"
-            "(PolicyData.features 또는 폐루프 온라인 특징 계산을 확인하세요)." % model.feature_dim
+            "use_features=True 정책에는 관측 dict의 'features' float32 [B,%d,%d]가 필요합니다"
+            "(PolicyData.features 또는 폐루프 온라인 특징 계산을 확인하세요)." % (model.feature_history, model.feature_dim)
         )
     return torch.from_numpy(np.ascontiguousarray(obs["features"], dtype=np.float32)).to(device)
+
+
+def apply_lang_dropout(tokens: np.ndarray, rng: np.random.Generator, p: float) -> tuple[np.ndarray, np.ndarray]:
+    """T1 지시문 드롭아웃: 표본별로 확률 p로 지시문을 빈 지시(모든 토큰 PAD=0)로 바꾼 사본을 반환한다.
+
+    빈 지시 정의: PAD만 있는 시퀀스. `encode_language`의 마스크 평균은 분모를 clamp_min(1)로 막으므로
+    빈 지시의 언어 특징은 0 벡터 평균 → ReLU(lang_fc 편향)로 잘 정의된다(0으로 나누기 없음, 별도 null 임베딩 불필요).
+    배포 때 지시문이 없으면 같은 PAD 시퀀스를 넣으면 학습 때의 "빈 지시" 경로와 같다.
+
+    Args:
+        tokens: int64 [B,L].
+        rng: 전용 난수 생성기(다른 증강 난수와 섞지 않는다). p ≤ 0이면 난수를 소비하지 않는다.
+        p: 드롭 확률 [0,1].
+
+    Returns:
+        (토큰 사본 또는 원본(p ≤ 0), 드롭 여부 bool [B]).
+    """
+
+    b = len(tokens)
+    if p <= 0:
+        return tokens, np.zeros(b, dtype=bool)
+    drop = rng.random(b) < p
+    out = np.array(tokens, dtype=np.int64, copy=True)
+    out[drop] = 0
+    return out, drop
+
+
+def soft_cross_entropy(logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """확률 타깃 soft CE: mean_b(−Σ_c q_bc · log softmax(z_b)_c)."""
+
+    return -(target * F.log_softmax(logits, dim=-1)).sum(dim=-1).mean()
 
 
 def add_feature_noise(features: np.ndarray, rng: np.random.Generator, sigma: float) -> np.ndarray:
@@ -662,11 +840,18 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
     - 증강(cfg.augment): 평행이동 ±2px(numpy Generator(seed+1)), 밝기·대비(torch.Generator(seed+2)). 좌우 반전 없음.
       cfg.use_features이면 특징에 N(0, feature_noise²) 노이즈(numpy Generator(seed+3), 영상 증강 난수와 분리).
     - 특징(cfg.use_features): data.features [N, feature_dim]이 필요하다. False면 data.features가 있어도 쓰지 않는다.
+      관측의 특징 이력은 cfg.feature_history·feature_stride 규칙(`PolicyData.observation(idx, history, stride)`)이다.
+    - v4 P3(cfg.aux_weight > 0): data.aux_targets [N, aux_classes]가 필요하다. 손실 = 행동 손실 +
+      aux_weight × soft CE(보조 로짓, aux_targets[t]).
+    - v4 T1(cfg.lang_dropout > 0, use_language=True일 때): 표본별 확률 p로 지시문을 PAD만 있는 빈 지시로 바꾼다
+      (numpy Generator(seed+4), 다른 난수와 분리).
     - 결정성: torch·numpy 시드 고정, 증강 난수는 전용 생성기를 쓴다. 스레드 수는 cfg.threads로 고정하고
-      학습 후 원래 값으로 되돌린다.
+      학습 후 원래 값으로 되돌린다. v4 필드가 기본값이면 v3와 같은 연산·난수 순서다.
 
     반환: (eval 모드 모델, 정보 dict: loss_curve, loss_curve_steps, final_loss, train_time_s, samples_per_s,
-    n_params, vocab_size, n_train, config).
+    n_params, vocab_size, n_train, config, final_aux_loss, aux_loss_curve, lang_dropped_frac).
+    `loss_curve`·`final_loss`는 v3와 비교할 수 있도록 **행동 손실만**이다. `final_aux_loss`는 보조 soft CE
+    (보조 헤드가 없으면 None), `lang_dropped_frac`는 빈 지시로 바꾼 표본 비율이다.
     """
 
     train_idx = np.asarray(train_idx, dtype=np.int64)
@@ -679,6 +864,15 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
             raise ValueError("cfg.use_features=True인데 PolicyData.features가 없습니다.")
         if data.features.shape[1] != cfg.feature_dim:
             raise ValueError(f"PolicyData.features 차원({data.features.shape[1]})이 cfg.feature_dim({cfg.feature_dim})과 다릅니다.")
+    use_aux = cfg.aux_weight > 0
+    if use_aux:
+        if data.aux_targets is None:
+            raise ValueError("cfg.aux_weight > 0인데 PolicyData.aux_targets가 없습니다.")
+        if data.aux_targets.shape[1] != cfg.aux_classes:
+            raise ValueError(
+                f"PolicyData.aux_targets 클래스 수({data.aux_targets.shape[1]})가 cfg.aux_classes({cfg.aux_classes})와 다릅니다."
+            )
+    use_lang_drop = cfg.lang_dropout > 0 and cfg.use_language
 
     prev_threads = torch.get_num_threads()
     torch.set_num_threads(max(1, int(cfg.threads)))
@@ -689,6 +883,7 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
         aug_rng = np.random.default_rng(cfg.seed + 1)
         gen = torch.Generator().manual_seed(cfg.seed + 2)
         feat_rng = np.random.default_rng(cfg.seed + 3)
+        lang_rng = np.random.default_rng(cfg.seed + 4)  # T1 전용(lang_dropout ≤ 0이면 소비하지 않는다)
         device = torch.device(cfg.device)
 
         vocab = _vocab_size(data.tokens)
@@ -709,36 +904,51 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
 
         sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
         logger.info(
-            "VLA-lite 학습 시작: n_train=%d steps=%d batch=%d params=%d use_language=%s use_features=%s threads=%d",
-            len(train_idx), cfg.steps, cfg.batch, n_params, cfg.use_language, cfg.use_features, cfg.threads,
+            "VLA-lite 학습 시작: n_train=%d steps=%d batch=%d params=%d use_language=%s use_features=%s "
+            "feature_encoder=%s H=%d s=%d aux_weight=%g lang_dropout=%g threads=%d",
+            len(train_idx), cfg.steps, cfg.batch, n_params, cfg.use_language, cfg.use_features,
+            cfg.feature_encoder, cfg.feature_history, cfg.feature_stride, cfg.aux_weight, cfg.lang_dropout, cfg.threads,
         )
 
         losses: list[float] = []
+        aux_losses: list[float] = []
+        n_dropped = 0
         t0 = time.perf_counter()
         for step in range(cfg.steps):
             idx = train_idx[rng.integers(0, len(train_idx), size=cfg.batch)]
-            obs = data.observation(idx)
+            obs = data.observation(idx, history=cfg.feature_history, stride=cfg.feature_stride)
             if cfg.augment:
                 obs = augment_observation(obs, aug_rng)
                 if cfg.use_features:
                     obs["features"] = add_feature_noise(obs["features"], feat_rng, cfg.feature_noise)
+            if use_lang_drop:
+                obs["tokens"], dropped = apply_lang_dropout(obs["tokens"], lang_rng, cfg.lang_dropout)
+                n_dropped += int(dropped.sum())
             image, tokens, prop = _to_tensor_batch(obs, device)
             feats = _features_tensor(obs, model, device)
             if cfg.augment:
                 image = photometric_jitter(image, gen)
             target = torch.from_numpy(data.action_chunk(idx, cfg.chunk) / a_scale).to(device)
-            pred = model(image, tokens, prop, feats)
-            loss = (F.smooth_l1_loss(pred, target, reduction="none", beta=cfg.huber_beta) * weights).mean()
+            if use_aux:
+                pred, aux_logits = model(image, tokens, prop, feats, return_aux=True)
+                act_loss = (F.smooth_l1_loss(pred, target, reduction="none", beta=cfg.huber_beta) * weights).mean()
+                aux_loss = soft_cross_entropy(aux_logits, torch.from_numpy(data.aux_targets[idx]).to(device))
+                loss = act_loss + cfg.aux_weight * aux_loss
+            else:
+                pred = model(image, tokens, prop, feats)
+                loss = act_loss = (F.smooth_l1_loss(pred, target, reduction="none", beta=cfg.huber_beta) * weights).mean()
             opt.zero_grad(set_to_none=True)
             loss.backward()
             if cfg.grad_clip > 0:
                 nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
             opt.step()
             sched.step()
-            lv = float(loss.detach())
-            if not math.isfinite(lv):
+            lv = float(act_loss.detach())
+            if not math.isfinite(float(loss.detach())):
                 raise FloatingPointError(f"손실이 유한하지 않습니다(step={step}).")
             losses.append(lv)
+            if use_aux:
+                aux_losses.append(float(aux_loss.detach()))
             if (step + 1) % max(1, cfg.steps // 10) == 0:
                 logger.info("step %d/%d loss=%.4f", step + 1, cfg.steps, float(np.mean(losses[-50:])))
         elapsed = time.perf_counter() - t0
@@ -747,16 +957,21 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
 
     model.eval()
     curve, curve_steps = _segment_means(losses, cfg.n_curve_bins)
+    tail = max(1, cfg.steps // 20)
     info: dict[str, Any] = {
         "loss_curve": curve,
         "loss_curve_steps": curve_steps,
-        "final_loss": float(np.mean(losses[-max(1, cfg.steps // 20):])),
+        "final_loss": float(np.mean(losses[-tail:])),
         "train_time_s": float(elapsed),
         "samples_per_s": float(cfg.steps * cfg.batch / max(elapsed, 1e-9)),
         "n_params": n_params,
         "vocab_size": vocab,
         "n_train": int(len(train_idx)),
         "config": asdict(cfg),
+        # v4: 보조 손실(행동 손실과 분리 기록, 보조 헤드가 없으면 None)·지시문 드롭 비율
+        "final_aux_loss": float(np.mean(aux_losses[-tail:])) if aux_losses else None,
+        "aux_loss_curve": _segment_means(aux_losses, cfg.n_curve_bins)[0] if aux_losses else [],
+        "lang_dropped_frac": float(n_dropped / (cfg.steps * cfg.batch)),
     }
     logger.info("VLA-lite 학습 완료: %.1fs, %.0f samples/s, final_loss=%.4f", elapsed, info["samples_per_s"], info["final_loss"])
     return model, info
@@ -773,11 +988,15 @@ def make_policy_fn(model: VLALitePolicy, domain: str) -> PolicyFn:
     """폐루프용 배치 정책 함수를 만든다(계약 `PolicyFn`).
 
     입력: {"image": uint8 [B,H,W,6], "tokens": int64 [B,L], "proprio": float32 [B,1](obs.proprio 정규화 값),
-          "features": float32 [B,2,feature_dim](v3, 모델이 use_features일 때만 필수, 아니면 무시)}
+          "features": float32 [B,feature_history,feature_dim](v3·v4, 모델이 use_features일 때만 필수, 아니면 무시)}
     출력: float32 [B] 물리 단위 가속도 명령 = 청크 첫 원소 × accel_scale(domain). eval 모드, no_grad.
+    보조 헤드는 계산하지 않는다.
+
+    반환 함수 속성(v4, 폐루프가 특징 이력 규칙을 읽는다): `policy_fn.feature_history`, `policy_fn.feature_stride`,
+    `policy_fn.use_features`. 폐루프(`FeatureHistory`)는 이 규칙으로 [B,H,D]를 만들어 그대로 넘긴다.
 
     Raises(호출 시):
-        ValueError: use_features=True 모델인데 입력에 "features"가 없을 때.
+        ValueError: use_features=True 모델인데 입력에 "features"가 없거나 형태가 [B,H,D]가 아닐 때.
     """
 
     a_scale = float(_obs().accel_scale(domain))
@@ -791,11 +1010,18 @@ def make_policy_fn(model: VLALitePolicy, domain: str) -> PolicyFn:
             out = model(image, tokens, prop, feats)[:, 0] * a_scale
         return out.cpu().numpy().astype(np.float32)
 
+    fn: Any = policy_fn
+    fn.feature_history = int(model.feature_history)
+    fn.feature_stride = int(model.feature_stride)
+    fn.use_features = bool(model.use_features)
     return policy_fn
 
 
 def predict_open_loop(model: VLALitePolicy, data: PolicyData, idx: np.ndarray, batch_size: int = 512) -> np.ndarray:
-    """개루프 예측: float32 [len(idx), chunk] 물리 단위 가속도(m/s²)."""
+    """개루프 예측: float32 [len(idx), chunk] 물리 단위 가속도(m/s²).
+
+    특징 이력은 모델의 `feature_history`·`feature_stride`(학습 설정과 같은 값) 규칙으로 만든다.
+    """
 
     idx = np.asarray(idx, dtype=np.int64)
     if model.use_features and data.features is None:
@@ -806,7 +1032,7 @@ def predict_open_loop(model: VLALitePolicy, data: PolicyData, idx: np.ndarray, b
     model.eval()
     with torch.no_grad():
         for s in range(0, len(idx), batch_size):
-            obs = data.observation(idx[s : s + batch_size])
+            obs = data.observation(idx[s : s + batch_size], history=model.feature_history, stride=model.feature_stride)
             image, tokens, prop = _to_tensor_batch(obs, device)
             outs.append((model(image, tokens, prop, _features_tensor(obs, model, device)) * a_scale).cpu().numpy())
     if not outs:
@@ -827,6 +1053,9 @@ __all__ = [
     "photometric_jitter",
     "augment_observation",
     "add_feature_noise",
+    "apply_lang_dropout",
+    "soft_cross_entropy",
+    "FEATURE_ENCODERS",
     "count_parameters",
     "train_policy",
     "make_policy_fn",

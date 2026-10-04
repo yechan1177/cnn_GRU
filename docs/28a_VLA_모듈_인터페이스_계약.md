@@ -185,3 +185,34 @@ def predict_open_loop(model, data: PolicyData, idx: np.ndarray) -> np.ndarray   
   - `select_shared`: rng 순열 π의 앞 R개가 저장소. None 기준선은 π의 앞 K개(같은 rng 상태의 `select("random")`과 같은 집합). method_score는 1차원만 받는다.
   - 분석 보조: `curation.shared_reservoir_mask(budget_ratio, group, clip_len, rng, reservoir)`(저장소 부분 마스크).
   - 상세: `docs/31_VLA_lite_정책.md` 10절, `docs/30_큐레이션_방법_정의.md` 6절.
+
+## v4 추가 계약(A14, 2026-10-04, docs/36)
+
+### 정책 블록(P2·P3·T1) — `src/vcp/vla/policy.py`
+- 관측 `"features"`: float32 [B, H, D]. 인덱스 k = 프레임 t − k·s(구간 시작에서 잘라 냄), k=0이 현재. H=2, s=2면 v3 [B,2,D]와 같다.
+- `PolicyConfig` 새 필드(모두 기본값이면 v3와 비트 단위로 같다):
+  `feature_history: int = 2`, `feature_stride: int = 2`, `feature_encoder: str = "mlp"`(`"gru"`),
+  `aux_weight: float = 0.0`, `aux_classes: int = 6`, `lang_dropout: float = 0.0`. 잘못된 값은 생성 시 `ValueError`.
+- `VLALitePolicy(..., feature_history=2, feature_stride=2, feature_encoder="mlp", aux_classes=0)`
+  - `"gru"`: NaN→0, clamp(−3,3) → 시간 순서 뒤집기 → Linear(D→64)+ReLU → GRU(64→64, 1층) → 마지막 은닉 [B,64].
+  - `forward(image, tokens, proprio, features=None, return_aux=False)`: 기본 반환은 행동 [B,chunk]. `return_aux=True`면
+    (행동, 보조 로짓 [B,aux_classes]). 보조 헤드 입력은 `fuse()`가 내는 헤드 첫 층 입력(융합 표현)이다.
+  - 새 모듈(특징 인코더 → 보조 헤드)은 기존 모듈 뒤에 만든다(초기화 난수 순서 보존).
+- `PolicyData` 새 필드: `aux_targets: np.ndarray | None = None` [N, aux_classes](확률, 행 합 1),
+  `feature_group: np.ndarray | None = None` [N](특징 이력 잘라 냄 기준, 아래 특징 프리롤).
+  `observation(idx, history=2, stride=2)`, 보조 메서드 `feature_index(idx, history, stride)`.
+- `train_policy`: 손실 = 행동 손실 + aux_weight × soft CE(−Σ q log softmax(z)), 타깃 = `aux_targets[t]`.
+  `aux_weight > 0`인데 `aux_targets`가 없으면 `ValueError`. info 추가: `final_aux_loss`(없으면 None), `aux_loss_curve`,
+  `lang_dropped_frac`. `final_loss`는 행동 손실만이다(v3와 비교 가능).
+- T1: 표본별 확률 p로 토큰을 PAD(0)만 있는 빈 지시로 바꾼다. 전용 `numpy Generator(seed+4)`. 배포 때 지시문 없음 = PAD 시퀀스.
+- `make_policy_fn`: obs["features"] [B,H,D]를 그대로 받는다. 반환 함수 속성 `feature_history`, `feature_stride`, `use_features`를
+  폐루프(`FeatureHistory`, A15)가 읽어 같은 규칙으로 이력을 만든다. `predict_open_loop`은 모델의 H·s를 쓴다.
+- 공개 함수: `apply_lang_dropout(tokens, rng, p)`, `soft_cross_entropy(logits, q)`, 상수 `FEATURE_ENCODERS`.
+
+### 특징 프리롤(본 세션 결정, A15 보고 반영)
+- 학습 `group`은 클립 id라 특징 이력이 클립 시작에서 잘리지만, 폐루프는 에피소드 시작에서 잘린다.
+- 큐레이션 내보내기에서 클립 앞 (H−1)·s 프레임의 **특징**을 함께 저장한다고 가정한다(영상·행동은 저장하지 않음).
+- 정책 쪽 구현: `PolicyData(feature_group=에피소드 id)`이면 특징 이력의 잘라 냄을 `feature_group` 구간 기준으로 한다.
+  `features`는 프리롤 프레임을 포함한 풀 전체 길이 N 배열이고, 학습 인덱스는 클립 프레임만 고른다. 영상·행동 청크는 계속 `group` 기준이다.
+  `feature_group=None`이면 v3와 같다.
+- 상세·측정: `docs/31_VLA_lite_정책.md` 11절.
