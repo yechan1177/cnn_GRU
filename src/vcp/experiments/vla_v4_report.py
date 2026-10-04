@@ -72,15 +72,21 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
     kpi: dict[str, Any] = {}
 
     # ---------- 개발 세트(선택 근거) ----------
-    ch = root / "cache" / "v4_choice.json"
-    if ch.exists():
+    names = {"v3": "v3 기준", "p2": "+P2 시간 특징 인코더", "p3": "+P3 위험 보조 헤드", "t1": "+T1 지시문 드롭아웃", "p4": "+P4 위험 가중 손실", "all": "전부"}
+    kpi["dev_choice"] = {}
+    rows = []
+    for dom, dname in (("driving", "주행"), ("robot", "AMR")):
+        ch = root / "cache" / f"v4_choice_{dom}.json"
+        if not ch.exists():
+            continue
         c = json.loads(ch.read_text(encoding="utf-8"))
-        kpi["dev_choice"] = c
-        names = {"v3": "v3 기준", "p2": "+P2 시간 특징 인코더", "p3": "+P3 위험 보조 헤드", "t1": "+T1 지시문 드롭아웃", "s1": "+S1 에피소드 상한", "all": "전부"}
-        rows = [[names.get(v, v), _fmt(float(np.mean(x)), float(np.std(x, ddof=1)) if len(x) > 1 else 0.0), {True: "채택", False: "기각"}.get(c["adopt"].get(v), "-")] for v, x in c["dev_success_by_seed"].items()]
-        _write_table(tables / "v4_dev", ["설정", "개발 세트 성공률(CARE 2%, 시드 3)", "채택"], rows)
-        se = c.get("devcf_speed_error", {})
-        _write_table(tables / "v4_dev_lang", ["설정:언어", "반사실 개발 세트 속도 오차(m/s)"], [[k, _fmt(v, digits=2)] for k, v in sorted(se.items())])
+        kpi["dev_choice"][dom] = c
+        for v, x in c["dev_success_by_seed"].items():
+            rows.append([dname, names.get(v, v), _fmt(float(np.mean(x)), float(np.std(x, ddof=1)) if len(x) > 1 else 0.0), {True: "채택", False: "기각"}.get(c["adopt"].get(v), "-")])
+        if dom == "driving" and c.get("devcf_speed_error"):
+            _write_table(tables / "v4_dev_lang", ["설정:언어", "반사실 개발 세트 속도 오차(m/s)"], [[k, _fmt(v, digits=2)] for k, v in sorted(c["devcf_speed_error"].items())])
+    if rows:
+        _write_table(tables / "v4_dev", ["도메인", "설정", "개발 세트 성공률(CARE 2%, 시드 3)", "채택"], rows)
 
     # ---------- 주행 새 테스트 ----------
     G = _group([r for r in _runs(root, "driving__")])
