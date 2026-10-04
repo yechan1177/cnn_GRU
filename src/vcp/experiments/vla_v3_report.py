@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from .vla_curation_suite import episode_success
+from .vla_curation_suite import MIN_REF_DISTANCE, SUCCESS_PROGRESS
 from .vla_report import _fmt, _write_table, hierarchical_bootstrap, holm, seed_t
 from .vla_v3_suite import V3Config, expert_reference
 
@@ -30,6 +30,23 @@ TARGETS = {
     "K6": ("언어가 줄이는 속도 추종 오차(반사실)", ">= 30%"),
     "K7": ("실영상 제동 시작 예측 AUROC(전체 데이터)", ">= 0.65"),
 }
+
+
+def episode_success(episodes: list[dict[str, Any]], expert: dict[str, Any], moving_only: bool = False) -> np.ndarray:
+    """v2 `episode_success`와 같은 정의이되, 전문가 기준 거리를 (시나리오, 시드, 스타일)로 찾는다.
+
+    반사실 세트는 같은 (시나리오, 시드)를 세 스타일로 평가하므로 (시나리오, 시드)만으로 찾으면
+    마지막 스타일(민첩)의 거리만 남는다. 스타일까지 키에 넣으면 일반 세트에서는 v2와 같은 결과다.
+    """
+
+    ref = {(e["scenario"], e["seed"], e.get("style")): e["distance"] for e in expert["episodes"]}
+    key = "collision_moving" if moving_only else "collision"
+    out = []
+    for e in episodes:
+        d_ref = ref[(e["scenario"], e["seed"], e.get("style"))]  # 평가 사양이 다르면 KeyError
+        progress_ok = True if d_ref < MIN_REF_DISTANCE else e["distance"] >= SUCCESS_PROGRESS * d_ref
+        out.append((not e[key]) and progress_ok)
+    return np.asarray(out, dtype=bool)
 
 
 def _load_runs(root: Path) -> list[dict[str, Any]]:
