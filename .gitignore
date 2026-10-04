@@ -105,3 +105,6 @@ paper/figures/*
 
 # Docs 그림 자산은 루트 *.png 규칙에서 제외
 !docs/assets/*.png
+
+# Claude Code 서브 에이전트 작업용 git worktree(로컬 전용)
+.claude/worktrees/
