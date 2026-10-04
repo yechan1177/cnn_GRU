@@ -304,10 +304,11 @@ MAIN_SEEDS = tuple(range(10))
 
 
 def stage_dev(cfg: V4Config) -> dict[str, Any]:
-    """개발 세트에서 개선별 효과를 보고 도메인별 v4 조합을 정한다(docs/36 3절 채택 규칙).
+    """개발 세트에서 후보 설정을 비교해 도메인별 v4 조합을 정한다(docs/36 3절 채택 규칙).
 
-    - P2·P3·P4: 개발 세트 CARE 2% 성공률(시드 3개 평균)이 v3 기준 이상이면 채택한다.
-    - T1(주행): 반사실 개발 세트에서 CARE 2% 언어 있음 속도 오차가 v3 이하이면 채택한다. AMR은 주행 결정을 따른다.
+    - 후보 {v3, +P2, +P3, +P4, 전부}(전부 = P2+P3+T1+P4) 중 개발 세트 CARE 2% 성공률 최대를 고른다.
+      측정하지 않은 조합은 채택하지 않는다.
+    - T1(주행): 반사실 개발 세트에서 CARE 2% 언어 있음 속도 오차가 v3 이하이면 더한다. AMR은 주행 결정을 따른다.
     """
 
     robot = cfg.domain == "robot"
@@ -334,17 +335,20 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
             v = r["closed_loop"]["overall"].get("speed_error")
             se.setdefault((j["variant"], j.get("use_language", True)), []).append(np.nan if v is None else float(v))
     mean = {v: float(np.mean(x)) for v, x in succ.items()}
-    base = mean["v3"]
-    adopt = {k: mean[k] >= base for k in ("p2", "p3", "p4")}
+    # 측정한 후보(v3, 단일 개선, 전부) 중 개발 세트 성공률 최대를 고른다(동률이면 구성 요소가 적은 쪽, 그다음 v3 우선).
+    # T1은 주행 반사실 개발 세트로 따로 정해 단일 개선 후보에 더한다("전부" 후보는 T1을 포함해 측정했다).
+    cands = [v for v in ("v3", "p2", "p3", "p4", "all") if v in mean]
+    order = {"v3": 0, "p2": 1, "p3": 1, "p4": 1, "all": 3}
+    best = max(cands, key=lambda v: (round(mean[v], 6), -order[v]))
     if robot:
         dc = cfg.cache / "v4_choice_driving.json"
-        adopt["t1"] = bool(json.loads(dc.read_text(encoding="utf-8"))["adopt"]["t1"]) if dc.exists() else False
+        t1 = bool(json.loads(dc.read_text(encoding="utf-8"))["adopt"]["t1"]) if dc.exists() else False
     else:
-        adopt["t1"] = float(np.nanmean(se[("t1", True)])) <= float(np.nanmean(se[("v3", True)]))
-    params: dict[str, Any] = {}
-    for k, ok in adopt.items():
-        if ok:
-            params.update(VARIANTS[k])
+        t1 = float(np.nanmean(se[("t1", True)])) <= float(np.nanmean(se[("v3", True)]))
+    params = dict(VARIANTS[best])  # "전부"는 T1을 포함한 상태로 측정했으므로 그대로 쓴다
+    if best != "all" and t1:
+        params.update(VARIANTS["t1"])
+    adopt = {"best": best, "t1": t1}
     choice = {
         "domain": cfg.domain,
         "params": params,
@@ -353,7 +357,7 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
         "dev_success_by_seed": succ,
         "dev_full_success": full,
         "devcf_speed_error": {f"{v}:{'lang' if l else 'nolang'}": float(np.nanmean(x)) for (v, l), x in se.items()},
-        "rule": "P2·P3·P4: 개발 세트 CARE 2% 성공률(시드 3개 평균) ≥ v3. T1: 반사실 개발 세트 CARE 2% 언어 있음 속도 오차 ≤ v3(AMR은 주행 결정을 따름)",
+        "rule": "후보 {v3, +P2, +P3, +P4, 전부} 중 개발 세트 CARE 2% 성공률(시드 3개 평균) 최대(동률이면 단순한 쪽). T1: 반사실 개발 세트 CARE 2% 언어 있음 속도 오차 ≤ v3(AMR은 주행 결정을 따름)",
     }
     (cfg.cache / f"v4_choice_{cfg.domain}.json").write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
     logger.info("v4 채택(%s): %s", cfg.domain, choice)

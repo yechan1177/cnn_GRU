@@ -82,7 +82,7 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
         c = json.loads(ch.read_text(encoding="utf-8"))
         kpi["dev_choice"][dom] = c
         for v, x in c["dev_success_by_seed"].items():
-            rows.append([dname, names.get(v, v), _fmt(float(np.mean(x)), float(np.std(x, ddof=1)) if len(x) > 1 else 0.0), {True: "채택", False: "기각"}.get(c["adopt"].get(v), "-")])
+            rows.append([dname, names.get(v, v), _fmt(float(np.mean(x)), float(np.std(x, ddof=1)) if len(x) > 1 else 0.0), "채택" if c["adopt"].get("best") == v else ("T1 채택" if v == "t1" and c["adopt"].get("t1") else "-")])
         if dom == "driving" and c.get("devcf_speed_error"):
             _write_table(tables / "v4_dev_lang", ["설정:언어", "반사실 개발 세트 속도 오차(m/s)"], [[k, _fmt(v, digits=2)] for k, v in sorted(c["devcf_speed_error"].items())])
     if rows:
