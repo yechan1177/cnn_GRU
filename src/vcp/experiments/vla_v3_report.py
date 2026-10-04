@@ -120,6 +120,25 @@ def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -
         for (m, b), c in sorted(cond.items(), key=lambda kv: (kv[0][1], kv[0][0])):
             rows.append([labels.get(m, m), f"{int(round(b * 100))}%", str(c["n"]), _fmt(*c["success"]), _fmt(*c["hazard"]), _fmt(c["collision"][0]), _fmt(c["speed_error"][0], digits=2)])
         _write_table(tables / "v3_driving", ["방법", "예산", "시드", "성공률", "위험 시나리오 성공률", "충돌률", "속도 오차(m/s)"], rows)
+        # 보조(탐색적): 시나리오별 성공률(2%·100%)과 선택 데이터 구성
+        scen = sorted({e["scenario"] for e in ex["episodes"]})
+        srows, crows = [], []
+        for m, b in [("full", 1.0)] + [(m, 0.02) for m in ("care", "mix_trigger", "mix_oracle", "random_shared", "trigger_only")]:
+            rs = G.get(("driving", "test", m, b, steps, True, True, None, None))
+            if not rs:
+                continue
+            per: dict[str, list[float]] = defaultdict(list)
+            for r in rs:
+                eps = r["closed_loop"]["episodes"]
+                sc = episode_success(eps, ex, False)
+                for e, ok in zip(eps, sc):
+                    per[e["scenario"]].append(float(ok))
+            srows.append([labels.get(m, m), f"{int(round(b * 100))}%"] + [_fmt(float(np.mean(per[c]))) for c in scen])
+            sel = [r["selection"] for r in rs]
+            hist = np.mean([np.asarray(x["class_hist"], float) / max(1, sum(x["class_hist"])) for x in sel], axis=0)
+            crows.append([labels.get(m, m), f"{int(round(b * 100))}%", _fmt(float(hist[2] + hist[3])), _fmt(float(np.mean([x["hazard_event_recall"] for x in sel]))), _fmt(float(np.mean([x["label_entropy_norm"] for x in sel]))), _fmt(float(np.mean([x["group_coverage"] for x in sel])))])
+        _write_table(tables / "v3_driving_scenario", ["방법", "예산"] + scen, srows)
+        _write_table(tables / "v3_selection", ["방법", "예산", "위험 프레임 비중", "위험 이벤트 회수율", "라벨 엔트로피(정규화)", "에피소드 포괄률"], crows)
         care, full = cond.get(("care", 0.02)), cond.get(("full", 1.0))
         if care:
             kpi["K1"] = {"value": care["success"][0], "sd": care["success"][1], "n_seeds": care["n"]}
