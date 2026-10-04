@@ -185,3 +185,37 @@ def predict_open_loop(model, data: PolicyData, idx: np.ndarray) -> np.ndarray   
   - `select_shared`: rng 순열 π의 앞 R개가 저장소. None 기준선은 π의 앞 K개(같은 rng 상태의 `select("random")`과 같은 집합). method_score는 1차원만 받는다.
   - 분석 보조: `curation.shared_reservoir_mask(budget_ratio, group, clip_len, rng, reservoir)`(저장소 부분 마스크).
   - 상세: `docs/31_VLA_lite_정책.md` 10절, `docs/30_큐레이션_방법_정의.md` 6절.
+
+## v4 추가 계약(A15)(2026-10-04, docs/36)
+
+공통 계약은 `docs/36_v4_알고리즘_모델_개선계획.md` 6절이다. 아래는 A15 구현 메모다. 모두 기본값에서 v3와 같다.
+
+### 관측 특징 이력(`vla/obs.py`)
+- `"features"`: float32 [B, H, 32]. 인덱스 k(0..H−1)는 프레임 max(t − k·s, 0)의 특징이다(에피소드 시작에서 잘라 냄, k=0 현재).
+- `FeatureHistory(batch, history=2, stride=2, conf_threshold=0.45, max_det=30)`
+  - `update(frames)` → [B, H, 32]. 링 버퍼 슬롯 (H−1)·s+1개.
+  - `conf_threshold`·`max_det`는 이제 3·4번째 위치다. 키워드로 넘긴다.
+- `stack_feature_history(feats, t, history=2, stride=2)` → [H, D] 또는 [M, H, D]
+- `feature_history_offsets(history, stride)`, 상수 `DEFAULT_FEATURE_HISTORY = DEFAULT_FEATURE_STRIDE = 2`
+- 영상 관측 (t, t−2) 2장과 `HISTORY_OFFSET`, `history_index`는 바뀌지 않았다.
+
+### 폐루프(`vla/closed_loop.py`)
+- `run_closed_loop(..., feature_history: int | None = None, feature_stride: int | None = None)`
+  - None이면 `policy_fn.feature_history`/`policy_fn.feature_stride` 속성을 쓰고, 없으면 2/2다(각각 따로 결정).
+  - A14 `make_policy_fn`은 반환 함수에 모델 설정의 두 속성을 붙인다.
+  - 결과 `config["feature_history"]`, `config["feature_stride"]`에 실제 값을 기록한다.
+- `resolve_feature_history(policy_fn, feature_history=None, feature_stride=None) -> (H, s)`(공개 헬퍼)
+
+### 선별(`vla/curation.py`)
+- `select_shared(..., per_group_cap: int | None = None, info: dict | None = None)`
+  - c가 주어지면 점수 몫(저장소 밖 점수 상위)에서 group(VLA 스위트에서는 에피소드 id `pool["ep"]`)당 최대 c개 클립을 고른다.
+  - 상한 때문에 못 채운 자리는 상한을 무시한 다음 점수 순으로 채운다. 선택량은 v3와 같다. `info["n_cap_overflow"]`·INFO 로그로 남긴다.
+  - 저장소와 rng 소비는 c와 무관하다. 무작위 기준선(None 점수)은 c를 무시한다.
+  - `info` 키: `k`, `n_reservoir`, `n_score`, `per_group_cap`, `n_cap_overflow`, `n_score_groups`
+
+### 학습 쪽과 맞출 점(A14·v4 스위트)
+- 학습 `PolicyData.observation(idx, history, stride)`는 group 연속 구간 시작에서 잘라 낸다.
+- v3 스위트는 group으로 **클립 id**를 넘긴다. 이대로면 학습 이력은 클립 시작에서, 폐루프 이력은 에피소드 시작에서 잘린다.
+  - H=8, s=2에서는 30프레임 클립의 앞 14프레임이 다르다.
+  - v4 스위트에서 어느 쪽을 쓸지 명시해야 한다. 상세: `docs/29_VLA_시뮬레이터_폐루프.md` 10.3절.
+- 상세·측정: `docs/29_VLA_시뮬레이터_폐루프.md` 10절, `docs/30_큐레이션_방법_정의.md` 7절.
