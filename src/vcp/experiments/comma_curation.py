@@ -116,6 +116,7 @@ def prepare_fold(cfg: CurationSuiteConfig, fold_id: int) -> Path:
         seed_mask=seed_mask,
         pool_mask=pool_mask,
         event_score=probs[:, BRAKING].astype(np.float32),
+        probs=probs.astype(np.float32),  # v4 위험 맥락 보조 헤드 타깃(docs/36 P3)
         entropy=entropy_norm(probs),
         event_sim=_scorer_sim(cfg, d).astype(np.float32),
         ittc=np.maximum(v2[:, V2_KEYS.index("lead_inv_ttc")], v2[:, V2_KEYS.index("vru_approach")]).astype(np.float32),
@@ -175,6 +176,7 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
             reservoir=float(job.get("reservoir", cfg.reservoir)),
             entropy=F["entropy"] if method == "care" else None,
             lam=float(job.get("lam", cfg.lam)) if method == "care" else 0.0,
+            **({"per_group_cap": job["per_group_cap"]} if job.get("per_group_cap") is not None else {}),  # v4 S1
         )
         mask &= pool_clip >= 0
     else:
@@ -196,6 +198,14 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
     train_idx = np.where(mask)[0]
     tokens = np.tile(encode_instruction(INSTRUCTION), (n, 1))
     use_feat = bool(job.get("use_features", False))  # v3: 검출 특징 토큰(YOLO 검출 기반 v1+v2) 입력
+    # v4(docs/36): 정책 블록 설정(시간 특징 인코더·보조 헤드·지시문 드롭아웃). 비어 있으면 v3와 같다.
+    pparams = dict(job.get("policy_params") or {})
+    extra_data: dict[str, Any] = {}
+    if pparams.get("aux_weight", 0.0) > 0:
+        if "probs" not in F:
+            raise ValueError("보조 헤드에는 fold 캐시의 점수기 확률(probs)이 필요합니다. prepare_fold를 다시 실행하세요.")
+        extra_data["aux_targets"] = F["probs"].astype(np.float32)
+        pparams["aux_classes"] = int(F["probs"].shape[1])
     data = PolicyData(
         images=ArrayImageSource(d["frames"]),
         group=pool_clip,
@@ -204,8 +214,9 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
         tokens=tokens,
         domain="driving",
         **({"features": d["X_v1v2"].astype(np.float32)} if use_feat else {}),
+        **extra_data,
     )
-    pcfg = PolicyConfig(chunk=CHUNK, steps=job["steps"], batch=cfg.batch, seed=job["seed"], threads=1, **({"use_features": True} if use_feat else {}))
+    pcfg = PolicyConfig(chunk=CHUNK, steps=job["steps"], batch=cfg.batch, seed=job["seed"], threads=1, **({"use_features": True} if use_feat else {}), **pparams)
     model, log = train_policy(data, train_idx, pcfg)
     # 평가: 테스트 블록(연속 구간)을 그룹으로
     test_seg = _segments(F["test_mask"])
@@ -223,6 +234,7 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
     result = {
         "key": job["key"],
         "job": {k: v for k, v in job.items() if k != "cfg"},
+        "policy_params": pparams,
         "selection": selection_stats(mask, d["y"], np.where(pool_seg >= 0, pool_seg, -1), 4, (BRAKING,)),
         "n_train_frames": int(len(train_idx)),
         "train_log": {k: v for k, v in log.items() if k != "loss_curve"},
