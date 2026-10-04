@@ -242,10 +242,67 @@ def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -
     rows = [[k, TARGETS[k][0], TARGETS[k][1], v2[k], show(k), judge(k)] for k in TARGETS]
     _write_table(tables / "v3_kpi", ["ID", "지표", "목표", "v2", "v3", "판정"], rows)
     kpi["judgement"] = {k: judge(k) for k in TARGETS}
+    try:
+        _figures(root, kpi, cond if ex is not None else {})
+    except Exception as exc:  # 그림 실패가 집계를 막지 않게 한다
+        logger.warning("v3 그림 생성 실패: %s", exc)
     (root / "summary").mkdir(parents=True, exist_ok=True)
     (root / "summary" / "v3_kpi.json").write_text(json.dumps(kpi, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     logger.info("v3 KPI: %s", kpi["judgement"])
     return kpi
+
+
+V2_POINTS = {"K1": 0.751, "K2": 0.84, "K3": 0.671, "K7": 0.523}
+GOALS = {"K1": 0.80, "K2": 0.90, "K3": 0.75, "K7": 0.65}
+
+
+def _figures(root: Path, kpi: dict[str, Any], cond: dict[tuple[str, float], dict[str, Any]]) -> None:
+    """그림 2종: (a) 비율형 KPI의 v2·v3·목표, (b) 예산별 주행 성공률."""
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    try:
+        import koreanize_matplotlib  # noqa: F401  (한글 글꼴)
+    except ModuleNotFoundError:  # pragma: no cover
+        pass
+    out = root / "summary" / "figures"
+    out.mkdir(parents=True, exist_ok=True)
+    ks = [k for k in ("K1", "K2", "K3", "K7") if k in kpi]
+    if ks:
+        fig, ax = plt.subplots(figsize=(6.4, 3.4))
+        x = np.arange(len(ks))
+        ax.bar(x - 0.2, [V2_POINTS[k] for k in ks], 0.38, label="v2", color="#9aa5b1")
+        ax.bar(x + 0.2, [kpi[k]["value"] for k in ks], 0.38, label="v3", color="#2b6cb0")
+        for i, k in enumerate(ks):
+            ax.plot([i - 0.42, i + 0.42], [GOALS[k]] * 2, color="#c53030", lw=1.6, ls="--", label="목표" if i == 0 else None)
+        ax.set_xticks(x, [f"{k}\n{TARGETS[k][0][:12]}" for k in ks], fontsize=8)
+        ax.set_ylim(0, 1.05)
+        ax.legend(fontsize=8)
+        ax.set_ylabel("값")
+        fig.tight_layout()
+        fig.savefig(out / "fig_v3_kpi.png", dpi=160)
+        plt.close(fig)
+    if cond:
+        fig, ax = plt.subplots(figsize=(5.6, 3.4))
+        for m, lab, c in (("care", "CARE", "#2b6cb0"), ("random_shared", "무작위(공유 저장소)", "#718096")):
+            pts = sorted((b, v["success"][0], v["success"][1]) for (mm, b), v in cond.items() if mm == m)
+            if pts:
+                b_, mu, sd = map(np.asarray, zip(*pts))
+                ax.errorbar(100 * b_, mu, yerr=sd, marker="o", capsize=3, label=lab, color=c)
+        if ("full", 1.0) in cond:
+            ax.axhline(cond[("full", 1.0)]["success"][0], color="k", ls=":", label="전체(100%)")
+        ax.axhline(0.80, color="#c53030", ls="--", lw=1, label="K1 목표")
+        ax.set_xscale("log")
+        ax.set_xticks([1, 2, 5], ["1%", "2%", "5%"])
+        ax.set_xlabel("저장 예산")
+        ax.set_ylabel("폐루프 성공률")
+        ax.legend(fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out / "fig_v3_budget.png", dpi=160)
+        plt.close(fig)
 
 
 def main() -> None:

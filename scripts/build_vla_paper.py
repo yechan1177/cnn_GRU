@@ -11,6 +11,7 @@
 - `{{table:이름}}`     : summary/tables/이름.md 또는 paper/sections_vla/tables/이름.md
 - `{{fig:파일|캡션}}`  : paper/figures/파일 이미지와 캡션
 - `{{section:이름}}`   : paper/sections_vla/이름.md 포함
+- `{{s:k:경로}}`       : v3 KPI(v3_kpi.json) 값. 경로는 ':'로 구분(예: k:K1:value, k:comparisons:care_vs_mix_trigger_b0.02:lo)
 - `{{이름}}`           : vla_stats.json 최상위 값(문자열 그대로)
 
 사용: python scripts/build_vla_paper.py [--root experiments/exp_110_vla_curation]
@@ -120,6 +121,11 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
         if key.startswith("cp:"):  # 실주행 fold 대응 차이: cp:<비교>:<예산>:<지표>:<diff|lo|hi>
             _, comp, b, metric, field = key.split(":")
             return stats[f"comma_pair:{comp}:{b}:{metric}"][field]
+        if key.startswith("k:"):  # v3 KPI: k:<경로...>
+            v: Any = KPI
+            for part in key.split(":")[1:]:
+                v = v[part]
+            return v
         if key.startswith(("ct:", "ctt:")):
             kind, comp, field = key.split(":", 2)
             entry = stats["confirm_tests"][comp]
@@ -135,7 +141,7 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                 name = body[6:]
                 if name == "pool_distribution":
                     return pool_table(stats)
-                for base in (root / "summary" / "tables", SECTIONS / "tables"):
+                for base in (root / "summary" / "tables", V3_TABLES[0] if V3_TABLES else root, SECTIONS / "tables"):
                     p = base / f"{name}.md"
                     if p.exists():
                         return p.read_text(encoding="utf-8").strip()
@@ -156,7 +162,7 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                     bt = stats["bootstrap"][key]
                     return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]".replace("-", "−")
                 v = lookup(key)
-                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
+                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:", "k:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
                 if kind == "s" and signed and isinstance(v, (int, float)) and math.isfinite(float(v)):
                     txt = f"{float(v):+.{3 if digits is None else digits}f}"
                     return txt.replace("-", "−")
@@ -178,14 +184,23 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
 
 
 MISSING: list[str] = []
+KPI: dict[str, Any] = {}
+V3_TABLES: list[Path] = []
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="experiments/exp_110_vla_curation")
     ap.add_argument("--out", default=str(PAPER / "manuscript_vla_ko.md"))
+    ap.add_argument("--v3-root", default="experiments/exp_120_vla_v3", help="v3 KPI 결과 루트(k: 자리표시자, v3 표·그림)")
     args = ap.parse_args()
     root = Path(args.root)
+    v3 = Path(args.v3_root)
+    V3_TABLES.append(v3 / "summary" / "tables")
+    if (v3 / "summary" / "v3_kpi.json").exists():
+        KPI.update(json.loads((v3 / "summary" / "v3_kpi.json").read_text(encoding="utf-8")))
+        for p in (v3 / "summary" / "figures").glob("*.png") if (v3 / "summary" / "figures").exists() else []:
+            shutil.copy2(p, PAPER / "figures" / p.name)
     stats = json.loads((root / "summary" / "vla_stats.json").read_text(encoding="utf-8"))
     stats.update(derived(stats))
     fig_src = root / "summary" / "figures"
