@@ -206,6 +206,9 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("보조 헤드에는 fold 캐시의 점수기 확률(probs)이 필요합니다. prepare_fold를 다시 실행하세요.")
         extra_data["aux_targets"] = F["probs"].astype(np.float32)
         pparams["aux_classes"] = int(F["probs"].shape[1])
+    if int(pparams.get("feature_history", 2)) > 2:
+        # 특징 프리롤(docs/36 2.1): 특징 이력은 연속 구간(세그먼트) 시작에서 자른다. 영상·행동은 클립 안에서만 쓴다.
+        extra_data["feature_group"] = np.where(pool_seg >= 0, pool_seg, -1 - np.arange(n))
     data = PolicyData(
         images=ArrayImageSource(d["frames"]),
         group=pool_clip,
@@ -221,7 +224,8 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
     # 평가: 테스트 블록(연속 구간)을 그룹으로
     test_seg = _segments(F["test_mask"])
     test_idx = np.where(test_seg >= 0)[0]
-    eval_data = replace(data, group=np.where(test_seg >= 0, test_seg, -1 - np.arange(n)))
+    eval_group = np.where(test_seg >= 0, test_seg, -1 - np.arange(n))
+    eval_data = replace(data, group=eval_group, **({"feature_group": eval_group} if "feature_group" in extra_data else {}))
     pred = predict_open_loop(model, eval_data, test_idx)
     target = chunk_targets(d["accel"], eval_data.group, test_idx, CHUNK)
     err = np.abs(pred - target)
