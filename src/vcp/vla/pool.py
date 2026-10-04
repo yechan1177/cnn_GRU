@@ -5,7 +5,10 @@ from __future__ import annotations
 각 에피소드는 `SimEnv`를 내부 전문가 모드(`step(None)`, IDM + 반응 지연)로 끝까지 돌려 만든다.
 - 시나리오: `sim.dataset.scenario_for_seed(seed, domain)` (기존 합성 데이터셋과 같은 규칙)
 - 스타일·패러프레이즈: 별도 난수 `random.Random(seed * 104729 + 3)`로 결정(시뮬레이터 난수와 독립)
-- 특징: `sim.dataset`과 같은 방식(v1/v2, conf 0.45, max_det 30)으로 노이즈 검출에서 계산
+- 특징: `sim.dataset`과 같은 방식(v1/v2, conf 0.45, max_det 30)으로 노이즈 검출에서 계산.
+  폐루프와 같은 계산 경로를 보장하려고 `obs.OnlineFeatureTracker`를 쓴다
+- v3 플래그(`collision_pushback`, `decouple_initial_speed`)는 `SimEnv`에 그대로 전달하고 meta config에 기록한다.
+  기본값(True, False)이면 기존 풀과 같은 값을 만든다. 저장 형식은 바뀌지 않는다
 - 렌더링용 GT 박스: 프레임별 가변 개수를 `box_ptr`(CSR 오프셋)/`boxes`로 압축 저장
 
 저장 형식(`<out>.npz` + `<out>.meta.json`, N=전체 프레임, M=전체 GT 박스)
@@ -26,7 +29,6 @@ from typing import Any
 
 import numpy as np
 
-from ..features import build_feature_extractor
 from ..sim.camera import DetectorNoiseConfig
 from ..sim.dataset import scenario_for_seed
 from ..sim.env import SimEnv
@@ -39,10 +41,10 @@ from .instructions import (
     sample_style,
     styles_for_domain,
 )
+from .obs import FEATURE_MAX_DET, OnlineFeatureTracker
 
 logger = logging.getLogger(__name__)
 
-FEATURE_MAX_DET = 30
 _FLOAT_KEYS = ("t", "ego_v", "ego_a", "ttc", "expert_cmd", "horizon_y", "v_target")
 
 
@@ -58,6 +60,9 @@ class PoolConfig:
     domain: str = "driving"
     workers: int = 4
     conf_threshold: float = 0.45
+    # v3(docs/33): 충돌 시 자차 되밀기(B3), 스타일 초기 속도 분리(B1). 기본값은 기존 동작
+    collision_pushback: bool = True
+    decouple_initial_speed: bool = False
 
 
 def style_for_seed(seed: int, domain: str) -> tuple[DrivingStyle, int]:
@@ -80,9 +85,10 @@ def _episode_worker(args: tuple[int, int, PoolConfig]) -> dict[str, Any]:
         duration_s=cfg.duration_s,
         noise=DetectorNoiseConfig(level=cfg.noise_level),
         style=style,
+        collision_pushback=cfg.collision_pushback,
+        decouple_initial_speed=cfg.decouple_initial_speed,
     )
-    v1 = build_feature_extractor("v1", conf_threshold=cfg.conf_threshold, max_det=FEATURE_MAX_DET)
-    v2 = build_feature_extractor("v2", conf_threshold=cfg.conf_threshold, max_det=FEATURE_MAX_DET)
+    tracker = OnlineFeatureTracker(conf_threshold=cfg.conf_threshold, max_det=FEATURE_MAX_DET)
     x1: list[list[float]] = []
     x2: list[list[float]] = []
     cols: dict[str, list[float]] = {k: [] for k in _FLOAT_KEYS}
@@ -90,8 +96,9 @@ def _episode_worker(args: tuple[int, int, PoolConfig]) -> dict[str, Any]:
     box_list: list[np.ndarray] = []
     info = env.reset()
     while True:
-        x1.append(v1.update(info.frame))
-        x2.append(v2.update(info.frame))
+        f1, f2 = tracker.update(info.frame)
+        x1.append(f1)
+        x2.append(f2)
         labels.append(info.label)
         cols["t"].append(info.t)
         cols["ego_v"].append(info.ego_v)

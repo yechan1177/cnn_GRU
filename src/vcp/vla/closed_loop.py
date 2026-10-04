@@ -7,6 +7,9 @@ from __future__ import annotations
 - image: uint8 [B,64,64,6] = (render_frame(프레임 t), render_frame(프레임 max(t−2, 0)))
 - tokens: int64 [B,L] = encode_instruction(영어 지시문)
 - proprio: float32 [B,1] = ego_v / speed_scale(domain)
+- features(v3): float32 [B,2,32] = (프레임 t, 프레임 max(t−2, 0))의 v1+v2 검출 특징.
+  에피소드마다 `obs.OnlineFeatureTracker`(풀과 같은 추출기·순서·conf 0.45·max_det 30)를 두고
+  매 프레임 노이즈 검출(`info.frame`)로 갱신한다. 정책이 쓰지 않으면 무시해도 된다
 정책 출력(물리 단위 가속도 명령, m/s^2)은 `SimEnv.step(cmd)`로 다음 프레임 동안 유지된다
 (반응 지연 큐 없이 액추에이터 1차 지연만 적용).
 
@@ -15,6 +18,13 @@ from __future__ import annotations
 
 프레임 0은 `SimEnv.reset()`이 만든다(내부 전문가, 반응 지연 큐가 0으로 차 있어 사실상 무명령 구간).
 정책은 프레임 0..n−2의 관측으로 명령을 내고, 지표는 프레임 0..n−1 전체에서 계산한다.
+
+v3 벤치마크 옵션(docs/33)
+- `collision_pushback`, `decouple_initial_speed`: `SimEnv`에 그대로 전달한다(전문가 참조에도 같게 적용).
+- 반사실 언어 평가(B2): `make_test_specs(..., counterfactual=True)`는 (시나리오, 시드)마다 세 스타일 사양을
+  모두 만든다. 같은 시드라 주변 객체 시나리오가 같고 지시문만 다르다(decouple_initial_speed=True면 초기 속도도 같다).
+  결과 dict의 `"counterfactual"`은 사양이 이 구조(모든 (시나리오, 시드) 묶음이 세 스타일을 1개씩 가짐)인지 기록한다.
+  스타일별 speed_error·headway_mean은 `by_style`에 있다.
 
 에피소드 지표 정의
 - collision: 에피소드 중 한 번이라도 충돌(경로 객체까지 거리 < 0.3 m)이 있었는지
@@ -44,6 +54,7 @@ hazard_success_rate는 위험 시나리오 에피소드만으로 계산하고, s
 import logging
 import math
 import time
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -55,7 +66,7 @@ from ..sim.env import SimEnv, StepInfo
 from ..sim.render import render_frame
 from ..sim.world import scenario_types_for_domain
 from .instructions import N_PARAPHRASES, STYLE_NAMES, encode_instruction, instruction_text, styles_for_domain
-from .obs import HISTORY_OFFSET, IMG_SIZE, proprio
+from .obs import HISTORY_OFFSET, IMG_SIZE, FeatureHistory, proprio
 
 logger = logging.getLogger(__name__)
 
@@ -82,22 +93,50 @@ class EpisodeSpec:
     paraphrase: int
 
 
-def make_test_specs(domain: str, n_per_cell: int, seed_base: int) -> list[EpisodeSpec]:
+def make_test_specs(domain: str, n_per_cell: int, seed_base: int, counterfactual: bool = False) -> list[EpisodeSpec]:
     """시나리오 × 스타일 칸마다 n_per_cell개씩 결정적으로 만든다.
 
-    시드는 seed_base부터 연속으로 붙이고, 패러프레이즈는 전체 순번 % N_PARAPHRASES로 고르게 돌린다.
+    - counterfactual=False(기존): 시드는 seed_base부터 사양마다 연속으로 붙이고,
+      패러프레이즈는 전체 순번 % N_PARAPHRASES로 고르게 돌린다.
+    - counterfactual=True(반사실 언어 평가, B2): 시나리오마다 시드 n_per_cell개를 seed_base부터 연속으로 붙이고
+      (시나리오, 시드)마다 세 스타일 사양을 STYLE_NAMES 순서로 모두 만든다.
+      패러프레이즈는 시드 % N_PARAPHRASES로 정해 세 스타일이 같은 번호를 쓴다.
+      사양 수는 시나리오 수 × n_per_cell × 3이고, 고유 시드 수는 시나리오 수 × n_per_cell이다.
     """
 
     if n_per_cell <= 0:
         raise ValueError(f"n_per_cell은 양수여야 한다: {n_per_cell}")
     specs: list[EpisodeSpec] = []
     idx = 0
+    if counterfactual:
+        for scenario in scenario_types_for_domain(domain):
+            for _ in range(n_per_cell):
+                seed = seed_base + idx
+                paraphrase = seed % N_PARAPHRASES
+                specs.extend(EpisodeSpec(scenario, seed, style, paraphrase) for style in STYLE_NAMES)
+                idx += 1
+        return specs
     for scenario in scenario_types_for_domain(domain):
         for style in STYLE_NAMES:
             for _ in range(n_per_cell):
                 specs.append(EpisodeSpec(scenario, seed_base + idx, style, idx % N_PARAPHRASES))
                 idx += 1
     return specs
+
+
+def is_counterfactual(specs: list[EpisodeSpec]) -> bool:
+    """모든 (시나리오, 시드) 묶음이 세 스타일을 정확히 1개씩, 같은 패러프레이즈로 가지면 True."""
+
+    groups: dict[tuple[str, int], list[EpisodeSpec]] = defaultdict(list)
+    for s in specs:
+        groups[(s.scenario, s.seed)].append(s)
+    if not groups:
+        return False
+    full = set(STYLE_NAMES)
+    for items in groups.values():
+        if len(items) != len(full) or {s.style for s in items} != full or len({s.paraphrase for s in items}) != 1:
+            return False
+    return True
 
 
 def _nanmean(values: list[float | None]) -> float | None:
@@ -210,6 +249,8 @@ def run_closed_loop(
     fps: float = 15.0,
     duration_s: float = 30.0,
     noise_level: float = 1.0,
+    collision_pushback: bool = True,
+    decouple_initial_speed: bool = False,
 ) -> dict[str, Any]:
     """폐루프 평가를 실행해 에피소드별·시나리오별·스타일별·전체 지표를 반환한다.
 
@@ -217,6 +258,8 @@ def run_closed_loop(
         policy_fn: 배치 관측 → float32 [B] 가속도 명령(m/s^2). None이면 지연 없는 IDM 전문가 참조.
         specs: 테스트 에피소드 목록(`make_test_specs`).
         domain: "driving" | "robot". specs의 시나리오 도메인과 같아야 한다.
+        collision_pushback: False면 충돌 시 자차를 뒤로 밀지 않는다(v3 B3). 전문가 참조에도 같게 적용한다.
+        decouple_initial_speed: True면 스타일 초기 속도를 시나리오 기본 속도 기준으로 정한다(v3 B1).
     """
 
     if not specs:
@@ -229,7 +272,16 @@ def run_closed_loop(
 
     t0 = time.perf_counter()
     envs = [
-        SimEnv(s.scenario, s.seed, fps=fps, duration_s=duration_s, noise=DetectorNoiseConfig(level=noise_level), style=styles[s.style])
+        SimEnv(
+            s.scenario,
+            s.seed,
+            fps=fps,
+            duration_s=duration_s,
+            noise=DetectorNoiseConfig(level=noise_level),
+            style=styles[s.style],
+            collision_pushback=collision_pushback,
+            decouple_initial_speed=decouple_initial_speed,
+        )
         for s in specs
     ]
     b = len(envs)
@@ -242,25 +294,33 @@ def run_closed_loop(
     h, w = IMG_SIZE
     slots = HISTORY_OFFSET + 1
     buf = np.zeros((slots, b, h, w, 3), dtype=np.uint8) if policy_fn is not None else None
-    t_render = t_policy = 0.0
+    # 검출 특징 버퍼(영상과 같은 t, t−2 규칙). 전문가 참조는 관측을 쓰지 않으므로 계산하지 않는다
+    feat_hist = FeatureHistory(b) if policy_fn is not None else None
+    t_render = t_policy = t_features = 0.0
 
     for t in range(n_frames - 1):
         if policy_fn is None:
             cmds = np.asarray([env.expert_command() for env in envs], dtype=np.float32)
         else:
-            assert buf is not None
+            assert buf is not None and feat_hist is not None
             tr = time.perf_counter()
             slot = t % slots
             for i, info in enumerate(infos):
                 buf[slot, i] = render_frame(info.gt_boxes, info.horizon_y, domain)
+            tf = time.perf_counter()
+            features = feat_hist.update([info.frame for info in infos])
+            dt_feat = time.perf_counter() - tf
             prev_slot = max(t - HISTORY_OFFSET, 0) % slots
             obs = {
                 "image": np.concatenate([buf[slot], buf[prev_slot]], axis=-1),
                 "tokens": tokens,
                 "proprio": proprio(np.asarray([info.ego_v for info in infos], dtype=np.float32), domain),
+                "features": features,
             }
             tp = time.perf_counter()
-            t_render += tp - tr
+            # render_s는 기존처럼 렌더링 + 관측 배치 구성 시간, features_s는 특징 갱신 시간
+            t_features += dt_feat
+            t_render += (tp - tr) - dt_feat
             out = policy_fn(obs)
             t_policy += time.perf_counter() - tp
             cmds = np.asarray(out, dtype=np.float32).reshape(-1)
@@ -275,14 +335,29 @@ def run_closed_loop(
         for spec, env, hist in zip(specs, envs, history)
     ]
     wall = time.perf_counter() - t0
+    counterfactual = is_counterfactual(specs)
     result = {
         "mode": "expert" if policy_fn is None else "policy",
-        "config": {"domain": domain, "fps": fps, "duration_s": duration_s, "noise_level": noise_level, "n_episodes": b},
+        "config": {
+            "domain": domain,
+            "fps": fps,
+            "duration_s": duration_s,
+            "noise_level": noise_level,
+            "n_episodes": b,
+            "collision_pushback": bool(collision_pushback),
+            "decouple_initial_speed": bool(decouple_initial_speed),
+        },
+        "counterfactual": counterfactual,
         "episodes": episodes,
         "by_scenario": _group(episodes, "scenario"),
         "by_style": _group(episodes, "style"),
         "overall": aggregate(episodes),
-        "timing": {"wall_s": round(wall, 3), "render_s": round(t_render, 3), "policy_s": round(t_policy, 3)},
+        "timing": {
+            "wall_s": round(wall, 3),
+            "render_s": round(t_render, 3),
+            "features_s": round(t_features, 3),
+            "policy_s": round(t_policy, 3),
+        },
         "specs": [asdict(s) for s in specs],
     }
     logger.info(

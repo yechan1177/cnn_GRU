@@ -15,6 +15,13 @@ from __future__ import annotations
 스타일(`style`)을 주어도 위 순서는 그대로 두고, 뽑은 값 중 t_head/a_max/b_comf와 v0만 덮어쓴다.
 따라서 같은 시드면 스타일과 무관하게 주변 객체 시나리오가 같다.
 
+v3 플래그(docs/33, 기본값은 기존 동작이며 회귀 fixture와 비트 단위로 같다)
+- `collision_pushback`(기본 True): False면 충돌 시 자차 위치를 뒤로 되돌리지 않는다(B3).
+  자차 속도를 경로 객체 속도 이하로 제한하는 처리와 충돌 집계는 그대로다.
+- `decouple_initial_speed`(기본 False): True이고 스타일이 있으면 초기 속도를
+  `v0_scenario × U(0.85, 1.0)`으로 정한다(B1, 지시 목표 속도가 초기 상태로 새는 것을 막는다).
+  같은 uniform 호출을 같은 위치에서 1회 하므로 난수 소비 순서·횟수는 바뀌지 않는다.
+
 프레임 규약
 - `reset()`은 프레임 0을 만든다. 프레임 0의 물리 구간은 내부 전문가(반응 지연 큐)로 진행한다.
   반응 지연 큐는 0으로 채워져 시작하므로(지연 ≥ 서브스텝 2개), 이 구간의 실제 명령은 사실상 0이다.
@@ -97,6 +104,8 @@ class SimEnv:
         *,
         cam: CameraConfig | None = None,
         thresholds: LabelThresholds | None = None,
+        collision_pushback: bool = True,
+        decouple_initial_speed: bool = False,
     ) -> None:
         if fps <= 0 or duration_s <= 0:
             raise ValueError(f"fps와 duration_s는 양수여야 한다: fps={fps}, duration_s={duration_s}")
@@ -105,6 +114,8 @@ class SimEnv:
         self.fps = float(fps)
         self.duration_s = float(duration_s)
         self.style = style
+        self.collision_pushback = bool(collision_pushback)
+        self.decouple_initial_speed = bool(decouple_initial_speed)
         self.instruction_style: str | None = style.name if style is not None else None
         self.prof: DomainProfile = profile_for_scenario(scenario)
         self.cam = cam or CameraConfig(cam_height_m=self.prof.cam_height_m, max_range_m=self.prof.max_range_m)
@@ -142,7 +153,9 @@ class SimEnv:
         self.t_head, self.a_max, self.b_comf, self.v0 = t_head, a_max, b_comf, v0
         self.v_target = v0
         self.cmd_queue: list[float] = [0.0] * self.delay_steps
-        self.ego_x, self.ego_v, self.ego_a = 0.0, v0 * rng.uniform(0.85, 1.0), 0.0
+        # 초기 속도 기준: 기본은 (스타일 반영) v0, decouple이면 시나리오 기본 속도(B1). 난수 1회 소비는 같다
+        v_init_base = self.v0_scenario if (self.decouple_initial_speed and self.style is not None) else v0
+        self.ego_x, self.ego_v, self.ego_a = 0.0, v_init_base * rng.uniform(0.85, 1.0), 0.0
         self.pitch_noise = 0.0
         self.collisions = 0
         self.collisions_moving = 0
@@ -242,7 +255,9 @@ class SimEnv:
             self.collisions += 1
             moving = self.ego_v > MOVING_SPEED_EPS[self.prof.name]
             self.collisions_moving += int(moving)
-            self.ego_x = self.ego_x - (COLLISION_GAP_M - gap_now)
+            if self.collision_pushback:
+                # 기존 동작: 충돌 거리만큼 자차를 뒤로 되돌린다(로봇 정지 중 피충돌 시 이동 거리가 음수가 될 수 있다)
+                self.ego_x = self.ego_x - (COLLISION_GAP_M - gap_now)
             self.ego_v = min(self.ego_v, v_obs_now)
             collided = True
         self.step_count += 1
@@ -343,6 +358,11 @@ class SimEnv:
                 "domain": self.prof.name,
             }
         )
+        # v3 플래그는 기본값이 아닐 때만 기록한다(기본값에서는 기존 meta와 같게 유지)
+        if not self.collision_pushback:
+            meta["collision_pushback"] = False
+        if self.decouple_initial_speed:
+            meta["decouple_initial_speed"] = True
         if self.style is not None:
             meta.update(
                 {

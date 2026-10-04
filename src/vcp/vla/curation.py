@@ -7,6 +7,8 @@
 - `select_clips`, `event_coverage`: 기존 VLA 스위트(`experiments/vla_suite.py`)가 쓰는 단순 선별·평가 함수.
 - `METHODS`, `clip_starts`, `select`, `selection_stats`: 논문 비교 실험용 10개 선별법과 선별 품질 지표
   (계약: `docs/28a_VLA_모듈_인터페이스_계약.md`, 방법 정의: `docs/30_큐레이션_방법_정의.md`).
+- `select_shared`, `shared_reservoir_mask`(v3 M1): 시드별 무작위 저장소를 모든 혼합 방법이 공유하고
+  점수 몫만 방법마다 다르게 고르는 선별(docs/33, docs/30 6절).
 
 통제 변수
 - 모든 방법은 같은 클립 길이(`clip_len`)와 같은 클립 수 k = max(1, round(budget_ratio·N/clip_len))를 고른다.
@@ -357,6 +359,127 @@ def select(
     logger.debug(
         "선별 %s: 예산 %.3f, 클립 %d/%d개(%d 프레임), %.3f초",
         method, budget_ratio, k, n_clips, int(mask.sum()), time.perf_counter() - t0,
+    )
+    return mask
+
+
+def _shared_plan(
+    budget_ratio: float, group: np.ndarray, clip_len: int, rng: np.random.Generator, reservoir: float
+) -> tuple[np.ndarray, int, int, np.ndarray]:
+    """공유 저장소 선별의 공통 준비: (클립 시작점, K, R, 클립 순열)을 반환한다.
+
+    K는 `select`와 같은 규칙(max(1, round(β·N/L)), 유효 클립 수로 상한), R = round(ρ·K).
+    rng는 여기서 **클립 순열 1회만** 소비한다. 따라서 같은 시드라면 순열(→ 저장소)이 방법과 무관하게 같다.
+    유효 클립이 없으면 K = R = 0, 빈 순열을 반환하고 rng를 소비하지 않는다.
+    """
+
+    if not (0.0 < budget_ratio <= 1.0):
+        raise ValueError(f"budget_ratio는 (0, 1] 범위여야 합니다: {budget_ratio}")
+    if not (0.0 <= reservoir <= 1.0):
+        raise ValueError(f"reservoir는 [0, 1] 범위여야 합니다: {reservoir}")
+    n = len(group)
+    starts = clip_starts(group, clip_len)
+    n_clips = len(starts)
+    if n_clips == 0:
+        return starts, 0, 0, np.zeros(0, dtype=np.int64)
+    k_req = max(1, int(round(budget_ratio * n / clip_len)))
+    k = min(k_req, n_clips)
+    if k < k_req:
+        logger.warning("요청 클립 수 %d가 유효 클립 수 %d보다 많아 %d개만 고릅니다.", k_req, n_clips, k)
+    r = int(round(reservoir * k))
+    perm = rng.permutation(n_clips).astype(np.int64)
+    return starts, k, r, perm
+
+
+def shared_reservoir_mask(
+    budget_ratio: float, group: np.ndarray, clip_len: int, rng: np.random.Generator, reservoir: float
+) -> np.ndarray:
+    """`select_shared`가 같은 rng 상태에서 고르는 **공유 저장소** 부분만의 프레임 마스크 bool [N].
+
+    분석용(점수 몫/저장소 몫 분리)이다. `select_shared`와 같은 시드의 **새** Generator를 넘겨야 같은 결과가 나온다.
+    """
+
+    group = np.asarray(group)
+    starts, _, r, perm = _shared_plan(budget_ratio, group, clip_len, rng, reservoir)
+    mask = np.zeros(len(group), dtype=bool)
+    if r > 0:
+        mask[_clip_index(starts[perm[:r]], clip_len).ravel()] = True
+    return mask
+
+
+def select_shared(
+    method_score: np.ndarray | None,
+    budget_ratio: float,
+    group: np.ndarray,
+    clip_len: int,
+    rng: np.random.Generator,
+    reservoir: float,
+    entropy: np.ndarray | None = None,
+    lam: float = 0.0,
+) -> np.ndarray:
+    """공유 저장소 선별(v3 M1, docs/33): 무작위 저장소 R개를 먼저 뽑고, 나머지 K−R개를 방법 점수로 채운다.
+
+    절차
+    1. K = max(1, round(β·N/L))(유효 클립 수로 상한, `select`와 같음), R = round(ρ·K).
+    2. rng로 유효 클립 전체의 순열을 만들고 앞 R개를 저장소로 쓴다. rng에서 가장 먼저 소비하는 난수이므로
+       **같은 시드라면 method_score와 무관하게 같은 R개**가 저장소가 된다.
+    3. 나머지 K−R개는 저장소 밖 클립 가운데 클립 점수 S(c) = max_{t∈c} method_score_t + λ·mean_{t∈c} entropy_t
+       상위로 채운다. 동률은 저장소 추출 **이후** rng 난수로 깬다(저장소에 영향 없음). NaN 점수는 최하위다.
+    4. method_score=None(무작위 기준선)이면 순열의 R..K−1번째 클립으로 채운다. 결과는 순열 앞 K개, 즉
+       공유 저장소를 포함하는 균일 무작위 K개다(같은 rng 상태의 `select("random", ...)`와 같은 클립 집합).
+
+    모든 방법의 선택 프레임 수는 K·L로 같다(유효 클립이 없으면 빈 마스크).
+
+    Args:
+        method_score: 프레임 점수 [N](예: 이벤트 점수, 감속 크기 −a_t, 오라클 라벨) 또는 None.
+        budget_ratio: 저장 예산 비율 β ∈ (0, 1].
+        group: 그룹(에피소드·블록) id [N]. 클립은 같은 값의 연속 구간 안에서만 만든다.
+        clip_len: 클립 길이 L.
+        rng: 저장소·동률 난수 생성기(시드 고정 Generator).
+        reservoir: 저장소 비율 ρ ∈ [0, 1].
+        entropy: 프레임 엔트로피 [N]. lam ≠ 0일 때 필수.
+        lam: 엔트로피 가중치 λ.
+
+    Raises:
+        ValueError: 잘못된 예산·저장소 비율·클립 길이, 입력 길이 불일치, lam ≠ 0인데 entropy 누락,
+            method_score가 1차원이 아닐 때.
+    """
+
+    group = np.asarray(group)
+    n = len(group)
+    if method_score is not None:
+        ms = _check_input("method_score", method_score, n, "select_shared").astype(np.float64)
+        if ms.ndim != 1:
+            raise ValueError(f"method_score는 1차원 [N]이어야 합니다: {ms.shape}")
+    else:
+        ms = None
+    en: np.ndarray | None = None
+    if lam != 0.0 and ms is not None:
+        en = _check_input("entropy", entropy, n, "select_shared(lam≠0)").astype(np.float64)
+    t0 = time.perf_counter()
+    starts, k, r, perm = _shared_plan(budget_ratio, group, clip_len, rng, reservoir)
+    mask = np.zeros(n, dtype=bool)
+    if k == 0:
+        logger.warning("유효 클립이 없습니다(N=%d, clip_len=%d). 빈 마스크를 반환합니다.", n, clip_len)
+        return mask
+    idx = _clip_index(starts, clip_len)
+    res = perm[:r]
+    rest = perm[r:]
+    n_fill = k - r
+    if ms is None or n_fill == 0:
+        fill = rest[:n_fill]
+    else:
+        score = ms[idx[rest]].max(axis=1)
+        if en is not None:
+            score = score + lam * en[idx[rest]].mean(axis=1)
+        fill = rest[_rank_desc(score, rng)[:n_fill]]
+    chosen = np.concatenate([res, fill]).astype(np.int64)
+    if len(chosen) != k or len(np.unique(chosen)) != k:
+        raise RuntimeError(f"select_shared: 고른 클립 수 {len(np.unique(chosen))}개가 예산 {k}개와 다릅니다.")
+    mask[idx[chosen].ravel()] = True
+    logger.debug(
+        "공유 저장소 선별(%s): 예산 %.3f, 클립 %d/%d개(저장소 %d + 몫 %d), %.3f초",
+        "random" if ms is None else "score", budget_ratio, k, len(starts), r, n_fill, time.perf_counter() - t0,
     )
     return mask
 

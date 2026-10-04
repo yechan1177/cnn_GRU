@@ -8,6 +8,7 @@ from __future__ import annotations
 
 구성 요소
 - `VLALitePolicy`: 6채널(t, t−2) CNN + FiLM 언어 조건화 + proprio MLP → 정규화 가속도 청크 [B, chunk]
+  (v3: `use_features=True`이면 검출 특징 토큰 [B,2,32] MLP 출력을 헤드 입력에 결합, docs/33 P1)
 - `ImageSource` / `PoolImageSource`(지연 렌더링 + LRU 상한) / `ArrayImageSource`(미리 만든 프레임)
 - `PolicyData`: 그룹(에피소드·블록) 경계를 지키는 관측(t−2 규칙)·행동 청크 조회
 - `train_policy`: 고정 경사 단계(steps) 학습. 데이터 양과 계산량을 분리한다.
@@ -135,6 +136,11 @@ class PolicyConfig:
     grad_clip: float = 1.0           # 기울기 노름 상한(0 이하면 끔)
     n_curve_bins: int = 30           # 손실 곡선 구간 수
     device: str = "cpu"              # 학습 장치(배포·실험 기본은 CPU, 3080 Ti 학습 시 "cuda")
+    # --- v3 검출 특징 토큰(P1, docs/33). 기본값 False면 v2 모델과 구조·결정성·파라미터 수가 같다 ---
+    use_features: bool = False       # 검출 특징 [B,2,feature_dim](t, t−2)을 헤드 입력에 결합할지
+    feature_dim: int = 32            # 프레임당 특징 차원(v1 16 + v2 16)
+    feature_hidden: int = 64         # 특징 MLP 은닉·출력 차원
+    feature_noise: float = 0.02      # 학습 증강: 특징에 더하는 가우시안 노이즈 σ(augment=True일 때만, 0이면 끔)
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +189,13 @@ class VLALitePolicy(nn.Module):
     - 헤드: concat(vis, lang, proprio) → MLP(256, 256) → chunk.
 
     `use_language=False`이면 언어 모듈을 만들지 않고, FiLM은 항등, 헤드의 언어 입력은 0 벡터인 절제 모델이 된다.
+
+    v3 검출 특징 토큰(`use_features=True`, docs/33 P1)
+    - 입력 features float [B,2,feature_dim](프레임 t, t−2의 v1+v2 특징) → clamp(−3,3)(NaN은 0) → 평탄화 [B,2D]
+      → MLP(2D → feature_hidden → feature_hidden, ReLU) → 헤드 입력 concat(vis, lang, proprio, feat).
+    - 특징은 대부분 [−1,1] 근처라 별도 정규화는 두지 않고 이상치만 자른다.
+    - 특징 모듈은 다른 모든 모듈을 만든 **뒤에** 만든다. use_features=False에서는 만들지 않으므로
+      기존 모델과 파라미터 수·초기화 난수 소비·순전파가 완전히 같다.
     """
 
     def __init__(
@@ -201,6 +214,9 @@ class VLALitePolicy(nn.Module):
         proprio_hidden: int = 32,
         head_hidden: int = 256,
         grid: int = 4,
+        use_features: bool = False,
+        feature_dim: int = 32,
+        feature_hidden: int = 64,
     ) -> None:
         super().__init__()
         if vocab_size < 2:
@@ -214,6 +230,11 @@ class VLALitePolicy(nn.Module):
         self.lang_dim = int(lang_dim)
         self.use_language = bool(use_language)
         self.film_blocks = tuple(film_blocks)
+        if use_features and (feature_dim < 1 or feature_hidden < 1):
+            raise ValueError(f"feature_dim({feature_dim}), feature_hidden({feature_hidden})은 1 이상이어야 합니다.")
+        self.use_features = bool(use_features)
+        self.feature_dim = int(feature_dim)
+        self.feature_hidden = int(feature_hidden) if self.use_features else 0
 
         chans = (in_channels,) + tuple(widths)
         self.blocks = nn.ModuleList(
@@ -235,7 +256,7 @@ class VLALitePolicy(nn.Module):
             nn.Linear(proprio_dim, proprio_hidden), nn.ReLU(), nn.Linear(proprio_hidden, proprio_hidden), nn.ReLU()
         )
         self.head = nn.Sequential(
-            nn.Linear(vis_dim + lang_dim + proprio_hidden, head_hidden),
+            nn.Linear(vis_dim + lang_dim + proprio_hidden + self.feature_hidden, head_hidden),
             nn.ReLU(),
             nn.Linear(head_hidden, head_hidden),
             nn.ReLU(),
@@ -243,11 +264,41 @@ class VLALitePolicy(nn.Module):
         )
         nn.init.normal_(self.head[-1].weight, std=1e-3)
         nn.init.zeros_(self.head[-1].bias)
+        if self.use_features:  # 마지막에 만든다(기존 모듈의 초기화 난수 소비 순서를 바꾸지 않기 위해)
+            self.feat_mlp = nn.Sequential(
+                nn.Linear(2 * self.feature_dim, self.feature_hidden),
+                nn.ReLU(),
+                nn.Linear(self.feature_hidden, self.feature_hidden),
+                nn.ReLU(),
+            )
         self.to(memory_format=torch.channels_last)
 
     @classmethod
     def from_config(cls, cfg: PolicyConfig, vocab_size: int) -> "VLALitePolicy":
-        return cls(vocab_size, chunk=cfg.chunk, vis_dim=cfg.vis_dim, lang_dim=cfg.lang_dim, use_language=cfg.use_language)
+        return cls(
+            vocab_size,
+            chunk=cfg.chunk,
+            vis_dim=cfg.vis_dim,
+            lang_dim=cfg.lang_dim,
+            use_language=cfg.use_language,
+            use_features=cfg.use_features,
+            feature_dim=cfg.feature_dim,
+            feature_hidden=cfg.feature_hidden,
+        )
+
+    def encode_features(self, features: torch.Tensor | None) -> torch.Tensor:
+        """특징 [B,2,feature_dim] → [B,feature_hidden]. NaN은 0, 값은 [−3,3]으로 자른 뒤 MLP에 넣는다.
+
+        Raises:
+            ValueError: use_features=True인데 features가 없거나 형태가 [B,2,feature_dim]이 아닐 때.
+        """
+
+        if features is None:
+            raise ValueError("use_features=True 모델에는 features [B,2,feature_dim] 입력이 필요합니다.")
+        if features.ndim != 3 or features.shape[1] != 2 or features.shape[2] != self.feature_dim:
+            raise ValueError(f"features 형태가 [B,2,{self.feature_dim}]이 아닙니다: {tuple(features.shape)}")
+        f = torch.nan_to_num(features.float(), nan=0.0).clamp(-3.0, 3.0)
+        return self.feat_mlp(f.flatten(1))
 
     def encode_language(self, tokens: torch.Tensor) -> torch.Tensor:
         """토큰 [B,L] → 언어 특징 [B,lang_dim]. 어휘 밖 id는 UNK(1)로 바꾼다. 절제 모델은 0 벡터."""
@@ -261,8 +312,17 @@ class VLALitePolicy(nn.Module):
         mean = emb.sum(1) / mask.sum(1, keepdim=True).clamp_min(1.0)
         return F.relu(self.lang_fc(mean))
 
-    def forward(self, image: torch.Tensor, tokens: torch.Tensor, proprio: torch.Tensor) -> torch.Tensor:
-        """image float [B,6,H,W]([0,1]), tokens int64 [B,L], proprio float [B,1] → 정규화 가속도 [B,chunk]."""
+    def forward(
+        self,
+        image: torch.Tensor,
+        tokens: torch.Tensor,
+        proprio: torch.Tensor,
+        features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """image float [B,6,H,W]([0,1]), tokens int64 [B,L], proprio float [B,1] → 정규화 가속도 [B,chunk].
+
+        features float [B,2,feature_dim]은 use_features=True일 때만 쓰고(필수), False면 무시한다.
+        """
 
         lang = self.encode_language(tokens)
         x = image.mul(4.0).sub_(2.0).contiguous(memory_format=torch.channels_last)  # (x−0.5)/0.25
@@ -276,6 +336,9 @@ class VLALitePolicy(nn.Module):
             x = self.pool(x)
         vis = F.relu(self.vis_fc(x.flatten(1)))
         prop = self.proprio_mlp(proprio)
+        if self.use_features:
+            feat = self.encode_features(features)
+            return self.head(torch.cat([vis, lang, prop, feat], dim=-1))
         return self.head(torch.cat([vis, lang, prop], dim=-1))
 
 
@@ -404,9 +467,11 @@ class PolicyData:
     - `images`: 프레임 소스(ImageSource), `group` [N]: 에피소드·블록 id(같은 값이 **연속 구간**을 이뤄야 한다)
     - `ego_v` [N]: 자차 속도(m/s), `action` [N]: 물리 단위 가속도 행동(m/s²)
     - `tokens` [N,L] int64: 지시문 토큰, `domain`: "driving" | "robot"
+    - `features` [N,D] float32 | None(v3): 프레임별 검출 특징(v1+v2, 보통 D=32). 있으면 관측에 `"features"`를 넣는다.
 
     경계 규칙
     - 관측 = stack_frames(t, t−HISTORY_OFFSET). t−2가 같은 연속 구간의 시작보다 앞이면 구간 첫 프레임을 쓴다.
+    - 특징 = [features[t], features[t−HISTORY_OFFSET]] → [B,2,D]. t−2 인덱스는 영상과 같은 규칙(`prev_index`)을 쓴다.
     - 행동 청크 = action[t : t+chunk], 구간 끝을 넘는 자리는 구간 마지막 값으로 채운다.
     """
 
@@ -416,6 +481,7 @@ class PolicyData:
     action: np.ndarray
     tokens: np.ndarray
     domain: str
+    features: np.ndarray | None = None
     _first: np.ndarray = field(init=False, repr=False)
     _last: np.ndarray = field(init=False, repr=False)
 
@@ -431,6 +497,12 @@ class PolicyData:
             )
         if self.tokens.ndim != 2:
             raise ValueError(f"tokens는 [N,L]이어야 합니다: {self.tokens.shape}")
+        if self.features is not None:
+            self.features = np.asarray(self.features, dtype=np.float32)
+            if self.features.ndim != 2 or len(self.features) != n:
+                raise ValueError(f"features는 [N={n}, D]이어야 합니다: {self.features.shape}")
+            if not np.isfinite(self.features).all():
+                logger.warning("features에 유한하지 않은 값이 있습니다. 모델 입력에서 NaN은 0, ±inf는 ±3으로 처리됩니다.")
         self._first, self._last = _run_bounds(self.group)
 
     def __len__(self) -> int:
@@ -454,7 +526,11 @@ class PolicyData:
         return self.action[self.chunk_index(idx, chunk)]
 
     def observation(self, idx: np.ndarray) -> dict[str, np.ndarray]:
-        """계약 PolicyFn 입력과 같은 형식의 배치 관측 dict."""
+        """계약 PolicyFn 입력과 같은 형식의 배치 관측 dict.
+
+        키: "image" uint8 [B,H,W,6], "tokens" int64 [B,L], "proprio" float32 [B,1],
+        그리고 `features`가 있으면 "features" float32 [B,2,D](0번 = 프레임 t, 1번 = t−HISTORY_OFFSET).
+        """
 
         idx = np.asarray(idx, dtype=np.int64)
         prev = self.prev_index(idx)
@@ -462,7 +538,10 @@ class PolicyData:
         b = len(idx)
         image = _stack_batch(frames[:b], frames[b:])
         prop = np.asarray(_obs().proprio(self.ego_v[idx], self.domain), dtype=np.float32).reshape(b, 1)
-        return {"image": image, "tokens": self.tokens[idx], "proprio": prop}
+        out = {"image": image, "tokens": self.tokens[idx], "proprio": prop}
+        if self.features is not None:
+            out["features"] = np.stack([self.features[idx], self.features[prev]], axis=1)
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -489,6 +568,31 @@ def _to_tensor_batch(obs: dict[str, np.ndarray], device: torch.device) -> tuple[
     tokens = torch.from_numpy(np.asarray(obs["tokens"], dtype=np.int64)).to(device)
     prop = torch.from_numpy(np.asarray(obs["proprio"], dtype=np.float32).reshape(-1, 1)).to(device)
     return image, tokens, prop
+
+
+def _features_tensor(obs: dict[str, np.ndarray], model: "VLALitePolicy", device: torch.device) -> torch.Tensor | None:
+    """모델이 특징을 쓰면 obs["features"] → float [B,2,D] 텐서, 쓰지 않으면 None(키가 있어도 무시).
+
+    Raises:
+        ValueError: use_features=True 모델인데 관측에 "features"가 없을 때.
+    """
+
+    if not model.use_features:
+        return None
+    if "features" not in obs or obs["features"] is None:
+        raise ValueError(
+            "use_features=True 정책에는 관측 dict의 'features' float32 [B,2,%d]가 필요합니다"
+            "(PolicyData.features 또는 폐루프 온라인 특징 계산을 확인하세요)." % model.feature_dim
+        )
+    return torch.from_numpy(np.ascontiguousarray(obs["features"], dtype=np.float32)).to(device)
+
+
+def add_feature_noise(features: np.ndarray, rng: np.random.Generator, sigma: float) -> np.ndarray:
+    """특징 증강: 가우시안 노이즈 N(0, σ²)를 더한 float32 사본을 반환한다(σ ≤ 0이면 그대로)."""
+
+    if sigma <= 0:
+        return features
+    return (features + rng.normal(0.0, sigma, size=features.shape)).astype(np.float32)
 
 
 def shift_images(image: np.ndarray, rng: np.random.Generator, max_shift: int = 2) -> np.ndarray:
@@ -556,6 +660,8 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
     - 손실: 청크 위치 가중 SmoothL1(Huber).
     - 최적화: AdamW, 선형 워밍업 + cosine 감쇠(→0), 기울기 노름 자르기.
     - 증강(cfg.augment): 평행이동 ±2px(numpy Generator(seed+1)), 밝기·대비(torch.Generator(seed+2)). 좌우 반전 없음.
+      cfg.use_features이면 특징에 N(0, feature_noise²) 노이즈(numpy Generator(seed+3), 영상 증강 난수와 분리).
+    - 특징(cfg.use_features): data.features [N, feature_dim]이 필요하다. False면 data.features가 있어도 쓰지 않는다.
     - 결정성: torch·numpy 시드 고정, 증강 난수는 전용 생성기를 쓴다. 스레드 수는 cfg.threads로 고정하고
       학습 후 원래 값으로 되돌린다.
 
@@ -568,6 +674,11 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
         raise ValueError("train_idx가 비어 있습니다.")
     if cfg.steps <= 0 or cfg.batch <= 0:
         raise ValueError("steps와 batch는 양수여야 합니다.")
+    if cfg.use_features:
+        if data.features is None:
+            raise ValueError("cfg.use_features=True인데 PolicyData.features가 없습니다.")
+        if data.features.shape[1] != cfg.feature_dim:
+            raise ValueError(f"PolicyData.features 차원({data.features.shape[1]})이 cfg.feature_dim({cfg.feature_dim})과 다릅니다.")
 
     prev_threads = torch.get_num_threads()
     torch.set_num_threads(max(1, int(cfg.threads)))
@@ -577,6 +688,7 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
         rng = np.random.default_rng(cfg.seed)
         aug_rng = np.random.default_rng(cfg.seed + 1)
         gen = torch.Generator().manual_seed(cfg.seed + 2)
+        feat_rng = np.random.default_rng(cfg.seed + 3)
         device = torch.device(cfg.device)
 
         vocab = _vocab_size(data.tokens)
@@ -597,8 +709,8 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
 
         sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
         logger.info(
-            "VLA-lite 학습 시작: n_train=%d steps=%d batch=%d params=%d use_language=%s threads=%d",
-            len(train_idx), cfg.steps, cfg.batch, n_params, cfg.use_language, cfg.threads,
+            "VLA-lite 학습 시작: n_train=%d steps=%d batch=%d params=%d use_language=%s use_features=%s threads=%d",
+            len(train_idx), cfg.steps, cfg.batch, n_params, cfg.use_language, cfg.use_features, cfg.threads,
         )
 
         losses: list[float] = []
@@ -608,11 +720,14 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
             obs = data.observation(idx)
             if cfg.augment:
                 obs = augment_observation(obs, aug_rng)
+                if cfg.use_features:
+                    obs["features"] = add_feature_noise(obs["features"], feat_rng, cfg.feature_noise)
             image, tokens, prop = _to_tensor_batch(obs, device)
+            feats = _features_tensor(obs, model, device)
             if cfg.augment:
                 image = photometric_jitter(image, gen)
             target = torch.from_numpy(data.action_chunk(idx, cfg.chunk) / a_scale).to(device)
-            pred = model(image, tokens, prop)
+            pred = model(image, tokens, prop, feats)
             loss = (F.smooth_l1_loss(pred, target, reduction="none", beta=cfg.huber_beta) * weights).mean()
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -657,8 +772,12 @@ def _model_device(model: nn.Module) -> torch.device:
 def make_policy_fn(model: VLALitePolicy, domain: str) -> PolicyFn:
     """폐루프용 배치 정책 함수를 만든다(계약 `PolicyFn`).
 
-    입력: {"image": uint8 [B,H,W,6], "tokens": int64 [B,L], "proprio": float32 [B,1](obs.proprio 정규화 값)}
+    입력: {"image": uint8 [B,H,W,6], "tokens": int64 [B,L], "proprio": float32 [B,1](obs.proprio 정규화 값),
+          "features": float32 [B,2,feature_dim](v3, 모델이 use_features일 때만 필수, 아니면 무시)}
     출력: float32 [B] 물리 단위 가속도 명령 = 청크 첫 원소 × accel_scale(domain). eval 모드, no_grad.
+
+    Raises(호출 시):
+        ValueError: use_features=True 모델인데 입력에 "features"가 없을 때.
     """
 
     a_scale = float(_obs().accel_scale(domain))
@@ -666,8 +785,10 @@ def make_policy_fn(model: VLALitePolicy, domain: str) -> PolicyFn:
     def policy_fn(batch: dict[str, np.ndarray]) -> np.ndarray:
         model.eval()
         with torch.no_grad():
-            image, tokens, prop = _to_tensor_batch(batch, _model_device(model))
-            out = model(image, tokens, prop)[:, 0] * a_scale
+            device = _model_device(model)
+            feats = _features_tensor(batch, model, device)
+            image, tokens, prop = _to_tensor_batch(batch, device)
+            out = model(image, tokens, prop, feats)[:, 0] * a_scale
         return out.cpu().numpy().astype(np.float32)
 
     return policy_fn
@@ -677,14 +798,17 @@ def predict_open_loop(model: VLALitePolicy, data: PolicyData, idx: np.ndarray, b
     """개루프 예측: float32 [len(idx), chunk] 물리 단위 가속도(m/s²)."""
 
     idx = np.asarray(idx, dtype=np.int64)
+    if model.use_features and data.features is None:
+        raise ValueError("use_features=True 모델의 개루프 예측에는 PolicyData.features가 필요합니다.")
     a_scale = float(_obs().accel_scale(data.domain))
     device = _model_device(model)
     outs: list[np.ndarray] = []
     model.eval()
     with torch.no_grad():
         for s in range(0, len(idx), batch_size):
-            image, tokens, prop = _to_tensor_batch(data.observation(idx[s : s + batch_size]), device)
-            outs.append((model(image, tokens, prop) * a_scale).cpu().numpy())
+            obs = data.observation(idx[s : s + batch_size])
+            image, tokens, prop = _to_tensor_batch(obs, device)
+            outs.append((model(image, tokens, prop, _features_tensor(obs, model, device)) * a_scale).cpu().numpy())
     if not outs:
         return np.zeros((0, model.chunk), dtype=np.float32)
     return np.concatenate(outs, axis=0).astype(np.float32)
@@ -702,6 +826,7 @@ __all__ = [
     "shift_images",
     "photometric_jitter",
     "augment_observation",
+    "add_feature_noise",
     "count_parameters",
     "train_policy",
     "make_policy_fn",
