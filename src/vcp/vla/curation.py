@@ -9,6 +9,7 @@
   (계약: `docs/28a_VLA_모듈_인터페이스_계약.md`, 방법 정의: `docs/30_큐레이션_방법_정의.md`).
 - `select_shared`, `shared_reservoir_mask`(v3 M1): 시드별 무작위 저장소를 모든 혼합 방법이 공유하고
   점수 몫만 방법마다 다르게 고르는 선별(docs/33, docs/30 6절).
+  v4 S1(docs/36, docs/30 7절): `select_shared(per_group_cap=c)`는 점수 몫에서 그룹(에피소드)당 최대 c개만 고른다.
 
 통제 변수
 - 모든 방법은 같은 클립 길이(`clip_len`)와 같은 클립 수 k = max(1, round(budget_ratio·N/clip_len))를 고른다.
@@ -168,22 +169,39 @@ def _rank_desc(scores: np.ndarray, rng: np.random.Generator) -> np.ndarray:
     return np.lexsort((tie, -s))
 
 
-def _take_with_cap(order: np.ndarray, clip_group: np.ndarray, k: int, cap: int | None) -> np.ndarray:
-    """순서대로 k개를 고르되 그룹당 최대 cap개로 제한한다. 고른 클립 인덱스를 반환한다."""
+def _check_cap(cap: int | None) -> int | None:
+    """per_group_cap 검사: None 또는 1 이상의 정수."""
 
     if cap is None:
-        return order[:k]
-    if cap < 1:
-        raise ValueError(f"per_group_cap은 1 이상이어야 합니다: {cap}")
-    _, inv = np.unique(clip_group[order], return_inverse=True)
-    # 각 클립이 순서상 자기 그룹에서 몇 번째인지(0부터) 계산한다.
+        return None
+    c = int(cap)
+    if c != cap or c < 1:
+        raise ValueError(f"per_group_cap은 1 이상의 정수여야 합니다: {cap}")
+    return c
+
+
+def _rank_in_group(ordered_groups: np.ndarray) -> np.ndarray:
+    """순서대로 늘어선 그룹 id [M]에서 각 원소가 자기 그룹의 몇 번째(0부터)인지 int64 [M]를 반환한다."""
+
+    if len(ordered_groups) == 0:
+        return np.zeros(0, dtype=np.int64)
+    _, inv = np.unique(ordered_groups, return_inverse=True)
     sort_idx = np.argsort(inv, kind="stable")
     sorted_inv = inv[sort_idx]
     first = np.concatenate([[True], sorted_inv[1:] != sorted_inv[:-1]])
     run_start = np.maximum.accumulate(np.where(first, np.arange(len(inv)), 0))
-    rank_in_group = np.empty(len(inv), dtype=np.int64)
-    rank_in_group[sort_idx] = np.arange(len(inv)) - run_start
-    allowed = order[rank_in_group < cap]
+    rank = np.empty(len(inv), dtype=np.int64)
+    rank[sort_idx] = np.arange(len(inv)) - run_start
+    return rank
+
+
+def _take_with_cap(order: np.ndarray, clip_group: np.ndarray, k: int, cap: int | None) -> np.ndarray:
+    """순서대로 k개를 고르되 그룹당 최대 cap개로 제한한다. 고른 클립 인덱스를 반환한다."""
+
+    cap = _check_cap(cap)
+    if cap is None:
+        return order[:k]
+    allowed = order[_rank_in_group(clip_group[order]) < cap]
     return allowed[:k]
 
 
@@ -416,6 +434,8 @@ def select_shared(
     reservoir: float,
     entropy: np.ndarray | None = None,
     lam: float = 0.0,
+    per_group_cap: int | None = None,
+    info: dict[str, Any] | None = None,
 ) -> np.ndarray:
     """공유 저장소 선별(v3 M1, docs/33): 무작위 저장소 R개를 먼저 뽑고, 나머지 K−R개를 방법 점수로 채운다.
 
@@ -427,6 +447,17 @@ def select_shared(
        상위로 채운다. 동률은 저장소 추출 **이후** rng 난수로 깬다(저장소에 영향 없음). NaN 점수는 최하위다.
     4. method_score=None(무작위 기준선)이면 순열의 R..K−1번째 클립으로 채운다. 결과는 순열 앞 K개, 즉
        공유 저장소를 포함하는 균일 무작위 K개다(같은 rng 상태의 `select("random", ...)`와 같은 클립 집합).
+    5. (v4 S1, docs/30 7절) per_group_cap=c이면 3의 점수 순서를 훑으며 **같은 group 값(에피소드)의 클립을
+       최대 c개까지만** 점수 몫에 넣고 상한을 넘는 클립은 건너뛴다. 상한 때문에 K−R개를 못 채우면(그룹 수가
+       적을 때) 남은 자리는 건너뛴 클립 가운데 점수 순(상한 무시)으로 채운다. 따라서 선택량은 v3와 같다.
+       채운 수는 `info["n_cap_overflow"]`와 로그(INFO)로 남긴다. 상한은 점수 몫에만 적용하며, 저장소 클립은
+       세지 않는다(저장소에 같은 에피소드 클립이 있어도 점수 몫 상한과 무관). 저장소와 동률 난수 소비는
+       상한과 무관하게 같으므로 저장소는 c와 관계없이 같다. method_score=None이면 상한을 무시한다.
+       per_group_cap=None이면 v3와 비트 단위로 같다.
+
+    클립·그룹: 클립은 `clip_starts(group, clip_len)`의 비중첩 클립(같은 group 값의 연속 구간 안)이다.
+    v3·v4 VLA 스위트는 group으로 풀의 에피소드 id(`pool["ep"]`)를 넘기므로 상한 단위는 **에피소드**다
+    (comma 실험은 연속 구간 id). 같은 group 값이 떨어진 두 구간에 나오면 상한은 두 구간을 합쳐 센다.
 
     모든 방법의 선택 프레임 수는 K·L로 같다(유효 클립이 없으면 빈 마스크).
 
@@ -439,10 +470,14 @@ def select_shared(
         reservoir: 저장소 비율 ρ ∈ [0, 1].
         entropy: 프레임 엔트로피 [N]. lam ≠ 0일 때 필수.
         lam: 엔트로피 가중치 λ.
+        per_group_cap: 점수 몫의 그룹(에피소드)당 최대 클립 수 c(v4 S1). None이면 상한 없음(v3).
+        info: dict를 넘기면 선별 정보를 채운다. 키: k, n_reservoir, n_score, per_group_cap(적용 값, 무작위
+            기준선이면 None), n_cap_overflow(상한을 무시하고 채운 점수 몫 클립 수), n_score_groups(점수 몫
+            클립의 서로 다른 group 수).
 
     Raises:
         ValueError: 잘못된 예산·저장소 비율·클립 길이, 입력 길이 불일치, lam ≠ 0인데 entropy 누락,
-            method_score가 1차원이 아닐 때.
+            method_score가 1차원이 아닐 때, per_group_cap이 1 이상의 정수가 아닐 때.
     """
 
     group = np.asarray(group)
@@ -453,12 +488,17 @@ def select_shared(
             raise ValueError(f"method_score는 1차원 [N]이어야 합니다: {ms.shape}")
     else:
         ms = None
+    cap = _check_cap(per_group_cap)
     en: np.ndarray | None = None
     if lam != 0.0 and ms is not None:
         en = _check_input("entropy", entropy, n, "select_shared(lam≠0)").astype(np.float64)
     t0 = time.perf_counter()
     starts, k, r, perm = _shared_plan(budget_ratio, group, clip_len, rng, reservoir)
     mask = np.zeros(n, dtype=bool)
+    applied_cap = cap if ms is not None else None
+    if info is not None:
+        info.update(k=int(k), n_reservoir=int(r), n_score=int(k - r), per_group_cap=applied_cap,
+                    n_cap_overflow=0, n_score_groups=0)
     if k == 0:
         logger.warning("유효 클립이 없습니다(N=%d, clip_len=%d). 빈 마스크를 반환합니다.", n, clip_len)
         return mask
@@ -466,20 +506,38 @@ def select_shared(
     res = perm[:r]
     rest = perm[r:]
     n_fill = k - r
+    n_overflow = 0
     if ms is None or n_fill == 0:
         fill = rest[:n_fill]
     else:
         score = ms[idx[rest]].max(axis=1)
         if en is not None:
             score = score + lam * en[idx[rest]].mean(axis=1)
-        fill = rest[_rank_desc(score, rng)[:n_fill]]
+        ranked = rest[_rank_desc(score, rng)]
+        if cap is None:
+            fill = ranked[:n_fill]
+        else:
+            within = _rank_in_group(group[starts[ranked]]) < cap
+            fill = ranked[within][:n_fill]
+            n_overflow = n_fill - len(fill)
+            if n_overflow > 0:
+                # 상한만으로 몫을 못 채우면 건너뛴 클립을 점수 순(상한 무시)으로 채워 선택량을 v3와 같게 둔다
+                fill = np.concatenate([fill, ranked[~within][:n_overflow]])
+                logger.info(
+                    "점수 몫 그룹 상한 %d로 %d/%d개만 채워 나머지 %d개를 상한 없이 점수 순으로 채웠습니다.",
+                    cap, n_fill - n_overflow, n_fill, n_overflow,
+                )
     chosen = np.concatenate([res, fill]).astype(np.int64)
+    if info is not None:
+        info["n_cap_overflow"] = int(n_overflow)
+        info["n_score_groups"] = int(len(np.unique(group[starts[fill]]))) if len(fill) else 0
     if len(chosen) != k or len(np.unique(chosen)) != k:
         raise RuntimeError(f"select_shared: 고른 클립 수 {len(np.unique(chosen))}개가 예산 {k}개와 다릅니다.")
     mask[idx[chosen].ravel()] = True
     logger.debug(
-        "공유 저장소 선별(%s): 예산 %.3f, 클립 %d/%d개(저장소 %d + 몫 %d), %.3f초",
-        "random" if ms is None else "score", budget_ratio, k, len(starts), r, n_fill, time.perf_counter() - t0,
+        "공유 저장소 선별(%s): 예산 %.3f, 클립 %d/%d개(저장소 %d + 몫 %d), 그룹 상한 %s, %.3f초",
+        "random" if ms is None else "score", budget_ratio, k, len(starts), r, n_fill, applied_cap,
+        time.perf_counter() - t0,
     )
     return mask
 

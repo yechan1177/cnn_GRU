@@ -10,6 +10,10 @@ from __future__ import annotations
 - features(v3): float32 [B,2,32] = (프레임 t, 프레임 max(t−2, 0))의 v1+v2 검출 특징.
   에피소드마다 `obs.OnlineFeatureTracker`(풀과 같은 추출기·순서·conf 0.45·max_det 30)를 두고
   매 프레임 노이즈 검출(`info.frame`)로 갱신한다. 정책이 쓰지 않으면 무시해도 된다
+- features(v4 일반화, docs/29 10절): float32 [B,H,32]. 인덱스 k는 프레임 max(t − k·s, 0)의 특징(k=0 현재).
+  H·s는 `run_closed_loop(feature_history=, feature_stride=)`로 주고, None이면 policy_fn의 속성
+  `feature_history`/`feature_stride`(A14 `make_policy_fn`이 붙임), 그것도 없으면 2/2(v3와 같음)를 쓴다.
+  결과 `config`에 실제로 쓴 두 값을 기록한다
 정책 출력(물리 단위 가속도 명령, m/s^2)은 `SimEnv.step(cmd)`로 다음 프레임 동안 유지된다
 (반응 지연 큐 없이 액추에이터 1차 지연만 적용).
 
@@ -66,7 +70,7 @@ from ..sim.env import SimEnv, StepInfo
 from ..sim.render import render_frame
 from ..sim.world import scenario_types_for_domain
 from .instructions import N_PARAPHRASES, STYLE_NAMES, encode_instruction, instruction_text, styles_for_domain
-from .obs import HISTORY_OFFSET, IMG_SIZE, FeatureHistory, proprio
+from .obs import DEFAULT_FEATURE_HISTORY, DEFAULT_FEATURE_STRIDE, HISTORY_OFFSET, IMG_SIZE, FeatureHistory, proprio
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +246,31 @@ def _group(episodes: list[dict[str, Any]], key: str) -> dict[str, Any]:
     return {name: aggregate(items) for name, items in groups.items()}
 
 
+def resolve_feature_history(
+    policy_fn: PolicyFn | None, feature_history: int | None = None, feature_stride: int | None = None
+) -> tuple[int, int]:
+    """폐루프 특징 이력 (H, s)를 정한다.
+
+    우선순위: 명시 인자 → policy_fn 속성(`feature_history`, `feature_stride`) → 기본값 2/2(v3).
+    두 값은 따로 정한다(예: 인자로 H만 주면 s는 속성 또는 기본값). 1 이상의 정수가 아니면 ValueError.
+    """
+
+    def pick(value: int | None, attr: str, default: int) -> int:
+        if value is None:
+            value = getattr(policy_fn, attr, None) if policy_fn is not None else None
+        if value is None:
+            value = default
+        iv = int(value)
+        if iv != value or iv < 1:
+            raise ValueError(f"{attr}는 1 이상의 정수여야 한다: {value!r}")
+        return iv
+
+    return (
+        pick(feature_history, "feature_history", DEFAULT_FEATURE_HISTORY),
+        pick(feature_stride, "feature_stride", DEFAULT_FEATURE_STRIDE),
+    )
+
+
 def run_closed_loop(
     policy_fn: PolicyFn | None,
     specs: list[EpisodeSpec],
@@ -251,6 +280,8 @@ def run_closed_loop(
     noise_level: float = 1.0,
     collision_pushback: bool = True,
     decouple_initial_speed: bool = False,
+    feature_history: int | None = None,
+    feature_stride: int | None = None,
 ) -> dict[str, Any]:
     """폐루프 평가를 실행해 에피소드별·시나리오별·스타일별·전체 지표를 반환한다.
 
@@ -260,6 +291,9 @@ def run_closed_loop(
         domain: "driving" | "robot". specs의 시나리오 도메인과 같아야 한다.
         collision_pushback: False면 충돌 시 자차를 뒤로 밀지 않는다(v3 B3). 전문가 참조에도 같게 적용한다.
         decouple_initial_speed: True면 스타일 초기 속도를 시나리오 기본 속도 기준으로 정한다(v3 B1).
+        feature_history: 관측 `"features"`의 이력 길이 H(v4). None이면 policy_fn.feature_history, 없으면 2.
+        feature_stride: 이력 간격 s(프레임). None이면 policy_fn.feature_stride, 없으면 2.
+            기본값(2/2)이면 v3와 같은 관측·결과다(`config`에 두 값이 추가로 기록되는 것만 다르다).
     """
 
     if not specs:
@@ -269,6 +303,7 @@ def run_closed_loop(
     bad = sorted({s.scenario for s in specs if s.scenario not in valid_scenarios})
     if bad:
         raise ValueError(f"도메인 {domain}에 없는 시나리오: {bad}")
+    feat_h, feat_s = resolve_feature_history(policy_fn, feature_history, feature_stride)
 
     t0 = time.perf_counter()
     envs = [
@@ -294,8 +329,9 @@ def run_closed_loop(
     h, w = IMG_SIZE
     slots = HISTORY_OFFSET + 1
     buf = np.zeros((slots, b, h, w, 3), dtype=np.uint8) if policy_fn is not None else None
-    # 검출 특징 버퍼(영상과 같은 t, t−2 규칙). 전문가 참조는 관측을 쓰지 않으므로 계산하지 않는다
-    feat_hist = FeatureHistory(b) if policy_fn is not None else None
+    # 검출 특징 버퍼(인덱스 k = 프레임 max(t − k·s, 0), 기본 2/2는 영상과 같은 t, t−2 규칙).
+    # 전문가 참조는 관측을 쓰지 않으므로 계산하지 않는다
+    feat_hist = FeatureHistory(b, history=feat_h, stride=feat_s) if policy_fn is not None else None
     t_render = t_policy = t_features = 0.0
 
     for t in range(n_frames - 1):
@@ -346,6 +382,8 @@ def run_closed_loop(
             "n_episodes": b,
             "collision_pushback": bool(collision_pushback),
             "decouple_initial_speed": bool(decouple_initial_speed),
+            "feature_history": feat_h,
+            "feature_stride": feat_s,
         },
         "counterfactual": counterfactual,
         "episodes": episodes,
