@@ -38,8 +38,9 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "p2": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru"},
     "p3": {"aux_weight": 0.2},
     "t1": {"lang_dropout": 0.15},
-    "s1": {"per_group_cap": 1},
-    "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "per_group_cap": 1},
+    # S1(점수 몫 에피소드 상한)은 개발 실험 전에 기각했다: v3 CARE 2% 점수 몫 36클립이 이미 서로 다른 36개 에피소드에서
+    # 나와 c=1이 선택을 바꾸지 않는다(A15 측정, docs/30 7절). 트리거 혼합만 바뀌어 비교 기준선만 달라진다.
+    "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15},
 }
 POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout")
 
@@ -181,6 +182,8 @@ def policy_data(cfg: V4Config, P: dict[str, Any], params: dict[str, Any]) -> Any
         tokens=episode_tokens(pool, P["meta"]),
         domain=cfg.domain,
         features=pool["X_v1v2"].astype(np.float32),
+        # 특징 프리롤: 특징 이력은 에피소드 시작에서 자른다(클립 앞 (H−1)·s 프레임의 특징을 함께 저장한다고 가정, docs/36 6절)
+        feature_group=pool["ep"],
         aux_targets=aux,
     )
 
@@ -314,7 +317,7 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
             se.setdefault((j["variant"], j.get("use_language", True)), []).append(np.nan if v is None else float(v))
     mean = {v: float(np.mean(x)) for v, x in succ.items()}
     base = mean["v3"]
-    adopt = {"p2": mean["p2"] >= base, "p3": mean["p3"] >= base, "s1": mean["s1"] >= base}
+    adopt = {"p2": mean["p2"] >= base, "p3": mean["p3"] >= base}
     # T1은 반사실 개발 세트의 언어 있음 속도 오차가 v3보다 낮을 때 채택
     t1_se, v3_se = float(np.nanmean(se[("t1", True)])), float(np.nanmean(se[("v3", True)]))
     adopt["t1"] = t1_se <= v3_se
@@ -328,7 +331,7 @@ def stage_dev(cfg: V4Config) -> dict[str, Any]:
         "dev_success": mean,
         "dev_success_by_seed": succ,
         "devcf_speed_error": {f"{v}:{'lang' if l else 'nolang'}": float(np.nanmean(x)) for (v, l), x in se.items()},
-        "rule": "P2·P3·S1: 개발 세트 CARE 2% 성공률(시드 3개 평균) ≥ v3. T1: 반사실 개발 세트 CARE 2% 언어 있음 속도 오차 ≤ v3",
+        "rule": "P2·P3: 개발 세트 CARE 2% 성공률(시드 3개 평균) ≥ v3. T1: 반사실 개발 세트 CARE 2% 언어 있음 속도 오차 ≤ v3",
     }
     (cfg.cache / "v4_choice.json").write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
     logger.info("v4 채택: %s", choice)
