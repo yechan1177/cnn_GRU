@@ -206,6 +206,9 @@ def run_comma_job(job: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("보조 헤드에는 fold 캐시의 점수기 확률(probs)이 필요합니다. prepare_fold를 다시 실행하세요.")
         extra_data["aux_targets"] = F["probs"].astype(np.float32)
         pparams["aux_classes"] = int(F["probs"].shape[1])
+    if float(job.get("hazard_weight") or 0.0) > 0:
+        # v4 P4 위험 가중 손실: 점수기 제동 확률로 1 + β·e_t
+        extra_data["loss_weight"] = (1.0 + float(job["hazard_weight"]) * F["event_score"]).astype(np.float32)
     if int(pparams.get("feature_history", 2)) > 2:
         # 특징 프리롤(docs/36 2.1): 특징 이력은 연속 구간(세그먼트) 시작에서 자른다. 영상·행동은 클립 안에서만 쓴다.
         extra_data["feature_group"] = np.where(pool_seg >= 0, pool_seg, -1 - np.arange(n))

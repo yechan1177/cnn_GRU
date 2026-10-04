@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 SEED_BASES_V4 = {
     "driving": {"dev": 160000, "devcf": 170000, "test": 1000000, "cf": 1050000},
-    "robot": {"dev": 460000, "devcf": 470000, "test": 1100000, "cf": 1150000},
+    "robot": {"dev": 460000, "devcf": 470000, "test": 1100000, "cf": 1150000},  # AMR 개발 세트는 셀당 4개
 }
 
 # 설정 묶음(variant). v3 = v3 정책·선별 그대로, v4 = 개발 세트에서 채택한 조합(stage_dev 이후 cache/v4_choice.json로 확정)
@@ -38,9 +38,10 @@ VARIANTS: dict[str, dict[str, Any]] = {
     "p2": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru"},
     "p3": {"aux_weight": 0.2},
     "t1": {"lang_dropout": 0.15},
+    "p4": {"hazard_weight": 2.0},
     # S1(점수 몫 에피소드 상한)은 개발 실험 전에 기각했다: v3 CARE 2% 점수 몫 36클립이 이미 서로 다른 36개 에피소드에서
     # 나와 c=1이 선택을 바꾸지 않는다(A15 측정, docs/30 7절). 트리거 혼합만 바뀌어 비교 기준선만 달라진다.
-    "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15},
+    "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "hazard_weight": 2.0},
 }
 POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout")
 
@@ -91,11 +92,11 @@ class V4Config:
 def prepare(cfg: V4Config) -> None:
     cfg.cache.mkdir(parents=True, exist_ok=True)
     src = cfg.v3_root / "cache"
-    names = [f"pool_{cfg.domain}.npz", f"pool_{cfg.domain}.json", f"testpool_{cfg.domain}.npz", f"testpool_{cfg.domain}.json", f"scores_{cfg.domain}.npz", f"tune_{cfg.domain}.json", f"scorer_{cfg.domain}.pt", f"scorer_{cfg.domain}.json"]
+    names = [f"pool_{cfg.domain}.npz", f"pool_{cfg.domain}.meta.json", f"testpool_{cfg.domain}.npz", f"testpool_{cfg.domain}.meta.json", f"scores_{cfg.domain}.npz", f"tune_{cfg.domain}.json", f"scorer_{cfg.domain}.pt", f"scorer_{cfg.domain}.json"]
     for n in names:
         if (src / n).exists() and not (cfg.cache / n).exists():
             shutil.copy2(src / n, cfg.cache / n)
-    missing = [n for n in names if not (cfg.cache / n).exists() and not n.endswith(".json")]
+    missing = [n for n in names if not (cfg.cache / n).exists() and not n.startswith(("tune_", "scorer_"))]
     if missing:
         raise FileNotFoundError(f"v3 캐시가 없습니다(먼저 v3 prepare): {missing}")
 
@@ -158,9 +159,9 @@ def _pool(cfg: V4Config, kind: str = "pool") -> dict[str, Any]:
 
 def variant_params(name: str, cfg: V4Config) -> dict[str, Any]:
     if name == "v4":
-        p = cfg.cache / "v4_choice.json"  # 주행 개발 세트에서 정한 조합을 AMR·실영상에도 그대로 쓴다
+        p = cfg.cache / f"v4_choice_{cfg.domain}.json"  # 도메인별 개발 세트에서 정한 조합(실영상은 주행 조합을 쓴다)
         if not p.exists():
-            raise FileNotFoundError("v4 채택 조합(cache/v4_choice.json)이 없습니다. stage_dev를 먼저 실행하세요.")
+            raise FileNotFoundError(f"v4 채택 조합({p})이 없습니다. stage_dev를 먼저 실행하세요.")
         return dict(json.loads(p.read_text(encoding="utf-8"))["params"])
     return dict(VARIANTS[name])
 
@@ -174,6 +175,10 @@ def policy_data(cfg: V4Config, P: dict[str, Any], params: dict[str, Any]) -> Any
         if "scores" not in P:
             raise ValueError("보조 헤드 타깃(점수기 확률)은 학습 풀에서만 쓸 수 있습니다.")
         aux = P["scores"]["probs"].astype(np.float32)
+    lw = None
+    if params.get("hazard_weight", 0.0) > 0 and "scores" in P:
+        # P4 위험 가중 손실: 수집 시점 점수기 위험 확률 e_t로 가중치 1 + β·e_t(특권 정보 아님)
+        lw = (1.0 + float(params["hazard_weight"]) * P["scores"]["event_score"]).astype(np.float32)
     return PolicyData(
         images=PoolImageSource.from_pool(pool, cfg.domain),
         group=P["clip"],
@@ -185,6 +190,7 @@ def policy_data(cfg: V4Config, P: dict[str, Any], params: dict[str, Any]) -> Any
         # 특징 프리롤: 특징 이력은 에피소드 시작에서 자른다(클립 앞 (H−1)·s 프레임의 특징을 함께 저장한다고 가정, docs/36 6절)
         feature_group=pool["ep"],
         aux_targets=aux,
+        loss_weight=lw,
     )
 
 
@@ -298,43 +304,59 @@ MAIN_SEEDS = tuple(range(10))
 
 
 def stage_dev(cfg: V4Config) -> dict[str, Any]:
-    """개발 세트에서 개선별 효과를 보고 v4 조합을 정한다(docs/36 3절 채택 규칙)."""
+    """개발 세트에서 개선별 효과를 보고 도메인별 v4 조합을 정한다(docs/36 3절 채택 규칙).
 
-    for ev in ("dev", "devcf"):
-        expert_reference(cfg, ev)
-    jobs = [make_job(cfg, v, "care", 0.02, s, "dev") for v in VARIANTS for s in DEV_SEEDS]
+    - P2·P3·P4: 개발 세트 CARE 2% 성공률(시드 3개 평균)이 v3 기준 이상이면 채택한다.
+    - T1(주행): 반사실 개발 세트에서 CARE 2% 언어 있음 속도 오차가 v3 이하이면 채택한다. AMR은 주행 결정을 따른다.
+    """
+
+    robot = cfg.domain == "robot"
+    prepare(cfg)
+    expert_reference(cfg, "dev")
+    if not robot:
+        expert_reference(cfg, "devcf")
+    variants = ("v3", "p2", "p3", "p4", "all") if robot else ("v3", "p2", "p3", "t1", "p4", "all")
+    jobs = [make_job(cfg, v, "care", 0.02, s, "dev") for v in variants for s in DEV_SEEDS]
     jobs += [make_job(cfg, v, "full", 1.0, 0, "dev") for v in ("v3", "all")]
-    jobs += [make_job(cfg, v, "care", 0.02, s, "devcf", use_language=lang) for v in ("v3", "t1", "all") for s in DEV_SEEDS[:2] for lang in (True, False)]
+    if not robot:
+        jobs += [make_job(cfg, v, "care", 0.02, s, "devcf", use_language=lang) for v in ("v3", "t1", "all") for s in DEV_SEEDS[:2] for lang in (True, False)]
     res = run_jobs(cfg, jobs)
     succ: dict[str, list[float]] = {}
+    full: dict[str, float] = {}
     se: dict[tuple[str, bool], list[float]] = {}
     for r in res:
         j = r["job"]
         if j["eval"] == "dev" and j["method"] == "care":
             succ.setdefault(j["variant"], []).append(success_of(cfg, r))
+        if j["eval"] == "dev" and j["method"] == "full":
+            full[j["variant"]] = success_of(cfg, r)
         if j["eval"] == "devcf":
             v = r["closed_loop"]["overall"].get("speed_error")
             se.setdefault((j["variant"], j.get("use_language", True)), []).append(np.nan if v is None else float(v))
     mean = {v: float(np.mean(x)) for v, x in succ.items()}
     base = mean["v3"]
-    adopt = {"p2": mean["p2"] >= base, "p3": mean["p3"] >= base}
-    # T1은 반사실 개발 세트의 언어 있음 속도 오차가 v3보다 낮을 때 채택
-    t1_se, v3_se = float(np.nanmean(se[("t1", True)])), float(np.nanmean(se[("v3", True)]))
-    adopt["t1"] = t1_se <= v3_se
+    adopt = {k: mean[k] >= base for k in ("p2", "p3", "p4")}
+    if robot:
+        dc = cfg.cache / "v4_choice_driving.json"
+        adopt["t1"] = bool(json.loads(dc.read_text(encoding="utf-8"))["adopt"]["t1"]) if dc.exists() else False
+    else:
+        adopt["t1"] = float(np.nanmean(se[("t1", True)])) <= float(np.nanmean(se[("v3", True)]))
     params: dict[str, Any] = {}
     for k, ok in adopt.items():
         if ok:
             params.update(VARIANTS[k])
     choice = {
+        "domain": cfg.domain,
         "params": params,
         "adopt": adopt,
         "dev_success": mean,
         "dev_success_by_seed": succ,
+        "dev_full_success": full,
         "devcf_speed_error": {f"{v}:{'lang' if l else 'nolang'}": float(np.nanmean(x)) for (v, l), x in se.items()},
-        "rule": "P2·P3: 개발 세트 CARE 2% 성공률(시드 3개 평균) ≥ v3. T1: 반사실 개발 세트 CARE 2% 언어 있음 속도 오차 ≤ v3",
+        "rule": "P2·P3·P4: 개발 세트 CARE 2% 성공률(시드 3개 평균) ≥ v3. T1: 반사실 개발 세트 CARE 2% 언어 있음 속도 오차 ≤ v3(AMR은 주행 결정을 따름)",
     }
-    (cfg.cache / "v4_choice.json").write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
-    logger.info("v4 채택: %s", choice)
+    (cfg.cache / f"v4_choice_{cfg.domain}.json").write_text(json.dumps(choice, ensure_ascii=False, indent=1), encoding="utf-8")
+    logger.info("v4 채택(%s): %s", cfg.domain, choice)
     return choice
 
 
@@ -374,7 +396,7 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser(description="v4 개선 개발·확증 실험")
-    ap.add_argument("stage", choices=["prepare", "dev", "main", "lang", "robot", "comma"])
+    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma"])
     ap.add_argument("--root", default="experiments/exp_130_vla_v4")
     ap.add_argument("--v3-root", default="experiments/exp_120_vla_v3")
     ap.add_argument("--workers", type=int, default=4)
@@ -387,6 +409,8 @@ def main() -> None:
         prepare(cfg)
     elif a.stage == "dev":
         stage_dev(cfg)
+    elif a.stage == "robotdev":
+        stage_dev(cfg.for_domain("robot"))
     elif a.stage == "main":
         stage_main(cfg)
     elif a.stage == "lang":

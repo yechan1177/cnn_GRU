@@ -24,7 +24,9 @@ def run_comma_v4(cfg: Any, budgets: tuple[float, ...] = (0.10, 0.20), seeds: tup
     from .vla_v4_suite import POLICY_KEYS, variant_params
 
     v3c = cfg.v3()
-    params = variant_params("v4", cfg)
+    from dataclasses import replace as _replace
+
+    params = variant_params("v4", _replace(cfg, domain="driving"))  # 실영상은 주행 개발 세트 조합을 쓴다
     pparams = {k: params[k] for k in POLICY_KEYS if k in params}
     cap = params.get("per_group_cap")
     legacy = CurationSuiteConfig(root=Path(cfg.root), domain="driving", comma_dir=Path(cfg.comma_dir), workers=cfg.workers, lam=v3c.lam, reservoir=v3c.reservoir, quick=cfg.quick)
@@ -36,10 +38,10 @@ def run_comma_v4(cfg: Any, budgets: tuple[float, ...] = (0.10, 0.20), seeds: tup
     jobs = []
     for k in folds:
         for s in seeds:
-            jobs.append({"cfg": legacy, "fold": k, "method": "full", "budget": 1.0, "seed": s, "steps": steps, "use_features": True, "policy_params": pparams})
+            jobs.append({"cfg": legacy, "fold": k, "method": "full", "budget": 1.0, "seed": s, "steps": steps, "use_features": True, "policy_params": pparams, "hazard_weight": params.get("hazard_weight", 0.0)})
             for b in budgets:
                 for m in COMMA_V4_METHODS:
-                    jobs.append({"cfg": legacy, "fold": k, "method": m, "budget": b, "seed": s, "steps": steps, "use_features": True, "policy_params": pparams, "per_group_cap": cap})
+                    jobs.append({"cfg": legacy, "fold": k, "method": m, "budget": b, "seed": s, "steps": steps, "use_features": True, "policy_params": pparams, "per_group_cap": cap, "hazard_weight": params.get("hazard_weight", 0.0)})
     for j in jobs:
         j["key"] = f"comma4__f{j['fold']}__{j['method']}__b{j['budget']:.2f}__s{j['seed']}__st{j['steps']}"
     pending = [j for j in jobs if not (legacy.runs / f"{j['key']}.json").exists()]

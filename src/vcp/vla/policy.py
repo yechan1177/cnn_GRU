@@ -592,6 +592,7 @@ class PolicyData:
     features: np.ndarray | None = None
     aux_targets: np.ndarray | None = None
     feature_group: np.ndarray | None = None
+    loss_weight: np.ndarray | None = None  # v4 P4: 프레임별 행동 손실 가중치 [N](양수). None이면 균등(v3와 같음)
     _first: np.ndarray = field(init=False, repr=False)
     _feat_first: np.ndarray = field(init=False, repr=False)
     _last: np.ndarray = field(init=False, repr=False)
@@ -624,6 +625,10 @@ class PolicyData:
             dev = float(np.abs(q.sum(axis=1) - 1.0).max()) if n else 0.0
             if dev > 1e-3:
                 raise ValueError(f"aux_targets 각 행의 합이 1이어야 합니다(최대 편차 {dev:.4g}).")
+        if self.loss_weight is not None:
+            self.loss_weight = np.asarray(self.loss_weight, dtype=np.float32)
+            if self.loss_weight.shape != (n,) or not np.isfinite(self.loss_weight).all() or (self.loss_weight <= 0).any():
+                raise ValueError(f"loss_weight는 양수·유한한 [N={n}] 배열이어야 합니다: {self.loss_weight.shape}")
         self._first, self._last = _run_bounds(self.group)
         if self.feature_group is not None:
             self.feature_group = np.asarray(self.feature_group)
@@ -830,6 +835,29 @@ def _segment_means(values: list[float], n_bins: int) -> tuple[list[float], list[
     return means, ends
 
 
+def _action_loss(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    weights: torch.Tensor,
+    beta: float,
+    loss_weight: np.ndarray | None,
+    idx: np.ndarray,
+    device: torch.device,
+) -> torch.Tensor:
+    """청크 위치 가중 Huber 행동 손실.
+
+    loss_weight가 None이면 v3와 같은 식(전체 평균)을 그대로 쓴다(비트 동일). 주어지면(v4 P4 위험 가중 손실)
+    표본별 손실에 배치 안에서 평균 1로 정규화한 가중치를 곱해 평균한다.
+    """
+
+    per = F.smooth_l1_loss(pred, target, reduction="none", beta=beta) * weights
+    if loss_weight is None:
+        return per.mean()
+    w = torch.from_numpy(loss_weight[idx]).to(device)
+    w = w / w.mean()
+    return (per.mean(1) * w).mean()
+
+
 def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> tuple[VLALitePolicy, dict[str, Any]]:
     """고정 경사 단계(cfg.steps) 동안 VLA-lite를 학습한다.
 
@@ -931,12 +959,12 @@ def train_policy(data: PolicyData, train_idx: np.ndarray, cfg: PolicyConfig) -> 
             target = torch.from_numpy(data.action_chunk(idx, cfg.chunk) / a_scale).to(device)
             if use_aux:
                 pred, aux_logits = model(image, tokens, prop, feats, return_aux=True)
-                act_loss = (F.smooth_l1_loss(pred, target, reduction="none", beta=cfg.huber_beta) * weights).mean()
+                act_loss = _action_loss(pred, target, weights, cfg.huber_beta, data.loss_weight, idx, device)
                 aux_loss = soft_cross_entropy(aux_logits, torch.from_numpy(data.aux_targets[idx]).to(device))
                 loss = act_loss + cfg.aux_weight * aux_loss
             else:
                 pred = model(image, tokens, prop, feats)
-                loss = act_loss = (F.smooth_l1_loss(pred, target, reduction="none", beta=cfg.huber_beta) * weights).mean()
+                loss = act_loss = _action_loss(pred, target, weights, cfg.huber_beta, data.loss_weight, idx, device)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             if cfg.grad_clip > 0:

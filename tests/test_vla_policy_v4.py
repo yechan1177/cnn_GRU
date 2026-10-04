@@ -507,3 +507,33 @@ def test_v4_full_combination_trains_and_is_deterministic() -> None:
     assert i1["config"]["feature_encoder"] == "gru" and i1["n_params"] == count_parameters(m1)
     pred = predict_open_loop(m1, data, np.arange(n))
     assert pred.shape == (n, 8) and np.isfinite(pred).all()
+
+
+def test_loss_weight_p4_uniform_equals_none_and_validation() -> None:
+    """P4 위험 가중 손실: 균등 가중치는 가중치 없음과 같은 손실값(수치 오차 범위), 잘못된 가중치는 ValueError."""
+
+    import numpy as np
+    import pytest
+    import torch
+
+    from vcp.vla.policy import _action_loss
+
+    g = torch.Generator().manual_seed(0)
+    pred, target = torch.randn(8, 4, generator=g), torch.randn(8, 4, generator=g)
+    w = torch.ones(4)
+    idx = np.arange(8)
+    a = _action_loss(pred, target, w, 1.0, None, idx, torch.device("cpu"))
+    b = _action_loss(pred, target, w, 1.0, np.full(8, 3.0, dtype=np.float32), idx, torch.device("cpu"))
+    assert torch.allclose(a, b, atol=1e-6)
+    lw = np.ones(8, dtype=np.float32)
+    lw[0] = 9.0
+    c = _action_loss(pred, target, w, 1.0, lw, idx, torch.device("cpu"))
+    assert not torch.allclose(a, c)
+
+    from vcp.vla.policy import ArrayImageSource, PolicyData
+
+    n = 10
+    kw = dict(images=ArrayImageSource(np.zeros((n, 8, 8, 3), np.uint8)), group=np.zeros(n, int), ego_v=np.zeros(n), action=np.zeros(n), tokens=np.ones((n, 3), np.int64), domain="driving")
+    with pytest.raises(ValueError):
+        PolicyData(**kw, loss_weight=np.zeros(n))
+    PolicyData(**kw, loss_weight=np.ones(n))
