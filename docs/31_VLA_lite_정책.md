@@ -209,3 +209,96 @@ v3 계획([33](33_v3_핵심지표_벤치마크_개선계획.md))의 P1이다. 64
   (평균 예측)의 25% 미만이다(측정 약 11%). 같은 조건의 특징 없는 모델은 70% 초과다(측정 약 100%).
 - 결정성: 같은 시드 → 같은 가중치, 다른 시드·`feature_noise=0` → 다른 가중치.
 - `make_policy_fn`: 개루프 예측과 일치, 특징 누락 시 `ValueError`, 특징 미사용 모델은 키를 무시.
+
+## 11. v4 정책 블록(P2·P3·T1, docs/36)
+v4 계획([36](36_v4_알고리즘_모델_개선계획.md)) 2절의 정책 쪽 개선이다(A14). 세 블록 모두 **기본값에서 v3와 비트 단위로 같다**
+(11.5 참고). v4 기본 조합(docs/36 3절 고정값)은 `feature_history=8, feature_stride=2, feature_encoder="gru", aux_weight=0.2,
+lang_dropout=0.15`이다. 채택 여부는 개발 세트 실험(본 세션)이 정하며, 이 절은 구현·계약·측정만 기록한다.
+
+### 11.1 구조
+```text
+ features float32 [B,H,32]   (k=0 = 프레임 t, k = t − k·s; 에피소드(또는 feature_group) 시작에서 잘라 냄)
+          │ NaN → 0, clamp(−3, 3)
+          ├─ "mlp"(v3): flatten [B,H·32] → MLP H·32 → 64 → 64 (ReLU 2회)          (H=2이면 v3 모듈 그대로)
+          └─ "gru"(P2): 시간축 뒤집기(오래된 것 → 현재) → Linear 32→64 + ReLU → GRU(64→64, 1층) → 마지막 은닉 [B,64]
+          ▼ feat [B,64]
+ fused = concat(vis 128, lang 64, prop 32, feat 64) = [B,288] ──► 헤드 MLP 288→256→256→chunk  (행동, 추론 출력)
+                                                            └─► 보조 헤드 Linear 288→6       (P3, 학습 손실에만 사용)
+```
+- P2 시간 특징 인코더: v3의 2프레임 MLP는 접근 속도·횡이동 같은 1초 단위 추세를 보기 어렵다(docs/36 1절 진단).
+  H=8, s=2면 t부터 t−14까지(약 1초) 이력을 GRU로 요약한다. 출력 차원(64)이 v3 MLP와 같아 헤드 입력 차원이 유지된다.
+- P3 위험 맥락 보조 헤드: 융합 표현(헤드 첫 층 입력)에서 맥락 6클래스 로짓을 낸다. 손실 = 행동 손실 + α·soft CE
+  (−Σ q·log softmax(z)), 타깃 q는 현재 프레임 t의 `aux_targets`(CARE 점수기 확률). `forward`의 기본 반환은 행동 [B,chunk]뿐이며
+  보조 헤드는 `return_aux=True`일 때만 계산한다(추론 비용 0). `make_policy_fn`·`predict_open_loop`은 보조 헤드를 쓰지 않는다.
+- T1 지시문 드롭아웃: 학습 중 표본별 확률 p로 지시문 토큰을 **PAD(0)만 있는 시퀀스**로 바꾼다. `encode_language`의 마스크 평균은
+  분모를 `clamp_min(1)`로 막으므로 빈 지시의 언어 특징은 ReLU(lang_fc 편향)로 잘 정의된다(0으로 나누기 없음).
+  그래서 별도 null 임베딩을 두지 않았다. 배포 때 지시문이 없으면 같은 PAD 시퀀스를 넣으면 학습한 "빈 지시" 경로와 같다.
+  `use_language=False`이면 효과가 없다(난수도 쓰지 않음).
+- 생성 순서: 기존 모듈 → 특징 인코더(mlp 또는 gru) → 보조 헤드. 새 모듈이 늘 마지막이므로 CNN·언어·proprio·헤드의 초기화
+  난수 소비가 바뀌지 않는다.
+
+### 11.2 설정·데이터·추론
+| 항목 | 내용 |
+|---|---|
+| `PolicyConfig` | `feature_history=2`, `feature_stride=2`, `feature_encoder="mlp"`(`"gru"`), `aux_weight=0.0`, `aux_classes=6`, `lang_dropout=0.0`. 잘못된 값(인코더 이름, H·s < 1, α < 0, p ∉ [0,1])은 생성 시 `ValueError` |
+| `VLALitePolicy` | 생성자 인자 `feature_history`, `feature_stride`, `feature_encoder`, `aux_classes`(0 = 보조 헤드 없음; `from_config`는 `aux_weight > 0`일 때만 `aux_classes`를 넘긴다). 새 메서드 `fuse()`(융합 표현), `forward(..., return_aux=False)` |
+| `encode_features` | 형태 검사 [B, feature_history, feature_dim]. 다르면 `ValueError` |
+| `PolicyData.observation(idx, history=2, stride=2)` | `"features"` [B,H,D], 열 k = max(t − k·s, 구간 시작). 영상은 (t, t−2) 그대로. 보조 메서드 `feature_index(idx, history, stride)` |
+| `PolicyData.aux_targets` | [N, aux_classes] float32 또는 None. 유한·음수 없음·행 합 1(±1e-3)이 아니면 `ValueError`. 관측 dict에는 넣지 않는다 |
+| `PolicyData.feature_group` | [N] 또는 None. 특징 이력을 잘라 내는 구간의 기준(11.3 특징 프리롤). None이면 `group` |
+| 난수 | T1 드롭아웃은 전용 `numpy Generator(seed+4)`(p ≤ 0이면 소비하지 않음). 기존 seed, +1(평행이동), +2(밝기·대비), +3(특징 노이즈)와 분리 |
+| `train_policy` | 관측을 `cfg.feature_history`·`feature_stride`로 만든다. `aux_weight > 0`인데 `aux_targets`가 없거나 클래스 수가 다르면 `ValueError`. info에 `final_aux_loss`(보조 헤드가 없으면 None), `aux_loss_curve`, `lang_dropped_frac` 추가. `final_loss`·`loss_curve`는 v3와 비교할 수 있도록 **행동 손실만** 기록한다 |
+| `predict_open_loop` | 모델의 `feature_history`·`feature_stride`로 관측을 만든다 |
+| `make_policy_fn` | 폐루프가 주는 `obs["features"]` [B,H,D]를 그대로 받는다. 반환 함수에 속성 `feature_history`, `feature_stride`, `use_features`를 붙인다(폐루프 `FeatureHistory`가 읽는다) |
+| 공개 함수 | `apply_lang_dropout(tokens, rng, p) -> (tokens, mask)`, `soft_cross_entropy(logits, q)`, 상수 `FEATURE_ENCODERS = ("mlp", "gru")` |
+
+### 11.3 특징 프리롤 가정(feature_group)
+- 문제: 학습 데이터는 클립 id를 `group`으로 넘기므로 특징 이력이 클립 시작에서 잘린다. 폐루프는 에피소드 시작에서 잘린다.
+  H=8, s=2면 30프레임 클립의 앞 14프레임에서 학습·폐루프 관측 규칙이 어긋난다.
+- 결정(본 세션, A15 보고 반영): 특징은 프레임당 32 float라 저장 비용이 무시할 만하므로, **큐레이션 내보내기에서 클립 앞
+  (H−1)·s 프레임의 특징을 함께 저장한다(특징 프리롤)**고 가정한다. 영상·행동은 프리롤을 저장하지 않는다.
+- 구현: `PolicyData(feature_group=ep)`이면 특징 이력의 잘라 냄을 `feature_group`(보통 에피소드 id) 구간 기준으로 한다.
+  `features`는 프리롤 프레임을 포함한 풀 전체 길이 N 배열을 그대로 쓰고, 학습 인덱스는 클립 프레임만 고른다.
+  영상(t−2)·행동 청크는 계속 `group`(클립) 기준이다. `feature_group=None`(기본)이면 v3와 같다.
+- 예(H=8, s=2, 클립 10프레임): 클립 시작 프레임 t=12의 이력은 `feature_group=ep`이면 [12,10,8,6,4,2,0,0](앞 클립 프레임 포함),
+  없으면 [12,10,10,…]이다. 에피소드 경계는 넘지 않는다(`test_feature_group_preroll_crosses_clip_start`).
+
+### 11.4 파라미터 수·1스레드 처리량(측정)
+| 모델(어휘 89) | 파라미터 수 |
+|---|---|
+| v3 설정(use_features, H=2 mlp) | 544,040 |
+| v4 기본 조합(H=8 s=2 gru, aux 0.2) | 564,526 (+20,486 = −특징 MLP 8,320 + Linear 32→64 2,112 + GRU 24,960 + 보조 헤드 288·6+6 = 1,734) |
+
+측정 조건: Intel Xeon 2.10GHz 가상 4코어(대부분 다른 실험이 사용 중, 측정 직전 1분 load average 2.5~2.8), torch 2.14.1 CPU 실행,
+`threads=1`(OMP_NUM_THREADS=1), 배치 128, 200단계, 증강 켬, 무작위 uint8 영상 64×64 4,000프레임(`ArrayImageSource`),
+특징 U(−1,1) [N,32], aux_targets Dirichlet(1) [N,6]. 처리량 = 200단계 전체 시간(데이터 조회·증강·순전파·역전파·옵티마이저) 기준.
+v3 → v4 → v4 → v3 순서로 교대 측정했다. 기록: `experiments/exp_130_vla_v4/summary/a14_policy_blocks/bench_1thread.json`.
+
+| 설정 | samples/s(1회, 2회) | 3000×128 예상 시간 |
+|---|---|---|
+| v3 설정 | 1,657 / 1,579 | 약 4.0분 |
+| v4 기본 조합 | 1,466 / 1,433 | 약 4.4분 |
+
+- 이 측정에서 v4는 v3보다 약 10% 느렸다(H=8 특징 조회·GRU 8단계 순차 계산·보조 헤드 역전파). CPU를 공유한 2회 측정이라
+  절대값은 부하에 따라 달라질 수 있다. 10.4절 표와 직접 비교하지 않는다.
+
+### 11.5 검증(`tests/test_vla_policy_v4.py`, 14개)
+- **비트 동일성(기본값)**: 두 방법으로 확인했다.
+  1. 작업 전 v3 코드로 초기 가중치 해시(4개 구성: 기본, use_features, use_language=False, 둘 다)·고정 시드 학습 4종(증강 켬/끔,
+     특징 켬/끔, 언어 끔)의 final_loss·손실 곡선·가중치 해시·개루프 예측 해시·`make_policy_fn` 출력 해시·관측 배열 해시를
+     기록하고, 변경 후 같은 스크립트 결과와 비교해 모두 같았다(`experiments/exp_130_vla_v4/summary/a14_policy_blocks/check_v3_identity.py`).
+  2. 테스트 `test_defaults_bit_identical_to_v3_reference`: v3 커밋(857a4fe)의 policy.py를 git에서 꺼내 별도 모듈로 불러와
+     초기 가중치·학습 결과(final_loss, 손실 곡선, 가중치, 개루프 예측, 정책 함수 출력)가 같음을 확인한다(git이 없으면 건너뜀).
+- 특징 이력: `observation(history=8, stride=2)` 형태 [B,8,D], 에피소드 시작에서 잘라 냄, 다음 에피소드로 넘어가지 않음,
+  history=2는 v3 배열과 같음, 영상은 history와 무관.
+- 특징 프리롤: `feature_group=ep`이면 클립 시작 직후 프레임의 이력이 앞 클립 프레임을 포함하고, 영상·행동 청크는 클립 기준 그대로다.
+- GRU 인코더: 출력 [B,64], 시간 순서(뒤집기) 확인, 이상치·NaN 처리, 형태 불일치·누락 `ValueError`, 잘못된 인코더 이름 오류.
+- 파라미터 수 공식 확인(564,526), `make_policy_fn` 속성과 개루프 일치.
+- 합성 추세 문제: 특징 한 차원이 에피소드별 무작위 보행이고 행동 = 4·(f[t] − f[t−14])인 문제(영상 상수, 언어 끔, chunk=1,
+  300단계×배치 32, 학습 에피소드 30개, 처음 보는 에피소드 10개로 평가). 측정한 MAE/기준선: gru(H=8) 약 0.43, mlp(H=2) 약 0.89~0.91
+  (설정 시드 0·1). 같은 조건 mlp(H=8)은 약 0.49~0.50이었다(참고, 테스트에는 넣지 않음). 테스트 기준: gru < 0.6, mlp > 0.75, gru < 0.7·mlp.
+- 보조 헤드: aux_weight=0이면 모듈 없음, aux_targets 누락·클래스 수 불일치·확률 아님 `ValueError`, 공통 모듈 초기 가중치 동일,
+  `return_aux` 동작, 합성 문제(특징 구간 → 맥락 클래스)에서 보조 손실 곡선이 처음(약 ln 6)의 75% 미만으로 감소.
+- 지시문 드롭아웃: p=0이면 기본과 동일(난수 미소비), p=1이면 모든 표본이 빈 지시이고 토큰을 모두 PAD로 바꾼 데이터의 학습과
+  비트 단위로 같음, 같은 시드 → 같은 결과, 다른 시드 → 다른 결과, use_language=False에서 효과 없음.
+- v4 기본 조합 전체: 학습·추론 동작과 결정성.
