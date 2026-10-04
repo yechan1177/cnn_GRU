@@ -20,7 +20,8 @@ for s in $STAGES; do
   if [ "$s" = report ]; then
     $PY -m vcp.experiments.vla_v4_report --root "$ROOT" 2>&1 | tee -a "$ROOT/logs/report.log"
   else
-    $PY -m vcp.experiments.vla_v4_suite "$s" --root "$ROOT" --workers "$WORKERS" 2>&1 | grep --line-buffered -v "policy: step" >> "$ROOT/logs/$s.log"
+    # grep은 출력할 줄이 없으면 1을 돌려주므로 감싼다(파이썬 실패는 pipefail로 그대로 잡힌다)
+    $PY -m vcp.experiments.vla_v4_suite "$s" --root "$ROOT" --workers "$WORKERS" 2>&1 | { grep --line-buffered -v "policy: step" || true; } >> "$ROOT/logs/$s.log"
   fi
   echo "=== $(date '+%F %T') 단계 $s 완료" | tee -a "$ROOT/logs/stages.log"
 done
