@@ -1,8 +1,8 @@
 # 31. VLA-lite 소형 정책(하위 정책 검증용)
 
 - 코드: `src/vcp/vla/policy.py`
-- 테스트: `tests/test_vla_policy.py`
-- 계약: `docs/28a_VLA_모듈_인터페이스_계약.md`의 "A4 소유" 절
+- 테스트: `tests/test_vla_policy.py`, `tests/test_vla_policy_v3.py`(v3 특징 토큰)
+- 계약: `docs/28a_VLA_모듈_인터페이스_계약.md`의 "A4 소유" 절, "v3 추가 계약" 절(10절 참고)
 - 상위 계획: `docs/28_VLA_논문_재설계_계획.md` 3절 "하위 정책(VLA-lite)"
 
 ## 1. 역할
@@ -148,3 +148,64 @@ fn = make_policy_fn(model, "driving")                    # closed_loop.run_close
 - A2 모듈 연결 확인(스크래치 스크립트): 12 에피소드 소형 풀 생성 → `PoolImageSource` + `encode_instruction` 토큰 →
   150단계 학습 → `predict_open_loop` → `run_closed_loop(make_policy_fn(...))` 4 에피소드가 오류 없이 동작했다.
   이 결과는 연결 확인용이며 성능 수치로 쓰지 않는다.
+
+## 10. v3: 검출 특징 토큰(P1, docs/33)
+v3 계획([33](33_v3_핵심지표_벤치마크_개선계획.md))의 P1이다. 64×64 영상만으로는 근거리 간격·정지 판단이 어렵다는 진단(AMR 실패,
+실영상 AUROC)에 따라, 검출기에서 나온 프레임 특징을 정책 입력에 더한다. 기본값(`use_features=False`)은 v2 모델과 같다.
+
+### 10.1 구조
+```text
+ features float32 [B,2,32]   (0번 = 프레임 t, 1번 = t−2; 각 행 = v1 16 + v2 16, X_v1v2 순서)
+          │ NaN → 0, clamp(−3, 3)      (특징은 대부분 [−1,1] 근처라 별도 정규화 없이 이상치만 자른다)
+          ▼ flatten [B,64]
+ MLP 64 → 64 → 64 (ReLU 2회)  →  feat [B,64]
+          │
+ concat(vis 128, lang 64, prop 32, feat 64) = [B,288] → MLP 288→256→256→chunk
+```
+- 결합 위치: FiLM 이후 헤드 입력(영상·언어·속도와 나란히). 특징으로 FiLM을 조건화하지는 않는다.
+- 초기화 순서: 특징 MLP는 다른 모든 모듈을 만든 뒤 마지막에 만든다. 그래서 같은 torch 시드에서 CNN·언어·proprio
+  모듈의 초기 가중치가 특징 사용 여부와 무관하게 같다(헤드 첫 층은 입력 차원이 달라 예외).
+- `use_features=False`: 특징 모듈을 만들지 않고, `"features"` 입력이 있어도 무시한다. 파라미터 수·초기 가중치·학습 결과가
+  v2와 비트 단위로 같다(`test_use_features_false_is_identical_to_v2`, 증강 포함 학습 결과 동일).
+
+### 10.2 설정·데이터·추론
+| 항목 | 내용 |
+|---|---|
+| `PolicyConfig` | `use_features=False`, `feature_dim=32`, `feature_hidden=64`, `feature_noise=0.02` |
+| `PolicyData.features` | [N, feature_dim] float32 또는 None. 있으면 `observation(idx)`가 `"features"` [B,2,D]를 만든다. t−2 인덱스는 영상과 같은 `prev_index`(같은 연속 구간 시작보다 앞이면 구간 첫 프레임) |
+| 증강 | `augment=True`이고 `use_features=True`일 때만 특징에 N(0, 0.02²) 노이즈. 난수는 전용 `numpy Generator(seed+3)`라 영상 증강 난수 흐름과 분리된다 |
+| `train_policy` | `use_features=True`인데 `data.features`가 없거나 차원이 `feature_dim`과 다르면 `ValueError` |
+| `make_policy_fn` | 모델이 `use_features`이면 입력 dict의 `"features"`가 필수(없으면 `ValueError`, 메시지에 `features` 포함). 아니면 무시 |
+| `predict_open_loop` | 모델이 `use_features`인데 `data.features`가 없으면 `ValueError` |
+| 폐루프 | 시뮬레이터는 노이즈 검출로 온라인 계산한 특징을 obs에 넣는다(A10 `closed_loop.py`). 정책 쪽은 키만 읽는다 |
+
+### 10.3 파라미터 수(측정)
+| 모델 | 파라미터 수 |
+|---|---|
+| use_features=False(어휘 89) | 519,336 (v2와 같음) |
+| use_features=True(어휘 89) | 544,040 (+24,704 = 헤드 첫 층 64×256 + 특징 MLP 64·64+64 + 64·64+64) |
+| use_features=True, use_language=False(어휘 89) | 509,224 |
+
+### 10.4 1스레드 처리량(측정)
+측정 조건: 7절과 같은 개발 컨테이너(CPU 4코어 가상, torch 2.14 CPU), `threads=1`, 배치 128, 200단계, 무작위 uint8 영상
+(`ArrayImageSource`, 4,000프레임), 특징은 균일 난수 [N,32]. 측정 중 load average 약 1~1.9(다른 작업과 CPU 공유 가능성 있음).
+각 조건 2회 측정값이다. 처리량 = 200단계 전체 시간(데이터 조회·증강·순전파·역전파·옵티마이저 포함)으로 계산했다.
+
+| 증강 | 특징 | samples/s(1회, 2회) | 3000×128 예상 시간 |
+|---|---|---|---|
+| 켬 | 끔 | 1,655 / 1,695 | 약 3.8분 |
+| 켬 | 켬 | 1,671 / 1,716 | 약 3.8분 |
+| 끔 | 끔 | 1,836 / 1,755 | 약 3.6분 |
+| 끔 | 켬 | 1,805 / 1,777 | 약 3.6분 |
+
+- 특징 MLP(64→64→64)는 CNN에 비해 연산량이 매우 작아, 특징 on/off 차이는 측정 반복 간 편차(약 ±3%) 안에 있다.
+- 7절 표(1스레드 증강 켬 1,198 samples/s)보다 높은 것은 측정 시점의 CPU 부하 차이로 보인다. 두 표를 직접 비교하지 않는다.
+
+### 10.5 검증(`tests/test_vla_policy_v3.py`, 7개)
+- 형태: 모델 입력 [B,2,32] → [B,chunk], 특징 누락·차원 불일치 오류, `observation`의 t/t−2 특징이 영상과 같은 경계 규칙을 따름.
+- 이상치: 100은 3과, NaN은 0과 같은 출력(clamp·nan_to_num).
+- 동일성: `use_features=False`의 파라미터·초기 가중치가 v2와 같고, features 유무와 무관하게 학습 결과가 같음.
+- 학습: 영상은 상수이고 특징 한 차원만 가속도를 결정하는 합성 문제에서, 200단계 후 특징 모델의 MAE가 기준선
+  (평균 예측)의 25% 미만이다(측정 약 11%). 같은 조건의 특징 없는 모델은 70% 초과다(측정 약 100%).
+- 결정성: 같은 시드 → 같은 가중치, 다른 시드·`feature_noise=0` → 다른 가중치.
+- `make_policy_fn`: 개루프 예측과 일치, 특징 누락 시 `ValueError`, 특징 미사용 모델은 키를 무시.

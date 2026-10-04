@@ -161,6 +161,13 @@ def predict_open_loop(model, data: PolicyData, idx: np.ndarray) -> np.ndarray   
   - True면 시드마다 세 스타일 사양을 모두 만든다(시나리오 × 시드 × 3스타일).
 - `run_closed_loop(..., collision_pushback: bool = True, decouple_initial_speed: bool = False)`
   - 위 플래그를 환경에 전달하고, obs에 `"features"`를 넣는다.
+- 구현 메모(A10, 시그니처 변경 없음, 기본값에서 기존 출력과 동일)
+  - 반사실 사양: 시나리오마다 시드를 seed_base부터 연속으로 붙이고, 사양 순서는 시나리오 → 시드 → STYLE_NAMES. 패러프레이즈 = 시드 % 4(세 스타일 공통).
+  - 결과 dict: `"counterfactual"`(사양 구조 자동 판정, `closed_loop.is_counterfactual`), `config`에 두 플래그, `timing.features_s`.
+  - 특징 공용 헬퍼(`vla/obs.py`): `OnlineFeatureTracker`(에피소드 1개, pool.py도 사용), `FeatureHistory`(폐루프 배치 [B,2,32]),
+    `stack_feature_history(feats [T,32], t)`(풀 특징으로 t, t−2 관측 재구성), 상수 `FEATURE_DIM=32`.
+  - `SimEnv.summary()`는 플래그가 기본값이 아닐 때만 `collision_pushback`/`decouple_initial_speed`를 meta에 더한다.
+  - 상세·측정: `docs/29_VLA_시뮬레이터_폐루프.md` 9절.
 
 ### A11(정책·선별)
 - `PolicyConfig.use_features: bool = False`, `feature_dim: int = 32`.
@@ -171,3 +178,10 @@ def predict_open_loop(model, data: PolicyData, idx: np.ndarray) -> np.ndarray   
   - 저장소 클립 수 R = round(ρ·K)를 먼저 `rng`로 뽑는다. 시드가 같으면 방법과 무관하게 같은 클립이 뽑힌다.
   - 나머지 K−R개는 남은 클립 가운데 클립 점수(max(score) + λ·mean(entropy)) 상위로 채운다.
   - `method_score=None`이면 무작위로 채운다(무작위 기준선).
+- 구현 메모(A11, 시그니처 변경 없음, 기본값으로 계약 동작 유지)
+  - `PolicyConfig` 확장 필드: `feature_hidden: int = 64`(특징 MLP 폭), `feature_noise: float = 0.02`(augment=True일 때 특징 가우시안 노이즈 σ).
+  - `VLALitePolicy.forward(image, tokens, proprio, features=None)`: features는 use_features일 때만 필수. 입력은 NaN→0, clamp(−3,3) 후 MLP.
+  - `make_policy_fn`: use_features 모델에 `"features"`가 없으면 `ValueError`. `predict_open_loop`·`train_policy`도 `PolicyData.features`가 없으면 `ValueError`.
+  - `select_shared`: rng 순열 π의 앞 R개가 저장소. None 기준선은 π의 앞 K개(같은 rng 상태의 `select("random")`과 같은 집합). method_score는 1차원만 받는다.
+  - 분석 보조: `curation.shared_reservoir_mask(budget_ratio, group, clip_len, rng, reservoir)`(저장소 부분 마스크).
+  - 상세: `docs/31_VLA_lite_정책.md` 10절, `docs/30_큐레이션_방법_정의.md` 6절.

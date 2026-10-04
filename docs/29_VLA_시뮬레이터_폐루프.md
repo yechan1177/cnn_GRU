@@ -7,7 +7,7 @@
 | `src/vcp/sim/env.py` | 단계형 환경 `SimEnv`(reset/step), 외부 가속도 명령 제어 |
 | `src/vcp/sim/world.py` | 시나리오 정의. `simulate_episode`는 `SimEnv`로 다시 구현(출력 동일) |
 | `src/vcp/sim/render.py` | GT 투영 박스 → 64×64 RGB 도식 프레임 |
-| `src/vcp/vla/obs.py` | 정책 관측 규격(프레임 2장 스택, proprio, 정규화 상수) |
+| `src/vcp/vla/obs.py` | 정책 관측 규격(프레임 2장 스택, proprio, 정규화 상수, v3 검출 특징 `OnlineFeatureTracker`·`FeatureHistory`) |
 | `src/vcp/vla/instructions.py` | 스타일 3종, 지시문 패러프레이즈 4개(영/한), VOCAB·토큰화 |
 | `src/vcp/vla/pool.py` | 스타일 지시문이 붙은 큐레이션 풀 생성·로드 |
 | `src/vcp/vla/closed_loop.py` | 테스트 사양 생성, lockstep 배치 폐루프 평가와 지표 |
@@ -44,7 +44,7 @@
 ### 1.3 스타일 적용
 - `style`을 주면 뽑아 둔 t_head, a_max, b_comf를 스타일 값으로 덮어쓴다. v0는 `target_speed(v0, style, domain)`로 바꾼다.
 - 난수는 스타일이 없을 때와 똑같이 소비한다. 그래서 같은 시드면 스타일과 무관하게 주변 객체 시나리오, s0, 반응 지연이 같다.
-- 초기 속도는 목표 속도 × U(0.85, 1.0)다.
+- 초기 속도는 목표 속도 × U(0.85, 1.0)다(기본값). v3의 `decouple_initial_speed=True`면 시나리오 기본 속도 × U(0.85, 1.0)다(9.1절).
 - `style=None`이면 `summary()`의 meta가 기존과 같다. 스타일이 있으면 meta에 `style`, `v_target`, `v0_scenario`, `a_max`, `b_comf`를 더한다.
 
 ### 1.4 `StepInfo`
@@ -285,9 +285,128 @@
 - 테스트 사양 균형
 - 폐루프 소규모 실행(0 가속 정책·전문가, 결정성)
 
+- `tests/test_vla_env_v3.py`(9건, v3): 9.5절 참고
+
 ## 8. 한계
 - 렌더러는 도식 영상이라 실사 영상과 도메인 차이가 크다. 실영상 일반화는 comma 개루프 평가로 따로 본다(A3·문서 28).
 - 전문가는 GT 상태를 쓰는 특권 정보 기준이다. 정책 성능의 상한이 아니라 참고 기준이다.
 - 외부 제어에서는 반응 지연이 없다.
   - 전문가 참조의 반응은 풀 데모(반응 지연 포함 IDM)보다 빠르다.
   - 정책의 실제 반응 시간은 관측 주기(1/15초)와 액추에이터 지연으로 정해진다.
+
+## 9. v3 벤치마크 수정(A10, 문서 33)
+
+계획은 `docs/33_v3_핵심지표_벤치마크_개선계획.md`, 계약은 `docs/28a_VLA_모듈_인터페이스_계약.md`의 "v3 추가 계약"이다.
+모든 플래그의 기본값은 기존 동작이며, 기본값에서는 회귀 fixture와 비트 단위로 같다.
+
+### 9.1 `SimEnv` 플래그
+
+| 인자 | 기본값 | v3 값 | 내용 |
+|---|---|---|---|
+| `collision_pushback` | True | False | False면 충돌 시 자차 위치를 뒤로 되돌리지 않는다(B3) |
+| `decouple_initial_speed` | False | True | True이고 스타일이 있으면 초기 속도 = `v0_scenario × U(0.85, 1.0)`(B1) |
+
+- `collision_pushback=False`
+  - 자차 속도를 경로 객체 속도 이하로 제한하는 처리는 그대로다.
+  - 충돌 집계(`collisions`, `collisions_moving`, `StepInfo.collided`, `collided_moving`)도 그대로다.
+  - 자차 위치 `ego_x`는 단조 비감소다(테스트로 확인).
+- `decouple_initial_speed=True`
+  - 같은 uniform 호출을 같은 위치에서 1회 한다. 그래서 난수 소비 순서·횟수가 같다.
+  - 목표 속도 `v_target`은 여전히 스타일 목표 속도다.
+  - 결과: 같은 시드의 세 스타일이 같은 초기 속도로 출발한다. 지시 정보가 초기 상태로 새지 않는다.
+  - 스타일이 없으면 효과가 없다(v0_scenario = v0).
+- `summary()` meta에는 기본값이 아닐 때만 `collision_pushback: false`, `decouple_initial_speed: true`를 더한다. 기본값의 meta는 기존과 같다.
+
+### 9.2 풀(`PoolConfig`)
+- `PoolConfig.collision_pushback: bool = True`, `decouple_initial_speed: bool = False`를 추가했다. v3 풀은 False/True로 만든다.
+- 두 값은 `SimEnv`에 그대로 넘기고, meta의 `config`에 기록한다. 저장 배열 형식은 바뀌지 않았다.
+- 특징 계산을 공용 헬퍼 `obs.OnlineFeatureTracker`로 바꿨다.
+  - 기본 설정에서 HEAD 버전 `pool.py`와 출력이 같음을 확인했다(주행·로봇 각 8개 에피소드, 모든 배열과 에피소드 meta 동일).
+
+### 9.3 반사실 언어 평가 사양(B2)
+- `make_test_specs(domain, n_per_cell, seed_base, counterfactual=True)`
+  - 시나리오마다 시드 n_per_cell개를 seed_base부터 연속으로 붙인다.
+  - (시나리오, 시드)마다 세 스타일 사양을 STYLE_NAMES 순서로 모두 만든다.
+  - 패러프레이즈는 `시드 % 4`로 정하며, 세 스타일이 같은 번호를 쓴다.
+  - 사양 수는 시나리오 수 × n_per_cell × 3이다. 예: 주행 n_per_cell=7이면 147개, 고유 시드 49개다.
+- 같은 시드라 주변 객체 시나리오가 같고, `decouple_initial_speed=True`면 초기 속도도 같다. 지시문(스타일·목표 속도)만 다르다.
+- `run_closed_loop` 결과의 `"counterfactual"`은 사양이 이 구조인지(`is_counterfactual`) 기록한다.
+  - 판정: 모든 (시나리오, 시드) 묶음이 세 스타일을 1개씩, 같은 패러프레이즈로 가진다.
+- 스타일별 `speed_error`·`headway_mean`은 기존 `by_style` 집계를 그대로 쓴다.
+
+### 9.4 폐루프 플래그와 검출 특징 관측
+- `run_closed_loop(..., collision_pushback=True, decouple_initial_speed=False)`
+  - 두 플래그를 모든 환경에 넘긴다. 전문가 참조(`policy_fn=None`)에도 같게 적용한다.
+  - 결과 `config`에 두 값을 기록한다.
+- obs에 `"features"`(float32 [B,2,32])를 추가했다.
+  - 에피소드마다 `OnlineFeatureTracker`를 둔다. 추출기는 `build_feature_extractor("v1"/"v2", conf_threshold=0.45, max_det=30)`이다.
+  - 매 프레임 노이즈 검출 `info.frame`으로 갱신하고, v1 16 + v2 16을 이어 붙인다(`X_v1v2` 순서).
+  - [:,0]은 프레임 t, [:,1]은 프레임 max(t−2, 0)이다. 경계 규칙은 영상과 같다.
+  - 배치 버퍼는 `obs.FeatureHistory`가 맡는다(슬롯 3개 링 버퍼).
+  - 전문가 참조는 관측을 쓰지 않으므로 특징을 계산하지 않는다.
+- 풀 특징과의 동일성은 테스트로 확인한다.
+  - 같은 시드를 `step(None)`으로 돌린 프레임 시퀀스에 `OnlineFeatureTracker`·`FeatureHistory`를 적용하면 풀 `X_v1v2`와 같다.
+  - 폐루프가 정책에 준 `"features"`는 같은 명령으로 재현한 프레임에서 계산한 값과 같다.
+- 학습 쪽에서 풀 특징으로 관측을 재구성할 때는 `obs.stack_feature_history(feats, t)`를 쓸 수 있다.
+- `timing`에 `features_s`(특징 갱신 시간)를 추가했다. `render_s`는 기존처럼 렌더링과 관측 배치 구성 시간이다.
+
+### 9.5 테스트(`tests/test_vla_env_v3.py`, 9건)
+- decouple=True에서 같은 시드의 세 스타일 초기 속도가 같음(주행·로봇)
+- decouple 여부와 무관하게 난수 상태·객체 배치가 같음, 스타일 없으면 효과 없음
+- pushback=False에서 `ego_x` 단조 비감소(대조: True에서는 같은 조건에서 뒤로 밀림)
+- pushback 기본값 = True
+- 반사실 사양 수·스타일 균형·패러프레이즈 공유(주행·로봇)
+- 풀 특징 = 폐루프 특징 경로(`OnlineFeatureTracker`, `FeatureHistory`)
+- 폐루프 obs features 형태 [B,2,32]·재현 동일성, 플래그 기록, `counterfactual` 기록
+- 기본 플래그 회귀는 `tests/test_vla_env.py`의 fixture 테스트가 맡는다.
+
+### 9.6 측정(전문가 참조, 노이즈 1.0, 30초)
+- 조건: 이 저장소의 CPU 컨테이너, 단일 프로세스
+- 결과 파일: `experiments/exp_200_vla_sim/v3/a10_measurements.json`, 스크립트 `measure_v3.py`(같은 폴더)
+- 기본 플래그의 전문가 결과는 HEAD 버전 `closed_loop.py` 결과와 에피소드 단위로 같았다(주행·로봇).
+
+로봇(`make_test_specs("robot", 4, 500000)`, 72개):
+
+| 설정 | 충돌률 | 주행 중 충돌률 | 이동 거리 음수 | 이동 거리 < 1 m | 평균 이동 거리 | 최소 이동 거리 |
+|---|---|---|---|---|---|---|
+| pushback=True(기존) | 0.181 | 0.056 | 9 | 9 | 22.4 m | −23.8 m |
+| pushback=False | 0.181 | 0.097 | 0 | 0 | 25.6 m | 6.7 m |
+| pushback=False, decouple=True(v3) | 0.167 | 0.083 | 0 | 0 | 25.6 m | 6.7 m |
+
+- 이동 거리 음수 에피소드 9개가 모두 없어졌다. 전부 robot_crowded였다.
+  - 기존에는 충돌 스텝이 595~834번 쌓여 자차가 최대 23.8 m 뒤로 밀렸다. False에서는 같은 에피소드의 충돌 스텝이 27~441번이다.
+- 진행 기준(0.8 × 전문가 거리)이 성립하지 않던 에피소드(전문가 거리 < 1 m)가 9개에서 0개가 되었다.
+- 에피소드 충돌 여부는 72개 모두 같았다. 이동 거리가 바뀐 에피소드는 13개다.
+- 주행 중 충돌률은 0.056에서 0.097로 올랐다. 늘어난 3건은 모두 robot_crowded다(시나리오 주행 중 충돌률 0.083 → 0.333).
+  - 원인: 로봇이 뒤로 밀리지 않아 다른 위치에서 작업자를 만난다.
+  - 늘어난 사례는 로봇이 0.55~0.7 m/s로 주행할 때, 옆(종방향 거리 0 근처, 횡방향 1.2~2.4 m)의 작업자가 횡이동을 시작한 경우다.
+  - 경로 판정(`_in_path`)이 2.5초 뒤 횡위치 예측으로 이 작업자를 경로 객체로 보고, 종방향 거리 < 0.3 m라 충돌로 센다.
+  - 실제 접촉이라기보다 기존 충돌 판정 규칙의 성질이다. v3에서는 규칙을 바꾸지 않고 그대로 보고한다.
+
+주행(`make_test_specs("driving", 7, 200000)`, 147개):
+
+| 설정 | 충돌률 | 주행 중 충돌률 | 평균 이동 거리 | 최소 이동 거리 | 속도 오차 |
+|---|---|---|---|---|---|
+| pushback=True(기존) | 0.000 | 0.000 | 350.46 m | 58.46 m | 0.484 m/s |
+| pushback=False | 0.000 | 0.000 | 350.46 m | 58.46 m | 0.484 m/s |
+| pushback=False, decouple=True(v3) | 0.000 | 0.000 | 351.22 m | 58.46 m | 0.532 m/s |
+
+- 주행 전문가는 충돌이 없어 pushback 플래그의 영향이 없다. 147개 모두 이동 거리가 같았다(성공 기준 거리 변화 0).
+- decouple=True에서는 초기 속도가 목표 속도와 분리되어 속도 오차가 0.484에서 0.532 m/s로 늘었다.
+  - 스타일별 변화: cautious 0.426 → 0.531, normal 0.655 → 0.686, brisk 0.372 → 0.380 m/s
+  - cautious(목표 = 시나리오 속도 × 0.85)가 목표보다 빠르게 출발해 초반 감속 구간이 생긴 영향이 가장 크다.
+
+폐루프 속도(주행 147개, 0 가속 가짜 정책, 2회):
+
+| 버전 | 벽시계 시간 | 렌더링·관측 구성 | 특징 갱신 |
+|---|---|---|---|
+| HEAD(특징 없음) | 15.1 s, 14.2 s | 6.3 s, 6.2 s | — |
+| v3(특징 포함) | 16.6 s, 17.0 s | 6.2 s, 6.3 s | 2.48 s, 2.50 s |
+
+- 특징 갱신은 에피소드·프레임당 약 0.038 ms다(147 × 449 프레임).
+- 벽시계 시간은 약 1.5~2.8 s(10~19%) 늘었다. 두 버전의 에피소드 지표는 같았다.
+
+### 9.7 남은 점
+- 충돌 시 자차 속도를 경로 객체 속도 이하로 자르는 처리 때문에, 객체가 자차 쪽으로 움직이면(속도 < 0) 그 프레임의 `ego_v`가 음수로 보고될 수 있다.
+  - 다음 서브스텝에서 0 이상으로 돌아오므로 위치(`ego_x`)는 줄지 않는다. 계약대로 처리는 바꾸지 않았다.
+- 로봇 충돌 판정은 경로 예측 기반이라 옆에서 횡이동을 시작한 작업자도 충돌로 셀 수 있다(9.6절).
