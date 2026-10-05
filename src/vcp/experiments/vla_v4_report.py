@@ -197,10 +197,53 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
     rows = [[k, TARGETS[k][0], TARGETS[k][1], show(k, v3k.get(k)) + f" ({judge(k, v3k.get(k))})", show(k, kpi.get(k)), judge(k, kpi.get(k))] for k in TARGETS]
     _write_table(tables / "v4_kpi", ["ID", "지표", "목표", "v3(800000번대 테스트)", "v4(새 테스트 1000000번대)", "판정"], rows)
     kpi["judgement"] = {k: judge(k, kpi.get(k)) for k in TARGETS}
+    try:
+        _figure(root, kpi, v3k)
+    except Exception as exc:  # 그림 실패가 집계를 막지 않게 한다
+        logger.warning("v4 그림 생성 실패: %s", exc)
     (root / "summary").mkdir(parents=True, exist_ok=True)
     (root / "summary" / "v4_kpi.json").write_text(json.dumps(kpi, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     logger.info("v4 KPI: %s", kpi["judgement"])
     return kpi
+
+
+def _figure(root: Path, kpi: dict[str, Any], v3k: dict[str, Any]) -> None:
+    """비율형 KPI(K1·K2·K3·K7)와 K6 감소율의 v3·v4 비교 막대 + 목표선."""
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    try:
+        import koreanize_matplotlib  # noqa: F401
+    except ModuleNotFoundError:  # pragma: no cover
+        pass
+    goals = {"K1": 0.80, "K2": 0.90, "K3": 0.75, "K6": 0.30, "K7": 0.65}
+
+    def val(d: dict[str, Any], k: str) -> float:
+        v = d.get(k)
+        if not v:
+            return float("nan")
+        return float(v["speed_error_reduction"] if k == "K6" else v["value"])
+
+    ks = list(goals)
+    x = np.arange(len(ks))
+    fig, ax = plt.subplots(figsize=(6.6, 3.4))
+    ax.bar(x - 0.2, [val(v3k, k) for k in ks], 0.38, label="v3", color="#9aa5b1")
+    ax.bar(x + 0.2, [val(kpi, k) for k in ks], 0.38, label="v4(새 테스트)", color="#2b6cb0")
+    for i, k in enumerate(ks):
+        ax.plot([i - 0.42, i + 0.42], [goals[k]] * 2, color="#c53030", ls="--", lw=1.5, label="목표" if i == 0 else None)
+    ax.axhline(0, color="k", lw=0.6)
+    short = {"K1": "CARE 2% 성공률", "K2": "데이터 효율", "K3": "위험 시나리오", "K6": "언어 오차 감소율", "K7": "실영상 AUROC"}
+    ax.set_xticks(x, [f"{k}\n{short[k]}" for k in ks], fontsize=8)
+    ax.set_ylabel("값(K6는 감소율)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    out = root / "summary" / "figures"
+    out.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out / "fig_v4_kpi.png", dpi=160)
+    plt.close(fig)
 
 
 def main() -> None:
