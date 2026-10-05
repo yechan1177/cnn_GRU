@@ -53,6 +53,20 @@ def _ms(x: np.ndarray) -> tuple[float, float]:
     return float(m.mean()), float(m.std(ddof=1)) if len(m) > 1 else 0.0
 
 
+def _boot_mean(S: np.ndarray, mask: np.ndarray | None = None, n_boot: int = 10000, seed: int = 0) -> dict[str, float]:
+    """단일 조건 성공률의 시드·에피소드 2단계 부트스트랩 95% CI(mask가 있으면 해당 에피소드만)."""
+
+    rng = np.random.default_rng(seed)
+    X = S if mask is None else S[:, mask]
+    n_s, n_e = X.shape
+    bs = np.empty(n_boot)
+    for i in range(n_boot):
+        si = rng.integers(0, n_s, n_s)
+        ei = rng.integers(0, n_e, n_e)
+        bs[i] = X[np.ix_(si, ei)].mean()
+    return {"mean": float(X.mean()), "sd_seed": float(X.mean(1).std(ddof=1)) if n_s > 1 else 0.0, "lo": float(np.quantile(bs, 0.025)), "hi": float(np.quantile(bs, 0.975)), "boot": bs}
+
+
 def _hazard(rs: list[dict[str, Any]], ex: dict[str, Any], moving: bool) -> np.ndarray:
     out = []
     for r in rs:
@@ -107,11 +121,32 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
         rows = [[var, LABELS.get(m, m), f"{int(round(100 * b))}%", str(c["n"]), _fmt(*c["success"]), _fmt(c["hazard"][0]), _fmt(c["collision"])] for (var, m, b), c in sorted(cond.items(), key=lambda kv: (kv[0][0], kv[0][2], kv[0][1]))]
         _write_table(tables / "v4_driving", ["설정", "방법", "예산", "시드", "성공률", "위험 시나리오 성공률", "충돌률"], rows)
         care, full = cond.get(("v4", "care", 0.02)), cond.get(("v4", "full", 1.0))
+        hz_mask = np.array([bool(e["hazard"]) for e in G[("test", "v4", "care", 0.02, True)][0]["closed_loop"]["episodes"]]) if care else None
         if care:
-            kpi["K1"] = {"value": care["success"][0], "sd": care["success"][1], "n_seeds": care["n"]}
-            kpi["K3"] = {"value": care["hazard"][0]}
+            b1 = _boot_mean(care["S"][0])
+            b3 = _boot_mean(care["S"][0], hz_mask)
+            kpi["K1"] = {"value": care["success"][0], "sd": care["success"][1], "n_seeds": care["n"], "lo": b1["lo"], "hi": b1["hi"], "p_ge_goal": float((b1["boot"] >= 0.80).mean())}
+            kpi["K3"] = {"value": care["hazard"][0], "sd": b3["sd_seed"], "lo": b3["lo"], "hi": b3["hi"], "p_ge_goal": float((b3["boot"] >= 0.75).mean()), "n_episodes": int(hz_mask.sum() * care["n"])}
         if care and full:
-            kpi["K2"] = {"value": care["success"][0] / full["success"][0], "care": care["success"][0], "full": full["success"][0]}
+            bf = _boot_mean(full["S"][0], seed=1)
+            ratio = b1["boot"] / bf["boot"]
+            kpi["K2"] = {"value": care["success"][0] / full["success"][0], "care": care["success"][0], "full": full["success"][0], "lo": float(np.quantile(ratio, 0.025)), "hi": float(np.quantile(ratio, 0.975)), "p_ge_goal": float((ratio >= 0.90).mean())}
+        # 탐색적: v4 시나리오별 성공률과 새 테스트 전문가 성공률(3차 심사 A1)
+        scen = sorted({e["scenario"] for e in ex["episodes"]})
+        srows = []
+        for var, m, b in (("v4", "full", 1.0), ("v4", "care", 0.02), ("v4", "mix_trigger", 0.02), ("v4", "random_shared", 0.02), ("v3", "care", 0.02)):
+            rs = G.get(("test", var, m, b, True))
+            if not rs:
+                continue
+            per: dict[str, list[float]] = defaultdict(list)
+            for r in rs:
+                for e, ok in zip(r["closed_loop"]["episodes"], episode_success(r["closed_loop"]["episodes"], ex, False)):
+                    per[e["scenario"]].append(float(ok))
+            srows.append([var, LABELS.get(m, m), f"{int(round(100 * b))}%"] + [_fmt(float(np.mean(per[c]))) for c in scen])
+        ex_ok = {c: float(np.mean([not e["collision"] for e in ex["episodes"] if e["scenario"] == c])) for c in scen}
+        srows.append(["전문가", "-", "-"] + [_fmt(ex_ok[c]) for c in scen])
+        _write_table(tables / "v4_driving_scenario", ["설정", "방법", "예산"] + scen, srows)
+        kpi["expert_test_success"] = {"driving": float(np.mean([not e["collision"] for e in ex["episodes"]]))}
         comps = {}
         pairs = {
             "care_vs_mix_trigger": (("v4", "care", 0.02), ("v4", "mix_trigger", 0.02)),
@@ -173,9 +208,70 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
                 rows.append([LABELS[m], "있음" if lang else "없음", str(len(rs)), _fmt(vals[lang]["speed_error"], digits=2), _fmt(vals[lang]["style_sep"], digits=2)])
             if True in vals and False in vals:
                 k6[m] = {"lang": vals[True], "nolang": vals[False], "speed_error_reduction": 1.0 - vals[True]["speed_error"] / vals[False]["speed_error"]}
+                # 시드별 감소율과 시드 부트스트랩 CI(3차 심사 M2)
+                sl = {r["job"]["seed"]: r["closed_loop"]["overall"].get("speed_error") for r in G[("cf", "v4", m, b, True)]}
+                sn = {r["job"]["seed"]: r["closed_loop"]["overall"].get("speed_error") for r in G[("cf", "v4", m, b, False)]}
+                common = sorted(set(sl) & set(sn))
+                L, N = np.array([sl[c] for c in common], float), np.array([sn[c] for c in common], float)
+                k6[m]["by_seed"] = {str(c): float(1 - sl[c] / sn[c]) for c in common}
+                rng = np.random.default_rng(0)
+                bs = []
+                for _ in range(10000):
+                    ii = rng.integers(0, len(common), len(common))
+                    bs.append(1 - L[ii].mean() / N[ii].mean())
+                k6[m]["lo"], k6[m]["hi"] = float(np.quantile(bs, 0.025)), float(np.quantile(bs, 0.975))
+                k6[m]["n_seeds_reduced"] = int((L < N).sum())
         _write_table(tables / "v4_language_cf", ["데이터", "언어", "시드", "속도 오차(m/s)", "신중−민첩 추종 간격 차(s)"], rows)
         if "care" in k6:
             kpi["K6"] = k6["care"] | {"by_data": k6}
+
+    # ---------- 탐색적 절제(3차 심사 M2·M3, 새 테스트는 이미 보았으므로 확증 아님) ----------
+    explore: dict[str, Any] = {}
+    if (root / "cache" / "expert_driving_cf.json").exists():
+        def se_of(key: tuple) -> tuple[float, int] | None:
+            rs = G.get(key)
+            if not rs:
+                return None
+            v = [r["closed_loop"]["overall"].get("speed_error") or np.nan for r in rs]
+            return float(np.nanmean(v)), len(rs)
+
+        erows = []
+        cases = [
+            ("v4 전부+P7, 언어 있음", ("cf", "v4", "care", 0.02, True)),
+            ("v4 전부+P7, 언어 없음(P6·P7도 꺼짐)", ("cf", "v4", "care", 0.02, False)),
+            ("전부+P6(P7 없음), 언어 있음", ("cf", "all_p6", "care", 0.02, True)),
+            ("전부+P6(P7 없음), 언어 없음", ("cf", "all_p6", "care", 0.02, False)),
+            ("P6·P7만(학습 언어 경로 없음)", ("cf", "p67_nolangemb", "care", 0.02, True)),
+            ("제어기 단독(학습 없음)", ("cf", "ctrl", "none", 0.0, True)),
+        ]
+        for name, key in cases:
+            v = se_of(key)
+            if v is not None:
+                explore.setdefault("k6", {})[name] = {"speed_error": v[0], "n": v[1]}
+                erows.append([name, str(v[1]), _fmt(v[0], digits=2)])
+        if erows:
+            _write_table(tables / "v4_explore_k6", ["조건(CARE 2%, 반사실 새 테스트)", "실행", "속도 오차(m/s)"], erows)
+    if (root / "cache" / "expert_driving_test.json").exists() and any(k[1] == "v4_noaux" for k in G):
+        ex = expert_reference(cfg, "test")
+        ec = {(var, m): _S(rs, ex, False) for (ev, var, m, b, lang), rs in G.items() if ev == "test" and lang and b == 0.02}
+        pairs = {
+            "noaux_care_vs_mix_trigger": (("v4_noaux", "care"), ("v4_noaux", "mix_trigger")),
+            "noaux_care_vs_random_shared": (("v4_noaux", "care"), ("v4_noaux", "random_shared")),
+            "noaux_mix_trigger_vs_random_shared": (("v4_noaux", "mix_trigger"), ("v4_noaux", "random_shared")),
+            "v4_mix_trigger_vs_random_shared": (("v4", "mix_trigger"), ("v4", "random_shared")),
+            "v3_mix_trigger_vs_random_shared": (("v3", "mix_trigger"), ("v3", "random_shared")),
+            "v3_care_vs_mix_trigger": (("v3", "care"), ("v3", "mix_trigger")),
+        }
+        erows = []
+        for name, (a, b) in pairs.items():
+            if a in ec and b in ec:
+                A, B = _pair(ec[a], ec[b])
+                hb = hierarchical_bootstrap(A, B)
+                explore.setdefault("k4", {})[name] = hb | {"n_seeds": len(A), "a": float(A.mean()), "b": float(B.mean())}
+                erows.append([name, str(len(A)), _fmt(float(A.mean())), _fmt(float(B.mean())), f"{hb['diff']:+.3f} [{hb['lo']:+.3f}, {hb['hi']:+.3f}]".replace("-", "−")])
+        if erows:
+            _write_table(tables / "v4_explore_k4", ["비교(새 테스트, 2%)", "시드", "A 성공률", "B 성공률", "A − B [95% CI]"], erows)
+    kpi["explore"] = explore
 
     # ---------- AMR(K5) ----------
     rc = cfg.for_domain("robot")
