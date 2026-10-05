@@ -1,8 +1,8 @@
 | 비교(새 테스트, 2%) | 시드 | A 성공률 | B 성공률 | A − B [95% CI] |
 |---|---|---|---|---|
-| noaux_care_vs_mix_trigger | 9 | 0.819 | 0.803 | +0.015 [−0.015, +0.045] |
-| noaux_care_vs_random_shared | 9 | 0.819 | 0.798 | +0.020 [−0.014, +0.055] |
-| noaux_mix_trigger_vs_random_shared | 9 | 0.803 | 0.798 | +0.005 [−0.022, +0.033] |
+| noaux_care_vs_mix_trigger | 10 | 0.822 | 0.805 | +0.017 [−0.014, +0.048] |
+| noaux_care_vs_random_shared | 10 | 0.822 | 0.798 | +0.024 [−0.010, +0.060] |
+| noaux_mix_trigger_vs_random_shared | 10 | 0.805 | 0.798 | +0.007 [−0.020, +0.036] |
 | v4_mix_trigger_vs_random_shared | 10 | 0.849 | 0.813 | +0.036 [+0.009, +0.067] |
-| v3_mix_trigger_vs_random_shared | 9 | 0.698 | 0.661 | +0.037 [−0.009, +0.085] |
-| v3_care_vs_mix_trigger | 9 | 0.701 | 0.698 | +0.002 [−0.042, +0.045] |
+| v3_mix_trigger_vs_random_shared | 10 | 0.700 | 0.660 | +0.040 [−0.003, +0.084] |
+| v3_care_vs_mix_trigger | 10 | 0.703 | 0.700 | +0.003 [−0.038, +0.044] |
