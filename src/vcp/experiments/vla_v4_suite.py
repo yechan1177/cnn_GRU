@@ -48,7 +48,11 @@ VARIANTS: dict[str, dict[str, Any]] = {
     # 나와 c=1이 선택을 바꾸지 않는다(A15 측정, docs/30 7절). 트리거 혼합만 바뀌어 비교 기준선만 달라진다.
     "all": {"feature_history": 8, "feature_stride": 2, "feature_encoder": "gru", "aux_weight": 0.2, "lang_dropout": 0.15, "hazard_weight": 2.0},
 }
-POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride", "goal_encoding", "goal_residual_gain")
+# 3차 심사(M2·M3) 대응 탐색적 절제(새 테스트는 이미 보았으므로 확증이 아니다, docs/38)
+VARIANTS["p67_nolangemb"] = dict(VARIANTS["all_p7"], lang_embedding=False)  # 학습 언어 경로 없이 P6·P7 수치 목표만
+VARIANTS["v4_noaux"] = {k: v for k, v in VARIANTS["all_p7"].items() if k not in ("aux_weight", "hazard_weight")}  # 점수기 출력을 학습에 쓰지 않는 v4
+
+POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride", "goal_encoding", "goal_residual_gain", "lang_embedding")
 # P7 이득(정규화 단위) = 물리 이득 0.5 s⁻¹ × 속도 스케일 / 가속도 스케일(주행 30/4, AMR 3/1)
 GOAL_RESIDUAL_GAIN = {"driving": 0.5 * 30.0 / 4.0, "robot": 0.5 * 3.0 / 1.0}
 
@@ -414,12 +418,58 @@ def stage_robot(cfg: V4Config) -> list[dict[str, Any]]:
     return run_jobs(rc, jobs)
 
 
+def controller_policy_fn(domain: str, gain_phys: float = 0.5, clip_norm: float = 0.5) -> Any:
+    """제어기 단독(3차 심사 M2 (d)): 지시문 목표 속도 g로 a = clip(0.5·(g − v), ±0.5·A). 학습 없음."""
+
+    from ..vla.instructions import goal_value_table
+    from ..vla.obs import accel_scale, speed_scale
+
+    table = goal_value_table()
+    S, A = float(speed_scale(domain)), float(accel_scale(domain))
+
+    def fn(obs: dict[str, Any]) -> np.ndarray:
+        tok = np.asarray(obs["tokens"])
+        vals = table[np.clip(tok, 0, len(table) - 1)]
+        ok = np.isfinite(vals)
+        cnt = ok.sum(1)
+        g = np.where(ok, vals, 0.0).sum(1) / np.maximum(cnt, 1)
+        v = np.asarray(obs["proprio"], dtype=np.float32).reshape(len(tok), -1)[:, 0]
+        a = np.clip(gain_phys * (g - v) * S, -clip_norm * A, clip_norm * A) * (cnt > 0)
+        return a.astype(np.float32)
+
+    return fn
+
+
+def stage_explore(cfg: V4Config) -> list[dict[str, Any]]:
+    """3차 심사 대응 탐색적 절제(docs/38). 결과는 확증이 아니라 해석 보조다."""
+
+    from ..vla.closed_loop import run_closed_loop
+
+    jobs = []
+    for s in MAIN_SEEDS[:5]:
+        for lang in (True, False):
+            jobs.append(make_job(cfg, "all_p6", "care", 0.02, s, "cf", use_language=lang))  # (a) P7 없음
+        jobs.append(make_job(cfg, "p67_nolangemb", "care", 0.02, s, "cf"))  # (b) 학습 언어 경로 없이 수치 목표만
+    for s in MAIN_SEEDS:
+        for m in ("random_shared", "care", "mix_trigger"):
+            jobs.append(make_job(cfg, "v4_noaux", m, 0.02, s, "test"))  # K4 정화: 점수기 출력을 학습에 쓰지 않음
+        jobs.append(make_job(cfg, "v3", "mix_trigger", 0.02, s, "test"))  # 새 테스트의 v3 트리거 혼합
+    res = run_jobs(cfg, jobs)
+    # (d) 제어기 단독(학습 없음, 결정적): 반사실 세트
+    out = cfg.runs / "driving__cf__ctrl__none__b0.00__s0__st0.json"
+    if not out.exists():
+        closed = run_closed_loop(controller_policy_fn(cfg.domain), eval_specs(cfg, "cf"), domain=cfg.domain, collision_pushback=False, decouple_initial_speed=True)
+        job = {"domain": cfg.domain, "eval": "cf", "variant": "ctrl", "method": "none", "budget": 0.0, "seed": 0, "steps": 0}
+        out.write_text(json.dumps({"job": job, "key": out.stem, "closed_loop": closed}, ensure_ascii=False, default=_json_default), encoding="utf-8")
+    return res
+
+
 def main() -> None:
     import argparse
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser(description="v4 개선 개발·확증 실험")
-    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma"])
+    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma", "explore"])
     ap.add_argument("--root", default="experiments/exp_130_vla_v4")
     ap.add_argument("--v3-root", default="experiments/exp_120_vla_v3")
     ap.add_argument("--workers", type=int, default=4)
@@ -440,6 +490,8 @@ def main() -> None:
         stage_lang(cfg)
     elif a.stage == "robot":
         stage_robot(cfg)
+    elif a.stage == "explore":
+        stage_explore(cfg)
     elif a.stage == "comma":
         from .comma_v4 import run_comma_v4
 

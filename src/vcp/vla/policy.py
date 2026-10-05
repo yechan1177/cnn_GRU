@@ -155,6 +155,7 @@ class PolicyConfig:
     goal_encoding: bool = False      # P6: 지시문의 목표 속도 숫자를 결정적으로 읽어 [g, 있음, g − v_t]를 입력(언어 사용 시만)
     goal_residual_gain: float = 0.0  # P7: 잔차 행동 기준 a0 = clip(gain·(g − v_t), ±goal_residual_clip)(정규화 단위). 0이면 끔
     goal_residual_clip: float = 0.5  # P7: 기준 행동 상한(정규화 가속도 단위)
+    lang_embedding: bool = True      # 절제용: False면 학습 언어 임베딩·FiLM 경로를 끄고(0 벡터) 토큰은 P6·P7 목표 읽기에만 쓴다
 
     def __post_init__(self) -> None:
         """v4 확장 필드 검사(잘못된 값은 학습 전에 바로 알린다)."""
@@ -271,6 +272,7 @@ class VLALitePolicy(nn.Module):
         goal_encoding: bool = False,
         goal_residual_gain: float = 0.0,
         goal_residual_clip: float = 0.5,
+        lang_embedding: bool = True,
     ) -> None:
         super().__init__()
         if feature_encoder not in FEATURE_ENCODERS:
@@ -310,6 +312,8 @@ class VLALitePolicy(nn.Module):
         # P7 목표 속도 잔차 헤드: 목표 표가 필요하므로 P6(goal_encoding)이 켜진 모델에서만 쓴다. 학습 파라미터는 없다.
         self.goal_residual_gain = float(goal_residual_gain) if self.goal_encoding else 0.0
         self.goal_residual_clip = float(goal_residual_clip)
+        # 절제(3차 심사 M2): 학습 언어 경로만 끄고 수치 목표(P6·P7)는 남긴다. 모듈은 그대로 만들어 난수 순서를 바꾸지 않는다
+        self.lang_embedding = bool(lang_embedding)
 
         chans = (in_channels,) + tuple(widths)
         self.blocks = nn.ModuleList(
@@ -384,6 +388,7 @@ class VLALitePolicy(nn.Module):
             goal_encoding=cfg.goal_encoding,
             goal_residual_gain=cfg.goal_residual_gain,
             goal_residual_clip=cfg.goal_residual_clip,
+            lang_embedding=cfg.lang_embedding,
         )
 
     def encode_features(self, features: torch.Tensor | None) -> torch.Tensor:
@@ -478,7 +483,7 @@ class VLALitePolicy(nn.Module):
         """토큰 [B,L] → 언어 특징 [B,lang_dim]. 어휘 밖 id는 UNK(1)로 바꾼다. 절제 모델은 0 벡터."""
 
         b = tokens.shape[0]
-        if not self.use_language:
+        if not self.use_language or not self.lang_embedding:
             return torch.zeros(b, self.lang_dim, device=tokens.device)
         tok = torch.where(tokens >= self.vocab_size, torch.ones_like(tokens), tokens).clamp_min(0)
         mask = (tok != 0).float()
