@@ -1,0 +1,11 @@
+설정:언어,반사실 개발 세트 속도 오차(m/s)
+all:lang,2.53
+all:nolang,2.14
+all_p6:lang,2.52
+all_p6:nolang,2.14
+all_p7:lang,1.95
+all_p7:nolang,2.14
+t1:lang,3.05
+t1:nolang,2.60
+v3:lang,3.68
+v3:nolang,2.60
