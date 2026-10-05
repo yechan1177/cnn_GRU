@@ -72,7 +72,7 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
     kpi: dict[str, Any] = {}
 
     # ---------- 개발 세트(선택 근거) ----------
-    names = {"v3": "v3 기준", "p2": "+P2 시간 특징 인코더", "p3": "+P3 위험 보조 헤드", "t1": "+T1 지시문 드롭아웃", "p4": "+P4 위험 가중 손실", "p5": "+P5 자차 운동 이력", "all": "전부(P2+P3+T1+P4)", "all_p6": "전부+P6 수치 목표"}
+    names = {"v3": "v3 기준", "p2": "+P2 시간 특징 인코더", "p3": "+P3 위험 보조 헤드", "t1": "+T1 지시문 드롭아웃", "p4": "+P4 위험 가중 손실", "p5": "+P5 자차 운동 이력", "all": "전부(P2+P3+T1+P4)", "all_p6": "전부+P6 수치 목표", "all_p7": "전부+P7 목표 속도 잔차"}
     kpi["dev_choice"] = {}
     rows = []
     for dom, dname in (("driving", "주행"), ("robot", "AMR")):
@@ -81,6 +81,13 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
             continue
         c = json.loads(ch.read_text(encoding="utf-8"))
         kpi["dev_choice"][dom] = c
+        # 원고 자리표시자용 중첩 형태: dev_choice:<도메인>:devcf:<설정>:<lang|nolang> (원래 키 "설정:언어"는 ':' 때문에 경로로 못 읽는다)
+        if c.get("devcf_speed_error"):
+            nest: dict[str, dict[str, float]] = defaultdict(dict)
+            for key, val in c["devcf_speed_error"].items():
+                var, _, lang = key.partition(":")
+                nest[var][lang] = val
+            c["devcf"] = dict(nest)
         for v, x in c["dev_success_by_seed"].items():
             rows.append([dname, names.get(v, v), _fmt(float(np.mean(x)), float(np.std(x, ddof=1)) if len(x) > 1 else 0.0), "채택" if c["adopt"].get("best") == v else ("T1 채택" if v == "t1" and c["adopt"].get("t1") else "-")])
         if dom == "driving" and c.get("devcf_speed_error"):
@@ -121,6 +128,25 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
         for k, p in holm(fam).items():
             comps[k]["p_holm"] = p
         kpi["comparisons"] = comps
+        # 원고 자리표시자용 조건별 값: driving:<설정>:<방법>:<success|success_sd|hazard|collision|n>
+        drv: dict[str, dict[str, Any]] = defaultdict(dict)
+        for (var, m, b), c in cond.items():
+            drv[var][m] = {"success": c["success"][0], "success_sd": c["success"][1], "hazard": c["hazard"][0], "collision": c["collision"], "n": c["n"], "budget": b}
+        kpi["driving"] = dict(drv)
+        # 원고 자리표시자용 학습 비용(새 테스트 2% 실행의 학습 기록): cost:<v3|v4>:<n_params|samples_per_s|train_time_s>
+        # 여러 작업자가 CPU를 공유한 상태의 1스레드 측정이므로 절대값은 참고치다(docs/31 11.4).
+        cost: dict[str, dict[str, float]] = {}
+        for var in ("v3", "v4"):
+            logs = [r.get("train_log") or {} for (ev, v, m, b, lang), rs in G.items() if ev == "test" and v == var and lang and b < 1.0 for r in rs]
+            logs = [t for t in logs if t.get("n_params")]
+            if logs:
+                cost[var] = {
+                    "n_params": float(logs[0]["n_params"]),
+                    "samples_per_s": float(np.median([t["samples_per_s"] for t in logs])),
+                    "train_time_s": float(np.median([t["train_time_s"] for t in logs])),
+                    "n_runs": float(len(logs)),
+                }
+        kpi["cost"] = cost
         if "care_vs_mix_trigger" in comps:
             kpi["K4"] = comps["care_vs_mix_trigger"]
 
@@ -163,6 +189,12 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
             kpi["K5"] = hierarchical_bootstrap(A, B) | {"care": float(A.mean()), "random_shared": float(B.mean()), "n_seeds": len(A)}
         if ("v4", "full", 1.0) in rcond:
             kpi["robot_full_success"] = float(rcond[("v4", "full", 1.0)][0].mean())
+        # 원고 자리표시자용: robot:<설정>:<방법>:<success|success_sd|n>
+        rob: dict[str, dict[str, Any]] = defaultdict(dict)
+        for (v, m, b), S in rcond.items():
+            mu, sd = _ms(S[0])
+            rob[v][m] = {"success": mu, "success_sd": sd, "n": len(S[1]), "budget": b}
+        kpi["robot"] = dict(rob)
 
     # ---------- 실영상(K7) ----------
     cr = _runs(root, "comma4__")
@@ -174,7 +206,12 @@ def build_v4_report(root: Path, quick: bool = False) -> dict[str, Any]:
         f = cg.get(("full", 1.0))
         if f:
             au = [r["open_loop"]["brake_onset_auroc"] for r in f]
-            kpi["K7"] = {"value": float(np.mean(au)), "sd": float(np.std(au, ddof=1)) if len(au) > 1 else 0.0}
+            kpi["K7"] = {"value": float(np.mean(au)), "sd": float(np.std(au, ddof=1)) if len(au) > 1 else 0.0, "min": float(np.min(au)), "max": float(np.max(au)), "n_runs": len(au)}
+            # 정책 없이 현재 자차 가속도(−a_t)만 쓴 기준선(같은 시험 프레임). K7 판정에는 쓰지 않는 참고값이다(docs/36 2.0b)
+            base = [r["open_loop"].get("baseline_neg_accel_auroc") for r in f]
+            base = [float(x) for x in base if x is not None]
+            if base:
+                kpi["K7"]["baseline_neg_accel"] = float(np.mean(base))
 
     # ---------- KPI 요약(v2·v3·v4) ----------
     v3k = json.loads(V3_KPI_PATH.read_text(encoding="utf-8")) if V3_KPI_PATH.exists() else {}

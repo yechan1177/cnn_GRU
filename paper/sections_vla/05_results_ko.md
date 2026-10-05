@@ -1,332 +1,234 @@
 ## 5. 실험 결과
 
-5.1~5.10절은 사전 등록 이전에 수행한 본 실험의 결과이며(폐루프는 시드 3개, 실영상은 fold 5개 × 시드 2개), 4.3절에 따라 모두 탐색적 결과로 보고한다. 5.1절의 점수기 진단과 5.10절의 비용 측정은 정책 학습 시드와 무관하다. 사전 등록 확증 실험의 결과는 5.11절에 따로 보고한다.
+결과는 연구 단계 순서로 보고한다. 5.1절은 핵심 지표(KPI) K1~K7의 판정을 두 확증 단계에 걸쳐 요약한다. 5.2절은 1차 확증(v3, 사전 등록 docs/34, 테스트 시드 800000번대)의 결과다. 5.3절은 v3 원자료로 미달 원인을 진단한 사후 분석이고, 5.4절은 그 진단에 따라 정책·학습 블록을 고른 v4 개발 세트 결과다. 5.5절은 처음 보는 새 테스트 세트(시드 1000000번대)에서 수행한 2차 확증(v4, 사전 등록 docs/37)의 결과다. 5.6절은 계산 비용, 5.7절은 예비 연구(v2)의 결과를 요약한다.
 
-### 5.1 점수기와 선택 데이터의 구성
+확증 근거는 5.2절과 5.5절뿐이다. 5.3절과 5.4절은 v3 테스트 결과를 본 뒤의 분석과 선택이므로 탐색적 결과로 읽어야 한다. 판정 규칙은 3.7절(표 6)과 같으며, 점추정 기준 지표(K1~K3, K6, K7)는 점추정이 목표 이상이면 '달성'이다.
 
-초기 라벨 셋으로 학습한 점수기를 새 큐레이션 풀(지시문 스타일 추가, 시드 분리)에 적용했다. 위험 프레임 판별 AUROC({{s:pool_scorer_auroc}})는 같은 프레임에서 역 TTC 특징 단독({{s:pool_ittc_auroc}})과 자차 감속도({{s:pool_action_auroc}})보다 높았다. 점수기는 물리 단서 하나보다 시간 맥락을 통합한 쪽이 위험 프레임을 더 잘 가려냈다.
+### 5.1 핵심 지표 요약
 
-**점수기는 자차 감속보다 먼저 반응하는가.** 1차 원고는 단일 사례 그림을 근거로 점수기가 자차 감속 전에 위험 확률을 높인다고 주장했다. 이를 풀 전체에서 확인했다. 풀의 위험 사건 {{s:lead_n_events:0}}개마다 사건 시작 3초 전부터 사건 끝까지의 창을 잡았다. 그 안에서 '위험 확률 $e_t$가 처음 0.5를 넘은 시각'과 '자차 가속도가 처음 −1 m/s² 아래로 내려간 시각'을 찾고, 선행 시간을 (감속 시각 − 점수 시각)으로 정의했다. 양수이면 점수기가 먼저 반응한 것이다.
+{{table:v4_kpi}}
 
-- 두 신호가 모두 나타난 사건은 {{s:lead_n_both:0}}개였다. 선행 시간의 중앙값은 {{s:lead_median_s:2}} s, 사분위 범위는 {{s:lead_q25_s:2}} ~ {{s:lead_q75_s:2}} s였다.
-- 점수기가 먼저 반응한 사건의 비율은 {{p:lead_frac_score_first:0}}로 절반에 못 미쳤다.
-- 점수만 반응한 사건은 {{s:lead_n_score_only:0}}개, 감속만 나타난 사건은 {{s:lead_n_decel_only:0}}개였다.
+표 22. 핵심 지표의 목표와 판정. v3 열은 1차 확증(테스트 시드 800000번대, 사전 등록 docs/34), v4 열은 2차 확증(처음 보는 새 테스트 세트 1000000번대, 사전 등록 docs/37)의 값이다. 두 열은 평가 세트가 다르므로, 같은 세트에서 v3·v4 설정을 직접 비교한 값은 5.5절(표 34의 H-v)에 따로 보고한다. K4·K5는 시드 대응 차이와 시드·에피소드 계층 부트스트랩 95% CI이다.
 
-따라서 **점수기는 자차 감속보다 앞서지 않았고, 대체로 동시 수준으로 반응했다.** 1차 원고의 '예측적 성질' 주장은 철회한다. 풀의 자차 가속도는 반응 지연을 넣은 전문가 제어기의 것이므로, 사람 운전 자료에서 같은 결과가 나오는지는 확인하지 않았다.
+{{fig:fig_v4_kpi.png|그림 10. 비율형 핵심 지표의 v3(1차 확증)·v4(2차 확증, 새 테스트) 값과 목표(점선). K6은 언어 입력이 줄인 속도 추종 오차의 비율이며, v3에서는 음수(언어가 오차를 키움)였다. 차이형 지표 K4·K5는 표 22에 있다.}}
 
-{{fig:fig_vla_episode.png|그림 2. 큐레이션 풀의 선행차 급제동 에피소드 사례. 사례는 급제동 시나리오 에피소드 가운데 고정 시드로 무작위 추출했으며, 대표성을 주장하지 않는다. 위: 정책 관측(64×64 렌더 영상). 가운데: 점수기의 위험 확률 $e_t$, 불확실성 $u_t$, 역 TTC 특징, GT 위험 구간(붉은 영역), 자차 가속도(감속 트리거의 입력)와 전문가 명령(행동 라벨). 아래: 예산 2%에서 CARE($\rho$=0.9)의 실제 선택, 감속 트리거, 무작위가 이 에피소드에서 고른 클립(본 실험 시드 0의 선택을 재현). CARE의 선택은 점수 몫과 저장소 몫을 구분하지 않고 표시했다. 점수기와 자차 감속의 선후 관계는 이 한 사례가 아니라 풀 전체 위험 사건의 선행 시간 분포(본문)로 판단한다.}}
+- **1차 확증(v3)에서는 일곱 지표가 모두 미달했다.** 성공률은 목표에 가까웠으나(K1 {{s:k:K1:value}}, 목표 0.80), 점수기 고유 기여(K4)는 CI 하한이 0에 닿지 못했고, AMR 비열등(K5)·언어 지시 준수(K6)·실영상 제동 시작 예측(K7)은 목표와 거리가 멀었다.
+- **2차 확증(v4)에서는 K1·K3·K6을 달성했고, K2·K4·K5·K7은 미달했다.** 값은 K1 {{s:k4:K1:value}}, K3 {{s:k4:K3:value}}, K6 {{p:k4:K6:speed_error_reduction}}이다. K2({{s:k4:K2:value}})는 목표 0.90에 조금 못 미쳤고, K4({{s:k4:K4:diff}})는 사실상 0이었다.
+- v4의 개선은 큐레이션(점수기·풀·선별 하이퍼파라미터)을 그대로 두고 하위 정책과 학습 블록만 바꾼 결과다(3.6절). 같은 새 테스트에서 v4 설정은 v3 설정보다 CARE 2% 성공률이 {{s:k4:comparisons:v4_vs_v3_care:diff}} 높았다(5.5절).
 
-선택 데이터의 구성은 방법마다 크게 달랐다(그림 3). 아래에는 회수율과 선택 데이터 내 위험 비중(표 5)을 함께 적었다.
+### 5.2 1차 확증(v3)
 
-- 주 예산 2%의 GT 위험 프레임 회수율 / 위험 비중
-  - 오라클: {{s:driving:oracle:0.02:hazard_frame_recall}} / {{s:driving:oracle:0.02:hazard_share:2}}
-  - 맥락 이벤트: {{s:driving:event:0.02:hazard_frame_recall}} / {{s:driving:event:0.02:hazard_share:2}}
-  - 감속 트리거: {{s:driving:action_trigger:0.02:hazard_frame_recall}} / {{s:driving:action_trigger:0.02:hazard_share:2}}
-  - CARE: {{s:driving:ours:0.02:hazard_frame_recall}} / {{s:driving:ours:0.02:hazard_share:2}}
-  - 무작위: {{s:driving:random:0.02:hazard_frame_recall}} / {{s:driving:random:0.02:hazard_share:2}}
-- 무작위의 회수율은 예산 비율 수준이고, 위험 비중은 풀의 위험 비율 수준이다.
-- 위험 지향 방법의 선택 데이터는 위험 프레임이 다수를 차지했다. 위험 비중은 무작위의 약 {{s:risk_share_ratio_min:0}}~{{s:risk_share_ratio_max:0}}배였다(감속 트리거·맥락 이벤트·오라클·오프라인 손실).
-- CARE는 예산의 90%를 무작위 저장소로 쓰므로, 선택 데이터의 위험 비중이 무작위보다 조금 높은 수준에 그친다. 즉 CARE의 선택 데이터는 '무작위 + 약간의 위험 강화'다.
+1차 확증은 사전 등록(docs/34, 커밋 `bee8b95`)에 따라 주행 테스트 147 에피소드(시드 800000번대), 반사실 언어 세트 63 에피소드, AMR 테스트 72 에피소드, 실영상 5-fold × 시드 2개로 수행했다. CARE의 $\lambda$=0.5, $\rho$=0.9(AMR은 $\lambda$=0, $\rho$=0.95)는 테스트 전에 검증 세트에서 정했다(4.2.3절).
 
-5.2~5.5절은 위험 프레임을 최대한 모으는 전략이 정책을 망치는 양상과, 약간의 위험 강화가 보인 효과를 차례로 살핀다.
+**(1) 주행 폐루프(K1~K3).**
 
-{{fig:fig_vla_selection.png|그림 3. 예산 2%에서 각 방법이 고른 데이터의 GT 위험 프레임 회수율과 맥락 라벨 분포 엔트로피(정규화). 회수율은 풀 전체 위험 프레임 가운데 선택된 비율이며, 선택 데이터 내 위험 비중은 본문에 함께 적었다.}}
+{{table:v3_driving}}
 
-### 5.2 주 결과: 예산 2%의 폐루프 성능
+표 23. v3 주행 테스트 결과(평균 ± 시드 표준편차). 예산 2%는 시드 10개, 1%·5%와 전체 데이터는 시드 5개다. 혼합 방법은 같은 학습 시드에서 공유 저장소(예산의 $\rho$)를 공유하고 점수 몫만 다르다(3.4절). *는 GT 위험 라벨을 쓰는 특권 정보 조건이다.
 
-표 13은 예산 2%(풀의 {{s:driving:random:0.02:n_train_frames:0}} 프레임)에서 학습한 VLA-lite 정책의 테스트 결과다(147 에피소드, 시드 3개).
+- **K1(미달)**: CARE 2%의 성공률({{s:k:K1:value}} ± {{s:k:K1:sd}})은 목표 0.80에 미달했다.
+- **K2(미달)**: 전체 데이터의 성공률({{s:k:K2:full}})이 높아 비율은 {{s:k:K2:value}}에 그쳤다(목표 0.90).
+- **K3(미달)**: 위험 시나리오 성공률은 {{s:k:K3:value}} ± {{s:k:K3:sd}}에 그쳤다(목표 0.75).
+- 감속 트리거 단독 선택은 예비 연구(5.7절)와 같은 위험 편향 붕괴를 보였다. 성공률이 0.1 아래였고(표 23), 속도 오차가 커 진행 기준을 넘지 못했다. CARE − 감속 트리거 단독의 차이: {{s:k:comparisons:care_vs_trigger_only_b0.02:diff}}.
 
-{{table:vla_main_driving}}
+{{fig:fig_v3_budget.png|그림 11. v3 주행 테스트의 예산별 폐루프 성공률(CARE, 무작위(공유 저장소); 오차 막대는 시드 표준편차). 점선은 전체 데이터(100%), 붉은 파선은 K1 목표(0.80)다. 예산 1%·5%는 사전 등록상 보조(탐색적) 분석이다.}}
 
-표 13. 예산 2% 폐루프·개루프 결과(평균 ± 시드 표준편차). '엣지 가능'은 수집 시점·정책 비의존·상수 비용(C1~C3)을 모두 만족하는지 나타낸다. *는 수집 시점에 계산할 수 없는 참고 기준이다. 개루프 MAE는 별도 개루프 테스트 풀(150 에피소드, 3프레임 간격 표본 {{s:openloop_n_frames:0}}프레임, 그중 GT 위험 프레임 {{s:openloop_n_hazard:0}}개)의 전문가 시연에 대한 행동 청크 오차(m/s²)이고, 위험 MAE는 그중 GT 위험 프레임만의 오차다. 지표 정의는 표 5에 있다. 전체 데이터(100%) 행의 엣지 가능 열 '-'는 선별이 아니므로 해당 없음을 뜻한다.
+**(2) 점수기 고유 기여(K4)와 보조 가설.** 표 24는 사전 등록 가설 검정이다.
 
-**(1) CARE의 평균 성공률이 수집 시점 방법 가운데 가장 높았으나, 무작위와의 차이는 시드 수준에서 결정적이지 않았다.**
-
-- CARE의 성공률({{s:driving:ours:0.02:success}} ± {{s:driving:ours:0.02:success_sd}})은 무작위({{s:driving:random:0.02:success}} ± {{s:driving:random:0.02:success_sd}})보다 높았다.
-- 시드·에피소드 계층 부트스트랩으로 구한 차이의 신뢰구간은 0을 포함한다({{s:hb:ours_vs_random_b0.02:diff}} [95% CI {{s:hb:ours_vs_random_b0.02:lo}}, {{s:hb:ours_vs_random_b0.02:hi}}], 단측 $p$={{s:hb:ours_vs_random_b0.02:p_le0:3}}). 시드 대응 $t$ 구간([{{s:hbt:ours_vs_random_b0.02:lo}}, {{s:hbt:ours_vs_random_b0.02:hi}}])은 더 넓다.
-- 참고로 에피소드만 재표집한 구간({{b:ours_vs_random_b0.02}})은 0을 포함하지 않는다. 그러나 이 구간은 평가 분산만 반영한다(4.3절).
-- 시드별 차이(시드 0 / 1 / 2: {{s:sdiff:0.02:0:3}} / {{s:sdiff:0.02:1:3}} / {{s:sdiff:0.02:2:3}})를 보면, 한 시드에서는 CARE가 무작위보다 낮았다. 시드 간 편차가 큰 무작위의 평균이 성공률이 낮은 시드에 끌려 내려간 영향도 있다.
-- 이 차이는 사전 등록 확증 실험(새 시드 7개, 새 평가 세트)에서 다시 검정했으며, 예산 2%의 우위가 지지되었다({{s:ct:H1_ours_vs_random_b0.02:diff}} [95% CI {{s:ct:H1_ours_vs_random_b0.02:lo}}, {{s:ct:H1_ours_vs_random_b0.02:hi}}], 5.11절).
-- 같은 선별법·예산·시드 번호로 언어 입력만 빼고 다시 학습한 사실상의 반복 실험(5.7절)에서는 무작위가 오히려 높았다({{s:lang:ours:nolang:success}} 대 {{s:lang:random:nolang:success}}).
-- 평균으로는 충돌률({{s:driving:ours:0.02:collision}} 대 {{s:driving:random:0.02:collision}}), 속도 오차({{s:driving:ours:0.02:speed_error:2}} 대 {{s:driving:random:0.02:speed_error:2}} m/s), 위험 시나리오 성공률({{s:driving:ours:0.02:hazard_success}} 대 {{s:driving:random:0.02:hazard_success}})이 모두 CARE 쪽이 나았다.
-- 예산 2%에서 관찰된 시드 3개 표준편차는 CARE가 무작위보다 작았다. 그러나 1·5·10% 예산에서는 비슷하거나 CARE가 더 컸고(표 15), 시드 3개의 표준편차 비교는 검정력이 거의 없다. 따라서 이를 CARE의 일반적 성질로 해석하지 않는다.
-
-**(2) 위험 표본만 늘리는 방법은 모두 실패했다.**
-
-- 성공률
-  - 감속 트리거: {{s:driving:action_trigger:0.02:success}}
-  - 맥락 이벤트: {{s:driving:event:0.02:success}}
-  - 오라클: {{s:driving:oracle:0.02:success}}
-  - 오프라인 손실: {{s:driving:offline_loss:0.02:success}}
-  - 불확실성: {{s:driving:uncertainty:0.02:success}}
-- 무작위 대비 차이는 계층 부트스트랩에서도 모두 0을 포함하지 않았다(예: 감속 트리거 {{s:hb:action_trigger_vs_random_b0.02:diff}} [{{s:hb:action_trigger_vs_random_b0.02:lo}}, {{s:hb:action_trigger_vs_random_b0.02:hi}}], 오라클 {{s:hb:oracle_vs_random_b0.02:diff}} [{{s:hb:oracle_vs_random_b0.02:lo}}, {{s:hb:oracle_vs_random_b0.02:hi}}], 오프라인 손실 {{s:hb:offline_loss_vs_random_b0.02:diff}} [{{s:hb:offline_loss_vs_random_b0.02:lo}}, {{s:hb:offline_loss_vs_random_b0.02:hi}}]).
-- 이들은 충돌이 거의 없었다(충돌률: 오라클 {{s:driving:oracle:0.02:collision}}, 감속 트리거 {{s:driving:action_trigger:0.02:collision}}).
-- 대신 속도 오차가 9~14 m/s에 달해 전문가 진행 거리의 80%를 넘지 못했다.
-- 즉, 위험 상황 위주로 학습한 정책은 "항상 감속한다"는 단순한 해로 수렴했다. 본 논문은 이를 **위험 편향 붕괴**(risk-bias collapse)라 부른다(5.3절).
-- 정책 의존 오프라인 기준선(오프라인 손실)도 이 붕괴를 피하지 못했다. 손실 상위 프레임은 대부분 행동 변화가 큰 제동 구간이라(위험 비중 {{s:driving:offline_loss:0.02:hazard_share:2}}), 결국 위험 지향 선택과 같은 문제를 겪는다.
-
-**(3) 커버리지 지향 방법도 무작위보다 낮았다.**
-
-- Coreset({{s:driving:coreset:0.02:success}})과 역 TTC 규칙({{s:driving:rule_ittc:0.02:success}})은 무작위보다 낮았고, 계층 신뢰구간도 0을 포함하지 않았다(Coreset {{s:hb:coreset_vs_random_b0.02:diff}} [{{s:hb:coreset_vs_random_b0.02:lo}}, {{s:hb:coreset_vs_random_b0.02:hi}}]).
-- Coreset은 특징 공간의 외곽(드문 장면)을 우선해, 결과적으로 정상 주행 표본을 줄인다(위험 비중 {{s:driving:coreset:0.02:hazard_share:2}}).
-- 등간격 선택({{s:driving:uniform:0.02:success}})은 무작위와 유의한 차이를 보이지 않았다({{s:hb:uniform_vs_random_b0.02:diff}} [{{s:hb:uniform_vs_random_b0.02:lo}}, {{s:hb:uniform_vs_random_b0.02:hi}}]).
-- 데이터 선택 연구에서 무작위가 강한 기준선이라는 보고[39]와 일치한다.
-
-**(4) 시나리오 가중 민감도.** 테스트 세트는 7개 시나리오를 같은 수로 담으므로 위험 시나리오가 4/7로 과대표집되어 있다. 풀의 시나리오 빈도로 가중해 성공률을 다시 계산했다. 가중 성공률(CARE {{s:driving:ours:weighted_success}}, 무작위 {{s:driving:random:weighted_success}}, 등간격 {{s:driving:uniform:weighted_success}}, 전체 데이터 {{s:driving:full:weighted_success}})의 순서는 균등 가중과 같았다. 위험 지향 방법(감속 트리거 {{s:driving:action_trigger:weighted_success}}, 오라클 {{s:driving:oracle:weighted_success}})은 여전히 최하위였다. 다만 이 가중치는 시뮬레이터 풀의 생성 빈도이며, 실제 도로의 시나리오 빈도를 대표하지 않는다. 가중 성공률의 신뢰구간은 계산하지 않았다.
-
-### 5.3 위험 편향 붕괴의 분석
-
-{{table:vla_scenarios_driving}}
-
-표 14. 시나리오별 폐루프 성공률(예산 2%, 시드 평균; 전체 데이터는 100%). 칸마다 에피소드 21개 × 시드 3개이며, 칸별 신뢰구간은 계산하지 않았다. 위험 시나리오는 cut_in, lead_brake, stop_and_go, vru_crossing이다.
-
-시나리오별 결과(표 14)는 붕괴의 성격을 보여 준다.
-
-- **위험 지향 방법**(감속 트리거·맥락 이벤트·오라클)은 모든 시나리오에서 성공률이 0.35 이하였다. 위험 시나리오에서는 충돌을 피했지만, 비위험 시나리오인 정상 주행(free_drive)과 추종(follow)에서도 서행해 진행 기준을 넘지 못했다.
-- **무작위**는 비위험 시나리오(정상·추종·밀집)에서 0.78~0.87로 높았고, 위험 시나리오 가운데 끼어들기({{s:driving:random:scen:cut_in:2}})에서도 높았다. 반면 선행차 급제동({{s:driving:random:scen:lead_brake:2}}), 보행자 횡단({{s:driving:random:scen:vru_crossing:2}}), 정체({{s:driving:random:scen:stop_and_go:2}})에서는 충돌로 실패가 잦았다.
-- **CARE**
-  - 같은 세 위험 시나리오에서 성공률(각각 {{s:driving:ours:scen:lead_brake:2}}, {{s:driving:ours:scen:vru_crossing:2}}, {{s:driving:ours:scen:stop_and_go:2}})이 무작위보다 높았다.
-  - 위험 시나리오인 끼어들기({{s:driving:ours:scen:cut_in:2}})와 비위험 시나리오인 추종·밀집에서도 무작위보다 같거나 높았다.
-  - 자유주행에서만 성공률이 다소 낮았다({{s:driving:ours:scen:free_drive:2}} 대 {{s:driving:random:scen:free_drive:2}}).
-  - CARE의 위험 시나리오 성공률({{s:driving:ours:0.02:hazard_success}})은 끼어들기를 포함한 네 위험 시나리오의 평균이다.
-  - 평균으로 보면 CARE의 차이는 정상 주행을 거의 희생하지 않으면서 위험 시나리오 대응이 나아진 데서 나온다. 다만 칸마다 표본이 작으므로(시드 3개) 시나리오별 차이는 기술 통계로만 읽어야 한다.
-- 보행자 횡단은 전체 데이터(100%)로 학습한 정책도 성공률이 {{s:driving:full:scen:vru_crossing:2}}에 그쳤다. 이 시나리오의 상한은 데이터 선택보다 64×64 관측에서 작은 보행자를 식별하는 정책의 시각 해상도에 묶여 있을 가능성이 있다.
-
-이 결과는 데이터 품질을 분포 이동으로 설명한 선행 연구[25]의 관점과 맞닿아 있다. 위험 과표집은 위험 상태의 행동 오차를 줄이지만, 학습 상태 분포를 배치 분포에서 멀어지게 해 정상 상태에서의 공변량 이동[75]을 키운다.
-
-### 5.4 예산 규모에 따른 변화
-
-{{fig:fig_vla_budget_curves.png|그림 4. 저장 예산에 따른 폐루프 성공률(왼쪽), 위험 시나리오 성공률(가운데), 선택 데이터의 위험 프레임 회수율(오른쪽). 오차 막대는 시드 표준편차, 점선은 수집 시점 계산 불가 방법, 일점쇄선은 전체 데이터(100%). 회수율은 예산과 함께 커지지만, 위험 지향 방법의 선택 데이터 내 위험 비중은 예산이 커질수록 줄어든다(본문).}}
-
-{{table:vla_budget_success}}
-
-표 15. 예산별 폐루프 성공률(평균 ± 시드 표준편차). 1·5·10% 예산에서는 핵심 6개 방법만 실행했으며, '-'는 미실행 칸이다. 마지막 행의 전체 데이터(100%)는 예산 열과 무관한 참고값({{s:driving:full:1.00:success}} ± {{s:driving:full:1.00:success_sd}})이며, 1% 열에 놓인 것은 표 형식 때문이다.
-
-위험 지향 방법의 붕괴는 모든 예산에서 나타났다(그림 4, 표 15). 감속 트리거, 맥락 이벤트, 오라클은 1%에서 10%까지 모든 예산에서 성공률 0.26 이하였고, 무작위 대비 차이의 계층 신뢰구간은 모든 예산에서 0을 포함하지 않았다.
-
-그러나 이 방법들의 학습 분포가 예산과 무관하게 고정된 것은 아니다. 예산이 커지면 회수율은 커지지만, 선택 데이터 내 위험 비중은 오히려 줄었다. 위험 프레임의 총량이 한정되어 있어, 예산이 커질수록 위험 구간 주변의 비위험 프레임이 함께 들어오기 때문으로 보인다(오라클의 회수율은 10%에서 {{s:driving:oracle:0.10:hazard_frame_recall:2}}에 이른다). 이에 따라 성공률도 부분적으로 회복되었다.
-
-- 감속 트리거: 위험 비중 {{s:driving:action_trigger:0.01:hazard_share:2}}(1%) → {{s:driving:action_trigger:0.10:hazard_share:2}}(10%), 성공률 {{s:driving:action_trigger:0.01:success:2}} → {{s:driving:action_trigger:0.10:success:2}}
-- 맥락 이벤트: 위험 비중 {{s:driving:event:0.01:hazard_share:2}} → {{s:driving:event:0.10:hazard_share:2}}, 성공률 {{s:driving:event:0.01:success:2}} → {{s:driving:event:0.10:success:2}}
-- 오라클: 위험 비중 {{s:driving:oracle:0.01:hazard_share:2}} → {{s:driving:oracle:0.10:hazard_share:2}}, 성공률 {{s:driving:oracle:0.01:success:2}} → {{s:driving:oracle:0.10:success:2}}
-- 그래도 10%에서 무작위({{s:driving:random:0.10:success:2}})에 크게 못 미쳤다.
-
-같은 예산 범위(1~10%)에서 CARE({{s:driving:ours:0.01:hazard_share:2}}~{{s:driving:ours:0.10:hazard_share:2}})와 무작위({{s:driving:random:0.10:hazard_share:2}}~{{s:driving:random:0.01:hazard_share:2}})의 위험 비중은 예산에 거의 무관했다.
-
-무작위 대비 CARE의 차이는 다음과 같다(표 16).
-
-| 예산 | 평균 차이 | 계층 부트스트랩 95% CI(주 분석) | 단측 $p$ | 시드 대응 $t$ 95% CI | 에피소드 재표집 차이와 CI(참고) |
+| 비교(예산 2%, 시드 10개 대응) | 차이 | 계층 부트스트랩 95% CI | 단측 $p$ | Holm 보정 $p$ | 판정 |
 |---|---|---|---|---|---|
-| 1% | {{s:hb:ours_vs_random_b0.01:diff}} | [{{s:hb:ours_vs_random_b0.01:lo}}, {{s:hb:ours_vs_random_b0.01:hi}}] | {{s:hb:ours_vs_random_b0.01:p_le0:3}} | [{{s:hbt:ours_vs_random_b0.01:lo}}, {{s:hbt:ours_vs_random_b0.01:hi}}] | {{b:ours_vs_random_b0.01}} |
-| 2% | {{s:hb:ours_vs_random_b0.02:diff}} | [{{s:hb:ours_vs_random_b0.02:lo}}, {{s:hb:ours_vs_random_b0.02:hi}}] | {{s:hb:ours_vs_random_b0.02:p_le0:3}} | [{{s:hbt:ours_vs_random_b0.02:lo}}, {{s:hbt:ours_vs_random_b0.02:hi}}] | {{b:ours_vs_random_b0.02}} |
-| 5% | {{s:hb:ours_vs_random_b0.05:diff}} | [{{s:hb:ours_vs_random_b0.05:lo}}, {{s:hb:ours_vs_random_b0.05:hi}}] | {{s:hb:ours_vs_random_b0.05:p_le0:3}} | [{{s:hbt:ours_vs_random_b0.05:lo}}, {{s:hbt:ours_vs_random_b0.05:hi}}] | {{b:ours_vs_random_b0.05}} |
-| 10% | {{s:hb:ours_vs_random_b0.10:diff}} | [{{s:hb:ours_vs_random_b0.10:lo}}, {{s:hb:ours_vs_random_b0.10:hi}}] | {{s:hb:ours_vs_random_b0.10:p_le0:3}} | [{{s:hbt:ours_vs_random_b0.10:lo}}, {{s:hbt:ours_vs_random_b0.10:hi}}] | {{b:ours_vs_random_b0.10}} |
+| K4: CARE − 저장소 + 감속 트리거 | {{s:k:K4:diff}} | [{{s:k:K4:lo}}, {{s:k:K4:hi}}] | {{s:k:K4:p_le0:3}} | {{s:k:K4:p_holm:3}} | 미달 |
+| H-a: CARE − 무작위(공유 저장소) | {{s:k:comparisons:care_vs_random_shared_b0.02:diff}} | [{{s:k:comparisons:care_vs_random_shared_b0.02:lo}}, {{s:k:comparisons:care_vs_random_shared_b0.02:hi}}] | {{s:k:comparisons:care_vs_random_shared_b0.02:p_le0:4}} | {{s:k:comparisons:care_vs_random_shared_b0.02:p_holm:3}} | 지지 |
+| H-b: CARE − 저장소 + 오라클* | {{s:k:comparisons:care_vs_mix_oracle_b0.02:diff}} | [{{s:k:comparisons:care_vs_mix_oracle_b0.02:lo}}, {{s:k:comparisons:care_vs_mix_oracle_b0.02:hi}}] | {{s:k:comparisons:care_vs_mix_oracle_b0.02:p_le0:3}} | {{s:k:comparisons:care_vs_mix_oracle_b0.02:p_holm:3}} | 차이 판별 안 됨 |
+| (탐색) 저장소 + 감속 트리거 − 무작위 | {{s:k:comparisons:mix_trigger_vs_random_shared_b0.02:diff}} | [{{s:k:comparisons:mix_trigger_vs_random_shared_b0.02:lo}}, {{s:k:comparisons:mix_trigger_vs_random_shared_b0.02:hi}}] | {{s:k:comparisons:mix_trigger_vs_random_shared_b0.02:p_le0:3}} | 해당 없음 | - |
+| (탐색) CARE − 무작위, 예산 1%(시드 5개) | {{s:k:comparisons:care_vs_random_shared_b0.01:diff}} | [{{s:k:comparisons:care_vs_random_shared_b0.01:lo}}, {{s:k:comparisons:care_vs_random_shared_b0.01:hi}}] | {{s:k:comparisons:care_vs_random_shared_b0.01:p_le0:4}} | 해당 없음 | - |
+| (탐색) CARE − 무작위, 예산 5%(시드 5개) | {{s:k:comparisons:care_vs_random_shared_b0.05:diff}} | [{{s:k:comparisons:care_vs_random_shared_b0.05:lo}}, {{s:k:comparisons:care_vs_random_shared_b0.05:hi}}] | {{s:k:comparisons:care_vs_random_shared_b0.05:p_le0:4}} | 해당 없음 | - |
 
-표 16. 예산별 CARE − 무작위 성공률 차이(시드 3개). 단측 $p$는 계층 부트스트랩에서 차이 ≤ 0인 재표집의 비율이다. 다중 비교 보정은 하지 않았다.
+표 24. v3 사전 등록 가설 검정(docs/34 3절). 신뢰구간은 시드·에피소드 2단계 계층 부트스트랩(10,000회)이고, 단측 $p$는 차이 ≤ 0인 재표집의 비율이다. Holm 보정 군은 K4·H-a·H-b다. '(탐색)' 행은 사전 등록에서 보조 분석으로 정한 기술 통계이며 다중 비교 보정을 하지 않았다.
 
-- 1%와 2%에서는 평균 차이가 양(+)이었으나, 계층 신뢰구간은 모두 0을 포함했다. 에피소드 재표집 기준으로만 0을 벗어났다.
-- 5%와 10%에서는 차이가 0에 가깝거나 음(−)이었다.
-- 1~2% 예산은 파일럿을 본 뒤 추가되었으므로(표 6), 이 패턴 자체도 탐색적이다.
+- **K4(미달)**: CARE는 같은 저장소에 감속 트리거 점수 몫을 더한 통제군보다 {{s:k:K4:diff}} 높았으나, 95% CI 하한이 0 아래({{s:k:K4:lo}})였고 Holm 보정 $p$도 0.05를 넘었다({{s:k:K4:p_holm:3}}). 시드 대응 $t$ 구간([{{s:k:K4:seed_t:lo}}, {{s:k:K4:seed_t:hi}}])은 0을 포함하지 않았지만, 사전 등록 판정은 계층 부트스트랩으로 한다.
+- **H-a(지지)**: 공유 저장소를 고정하고 점수 몫만 무작위 몫과 바꾼 비교에서 CARE가 {{s:k:comparisons:care_vs_random_shared_b0.02:diff}} 높았다. 저장소 클립이 같으므로 이 차이는 예산의 10%인 점수 몫의 내용에서 나온다.
+- 탐색 비교에서 예산 1%·5%의 CARE − 무작위도 양(+)이었고 CI가 0을 포함하지 않았다(그림 11). 감속 트리거 점수 몫의 무작위 대비 차이는 CI가 0을 포함했다.
 
-예산이 5% 이상이면 무작위 선택도 위험 프레임을 수천 개 담게 되어, 위험 강화의 추가 이득이 없어진다는 해석이 가능하다. 이 해석이 맞다면 CARE는 **위험 표본이 절대적으로 부족한 영역**(소예산, 또는 위험이 더 희소한 도메인)에서만 의미가 있다. 그러나 본 실험은 이 해석을 직접 검정하지 않았다. 또한 $\rho$를 2% 검증에서 한 번 고른 값으로 고정했으므로, 예산이 클 때 $\rho$를 1에 더 가깝게 조정하면 결과가 달라질 수 있다.
+**(3) 시나리오와 선택 구성(보조, 탐색적).**
 
-주 예산 2%에서 CARE는 등간격 선택보다 평균이 높았지만, 계층 신뢰구간은 0을 포함했다({{s:hb:ours_vs_uniform_b0.02:diff}} [{{s:hb:ours_vs_uniform_b0.02:lo}}, {{s:hb:ours_vs_uniform_b0.02:hi}}]). 전체 데이터(100%)보다는 낮았다(에피소드 재표집 기준 {{b:ours_vs_full_b0.02}}). 2%의 데이터로 전체 데이터 성공률의 약 {{pp:ratio_ours_full_b0.02:0}}%를 얻은 셈이다.
+{{table:v3_driving_scenario}}
 
-### 5.5 혼합 비율과 불확실성 항의 절제
+표 25. v3 시나리오별 성공률(예산 2%는 시드 10개, 전체는 시드 5개 평균). 칸별 신뢰구간은 계산하지 않았으며 탐색적 기술 통계다.
 
-{{fig:fig_vla_mixing.png|그림 5. 예산 2%에서 저장소 비율 ρ에 따른 폐루프 성공률과 충돌률(테스트, 시드 3개). ρ=0은 점수 상위만, ρ=1은 무작위다. ρ와 λ는 검증 시나리오에서 이미 선택했으며(4.2절), 이 그림은 분석 목적의 사후 보고다.}}
+- CARE가 무작위보다 높았던 칸은 주로 위험 시나리오(선행차 급제동, 정체)와 밀집이었다. 추종에서는 무작위가 더 높았다(표 25).
+- 보행자 횡단은 모든 2% 방법에서 0.5 아래였고, 전체 데이터에서도 다른 시나리오보다 낮았다. 이 시나리오의 낮은 성공률은 v4 진단(5.3절)의 근거가 되었다.
 
-{{table:vla_ablation}}
+{{table:v3_selection}}
 
-표 17. CARE 구성 요소 절제(예산 2%, 테스트, 시드 3개). 사후 분석이며, 다중 비교 보정은 하지 않았다.
+표 26. v3 예산 2% 선택 데이터의 구성(시드 평균). 위험 프레임 비중은 선택 프레임 가운데 GT 위험 프레임의 비율, 위험 이벤트 회수율은 풀의 위험 이벤트 가운데 선택에 포함된 비율, 에피소드 포괄률은 선택 클립이 나온 에피소드의 비율이다.
 
-표 17과 그림 5는 두 구성 요소의 기여를 보여 준다.
+- 혼합 방법(CARE·감속 트리거·오라클)의 선택 전체 위험 비중은 0.12~0.15로 무작위(0.07)의 1.6~2배였고, 감속 트리거 단독은 0.6을 넘었다.
+- 세 혼합 방법은 위험 비중·회수율·엔트로피·에피소드 포괄률이 서로 비슷했다. 이 구성 차이만으로는 K4의 차이를 설명하기 어렵다(5.3절 (4)).
 
-- **저장소 비율 $\rho$**: $\lambda$=0.5에서 $\rho$를 0.25 → 0.5 → 0.75 → 0.9로 높였을 때의 성공률(차례로 {{s:abl:0.5:0.25:success}}, {{s:abl:0.5:0.50:success}}, {{s:abl:0.5:0.75:success}}, {{s:abl:0.5:0.90:success}})은 0.25와 0.5에서 비슷했고, 0.75 이상에서 크게 올랐다. $\rho$=1(무작위)의 성공률은 표 17의 무작위 행({{s:abl:random:success}})과 같다.
-  - $\rho$가 작을수록 충돌률은 낮아지고(0.05 수준) 속도 오차는 커져, 5.3절의 위험 편향 붕괴가 연속적으로 나타났다.
-  - 최고점은 '대부분 무작위 + 소량의 위험 강화'였다.
-- **위험 확률만으로는 이득이 관찰되지 않았다.** $\lambda$=0, $\rho$=0.9(위험 확률 상위 + 저장소)의 성공률({{s:abl:0.0:0.90:success}})은 무작위({{s:abl:random:success}})보다 높지 않았다.
-- **불확실성 항 $\lambda$**: 같은 $\rho$에서 $\lambda$=0.5가 $\lambda$=0보다 높았다.
-  - $\rho$=0.9: {{s:abl:0.5:0.90:success}} 대 {{s:abl:0.0:0.90:success}}. 계층 부트스트랩 차이의 95% 신뢰구간은 0을 포함하지 않았다({{s:hb:abl_lam05_vs_lam0_r0.90:diff}} [95% CI {{s:hb:abl_lam05_vs_lam0_r0.90:lo}}, {{s:hb:abl_lam05_vs_lam0_r0.90:hi}}], 사후 비교이며 다중 비교 보정은 하지 않음).
-  - $\rho$=0.5: {{s:abl:0.5:0.50:success}} 대 {{s:abl:0.0:0.50:success}}
-- 반면 불확실성만으로 고른 방법(저장소 없음)은 크게 실패했다({{s:driving:uncertainty:0.02:success}}, 5.2절).
+**(4) 언어 지시 준수(K6).**
 
-즉 이 절제에서 관찰된 이득은 **위험 확률·불확실성·무작위 저장소가 결합된 경우에만** 나타났다. 위험 강화만으로는 이득이 관찰되지 않았고, 불확실성 단독(저장소 없음)은 실패했다. 엔트로피 항이 왜 저장소와 결합할 때만 도움이 되는지는 본 실험으로 설명할 수 없다. 1차 원고의 '점수기가 확신하지 못하는 경계 상황을 추가해 정책이 결정 경계를 배우도록 돕는다'는 설명은 근거 없는 추측이므로 철회한다. 또한 저장소 혼합을 CARE 점수에만 적용했으므로, 이 결합의 효과가 CNN-GRU 맥락 점수 고유의 것인지, '아무 점수로든 소량 강화 + 무작위 저장소' 구조의 것인지는 본 실험으로 분리되지 않는다. 이 질문을 검정하기 위해 확증 실험에 혼합 통제(4.6절 H3)를 두었으나, CARE의 통제군 대비 우위는 유의하지 않아 분리하지 못했다(5.11절 (3)).
+{{table:v3_language_cf}}
 
-테스트에서도 $\rho$=0.9가 탐색 범위 안에서 가장 높았다. 그러나 $\rho$=0.75와의 차이는 시드 변동 범위 안이며({{s:hb:abl_r0.90_vs_r0.75:diff}} [계층 부트스트랩 95% CI {{s:hb:abl_r0.90_vs_r0.75:lo}}, {{s:hb:abl_r0.90_vs_r0.75:hi}}]), 최적점이 격자 경계에 있었다. 확증 실험에서 탐색한 $\rho$=0.95와 $\rho$=0.9의 차이는 판별되지 않았고(5.11절 (4)), $\rho\in(0.95, 1)$은 평가하지 않았다.
+표 27. v3 반사실 언어 평가(시드 5개). 같은 (시나리오, 시드)를 세 스타일 지시문으로 각각 평가했다. '신중−민첩 추종 간격 차'는 같은 (시나리오, 시드)에서 신중 지시와 민첩 지시의 평균 추종 간격 차이다.
 
-### 5.6 개루프 지표는 폐루프 성능을 대신할 수 있는가
+- **K6(미달)**: CARE 2%에서 언어를 넣으면 속도 추종 오차가 {{s:k:K6:nolang:speed_error:2}} → {{s:k:K6:lang:speed_error:2}} m/s로 오히려 늘었다(감소율 {{p:k:K6:speed_error_reduction}}).
+- 전체 데이터(보조)에서는 {{s:k:K6:by_data:full:nolang:speed_error:2}} → {{s:k:K6:by_data:full:lang:speed_error:2}} m/s로 {{p:k:K6:by_data:full:speed_error_reduction}} 줄었다.
+- 스타일별 추종 간격 분리도는 두 데이터 모두 언어를 넣으면 커졌다(CARE {{s:k:K6:nolang:style_sep:2}} → {{s:k:K6:lang:style_sep:2}} s). 즉 2% 데이터의 정책은 지시문으로 추종 간격은 구분했지만 목표 속도는 따르지 못했다.
 
-방법 × 예산 {{s:ol_cl_n_conditions:0}}개 조건에서 개루프 지표와 폐루프 성공률의 스피어만 순위상관 $r_s$를 구했다(표 18, 그림 6). $p$는 순열 검정(10,000회, 양측)으로 구했다.
+**(5) AMR(K5).**
 
-| 범위 | 지표 | $r_s$ | $p$ |
+{{table:v3_robot}}
+
+표 28. v3 AMR 테스트 결과(72 에피소드; 2%는 시드 5개, 전체는 시드 3개). AMR 튜닝(검증, 시드 0)은 $\lambda$=0, $\rho$=0.95를 골랐다.
+
+- **K5(미달)**: CARE − 무작위(공유 저장소)는 {{s:k:K5:diff}} [95% CI {{s:k:K5:lo}}, {{s:k:K5:hi}}]로, CI 하한이 비열등 한계 −0.03보다 훨씬 낮았다.
+- 전체 데이터 정책의 성공률({{s:k:robot_full_success}})도 전문가({{s:k:robot_expert_success}})의 절반 수준이었다. AMR 과제는 데이터 선택 이전에 이 정책에게 어려웠다.
+
+**(6) 실영상(K7).**
+
+{{table:v3_comma}}
+
+표 29. v3 comma.ai 실영상 개루프 결과(5-fold 블록 교차검증 × 시드 2개 = 10회 실행, ± 는 실행 간 표준편차). '특징 토큰'은 실제 YOLOv8n 검출 특징 입력 여부다. 제동 시작 AUROC는 현재 제동 중이 아닌 프레임에서 1초 안의 제동 시작을 판별한 값이다(3.7절).
+
+- **K7(미달)**: 전체 데이터 특징 토큰 정책의 제동 시작 AUROC는 {{s:k:K7:value}} ± {{s:k:K7:sd}}에 그쳤다(특징 토큰 없음 {{s:k:K7:nofeat}}). 예비 연구와 마찬가지로 우연 수준이었다.
+- 예산 10·20%의 방법 간 AUROC도 0.51~0.58 범위였다. 감속 트리거 단독은 제동 구간 MAE가 가장 낮았지만 전체 MAE가 가장 높아, 예비 연구의 개루프 트레이드오프를 재현했다.
+
+### 5.3 미달 원인 진단(v3 원자료, 사후 분석)
+
+이 절의 수치는 v3 결과를 본 뒤 원자료를 다시 분석한 것이다(docs/36 1절, 2.0~2.0d, 2.1). 진단은 v4 후보를 정하는 데만 썼고, 그 효과는 개발 세트(5.4절)와 새 테스트(5.5절)에서 따로 평가했다. 표 30에 진단과 대응을 정리했다.
+
+| KPI | v3 원자료의 관찰 | 진단 가설 | v4 후보(3.6절) |
 |---|---|---|---|
-| 전체 {{s:ol_cl_n_conditions:0}}개 조건 | 전체 행동 MAE | {{s:ol_cl_spearman_mae:2}} | < $10^{-4}$ |
-| 전체 {{s:ol_cl_n_conditions:0}}개 조건 | 위험 구간 MAE | {{s:ol_cl_spearman_mae_hazard:2}} | {{s:ol_cl_spearman_mae_hazard_p:3}} |
-| 예산 2% 안({{s:ol_cl_within2_n:0}}개 방법) | 전체 행동 MAE | {{s:ol_cl_within2_mae:2}} | {{s:ol_cl_within2_mae_p:4}} |
-| 예산 2% 안({{s:ol_cl_within2_n:0}}개 방법) | 위험 구간 MAE | {{s:ol_cl_within2_mae_hazard:2}} | {{s:ol_cl_within2_mae_hazard_p:3}} |
+| K1·K3 | 보행자 횡단·정지-출발·선행차 급제동의 CARE 성공률이 낮다(표 25) | 2프레임($t$, $t-2$) 특징으로는 접근 속도·횡이동 같은 1초 단위 추세를 읽기 어렵다 | P2 시간 특징 인코더(H=8, GRU) |
+| K2 | 전체 데이터 성공률이 높아져 비율이 낮아졌다 | 2% 데이터의 위험 클립을 더 효율적으로 학습해야 한다 | P3 위험 맥락 보조 헤드, P4 위험 가중 손실 |
+| K5 | 전체 데이터 정책: 정지 작업자 시나리오 주행 중 충돌 27/36, 빈 통로 진행 미달 15/36. 위험 프레임 개루프 MAE가 전체 평균의 4배 | 위험 프레임(개루프 테스트의 4%)의 학습 비중이 작고, 저속 편향이 있다 | P4, 도메인별 개발 선택 |
+| K6 | CARE 2%는 언어 유무와 관계없이 '보통'·'민첩' 지시에서 목표(약 16 m/s)보다 느렸다(평균 12~14 m/s) | 적은 데이터에서 FiLM이 지시문에 과적합하고, 숫자 토큰별 예시가 적어 목표 속도의 대응을 배우지 못한다 | T1 지시문 드롭아웃, P6 수치 목표 인코딩, P7 목표 속도 잔차 |
+| K7 | 제동 시작 AUROC: 정책 0.528, CARE 점수기 0.518(fold별 0.41~0.64), 현재 자차 가속도 $-a_t$ 단독 0.802 | 정책의 고유 감각 입력이 현재 속도 하나뿐이다 | P5 자차 운동 이력 |
+| K4 | (초기 진단) 선택 전체의 위험 비중이 CARE 0.146, 트리거 혼합 0.131로 비슷하다 | 점수 상위 클립이 같은 에피소드에 몰려 다양성이 떨어진다 | S1 점수 몫 에피소드 상한 → 측정 후 기각 |
 
-표 18. 개루프 지표와 폐루프 성공률의 스피어만 순위상관. 조건별 값은 시드 평균이다. 전체 조건의 첫 행은 순열 10,000회 가운데 관찰값보다 극단적인 값이 없었다.
+표 30. v3 미달 원인 진단과 v4 후보. 수치 출처는 docs/36(1절, 2.0절 AMR, 2.0b절 실영상, 2.0c절 반사실, 2.1절 S1 측정)이며, 모두 v3 결과를 본 뒤의 사후 분석이다.
 
-- **전체 행동 MAE**는 폐루프 성공률과 강한 음의 상관을 보였다. 전체 조건과 예산 2% 안 모두 그랬다. 본 벤치마크에서는 전체 구간 개루프 오차가 폐루프 순위를 잘 따랐다.
-- **위험 구간 MAE**는 전체 조건에서 유의한 상관을 보이지 않았고, 부호는 기대와 반대(양)였다. 이는 '상관이 없다'(효과 크기 0)가 아니라 '유의 수준에 이르지 못했다'는 뜻이다.
-- **예산 2% 안**에서는 위험 구간 MAE가 성공률과 유의한 **양(+)의 상관**을 보였다. 위험 구간 오차가 작은 방법일수록 폐루프 성공률이 오히려 낮았다는 뜻이다. 예를 들어 오라클은 위험 구간 MAE가 가장 낮았지만({{s:driving:oracle:0.02:mae_hazard}}), 폐루프 성공률은 최하위권이었다.
+진단의 세부는 다음과 같다.
 
-이 상관에는 해석상 제약이 있다. 첫째, {{s:ol_cl_n_conditions:0}}개 조건은 독립 표본이 아니다. 같은 방법이 여러 예산에 반복되고, 예산 자체가 두 지표를 함께 움직이므로 전체 조건의 순위상관에는 방법 효과와 예산 효과가 섞여 있다. 둘째, 예산 내 상관은 예산 효과를 제거하지만 조건이 {{s:ol_cl_within2_n:0}}개뿐이고, 방법들이 같은 풀과 같은 테스트 세트를 공유하므로 역시 독립이 아니다. 순열 검정의 $p$는 조건을 교환 가능한 단위로 가정한 참고치다.
+1. **AMR의 정지 작업자 충돌과 저속 편향(K5).** v3 전체 데이터 정책(시드 3개)의 실패는 두 양상에 몰려 있었다. 정지 작업자 시나리오에서는 36회 중 27회가 주행 중 충돌이었다. 천천히 다가가다 완전히 멈추지 못하고 밀려 들어가는 양상이었다(시드 0 평균 속도: 정책 0.67, 전문가 0.78 m/s). 빈 통로 시나리오에서는 36회 중 15회가 진행 미달이었고, 평균 속도가 0.94 m/s로 전문가 1.19 m/s보다 느렸다. 개루프 위험 프레임 MAE는 0.516으로 전체 평균 0.129의 4배였고, 위험 프레임은 개루프 테스트 프레임의 4%(546/13,500)였다.
+2. **실영상 점수기와 단순 기준선(K7).** CARE 실영상 점수기의 제동 시작 AUROC는 0.518로 정책(0.528)과 비슷한 우연 수준이었다. 반면 정책 없이 현재 자차 가속도 $-a_t$ 하나만 점수로 쓰면 0.802였다. 영상·검출 특징보다 자차 운동 상태가 1초 안의 제동 시작과 더 강하게 연관되어 있었다.
+3. **반사실 스타일별 저속 편향(K6).** v3 반사실 결과를 스타일별로 나누면, CARE 2% 정책은 언어 유무와 관계없이 '보통'·'민첩' 지시에서 목표 속도보다 느리게 달렸다. 전체 데이터 정책은 언어가 있으면 오차가 절반 가까이 줄었다(표 27). 이 차이는 데이터가 적을 때 지시문의 숫자 → 목표 속도 대응을 배우지 못한 것으로 해석했다. v4 개발 세트에서 P6(숫자 목표를 결정적으로 읽어 입력)을 더해도 반사실 오차가 줄지 않자(5.4절), 해석적 목표 속도 추종 기준 위에 잔차를 학습하는 P7을 추가했다.
+4. **S1 측정 결과(K4).** 초기 진단은 선택 전체의 위험 비중(표 26)을 점수 몫의 위험 비중으로 잘못 읽은 것이었다. 점수 몫만 보면 CARE의 위험 비중은 약 0.80으로, 감속 트리거 혼합(0.64)보다 오히려 높았다. 또 CARE 2%의 점수 몫 36클립은 시드 0·1·2 모두에서 이미 서로 다른 36개 에피소드에서 나왔다. 따라서 에피소드당 1클립 상한(S1, $c$=1)은 CARE의 선택을 바꾸지 않고 트리거 혼합의 선택만 바꾼다(31 → 36 에피소드, 점수 몫 위험 비중 0.64 → 0.58). 이는 비교 기준선만 바꾸므로 S1은 개발 비교 전에 기각했다. v4에는 K4를 직접 겨냥한 개선이 없다.
 
-이 제약을 감안하면, 결론은 다음과 같이 한정된다. **희소 구간만의 개루프 오차로 선별 효과를 판단하면 오도될 수 있다.** 위험 대응을 개선하려고 데이터를 고르면서 위험 구간 개루프 오차를 기준으로 삼으면, 본 실험에서는 폐루프 성능을 떨어뜨리는 선택을 우대하게 되었다. 이는 개루프 평가의 한계를 지적한 주행 연구[76][81][82]의 결론을 데이터 큐레이션 문제로 확장한 결과다.
+### 5.4 v4 개발 세트 선택(적응적 선택, 확증 근거 아님)
 
-{{fig:fig_vla_openloop_vs_closedloop.png|그림 6. 조건별 개루프 행동 MAE(왼쪽: 전체, 오른쪽: 위험 구간)와 폐루프 성공률. 점 하나가 방법×예산 조건(시드 평균)이며, 크기는 예산에 비례한다.}}
+v4 후보는 새 개발 세트(주행 84 에피소드, 시드 160000번대; AMR 72 에피소드, 시드 460000번대)에서 CARE 2%, 시드 3개로 비교했다. 채택 규칙은 '측정한 후보 가운데 개발 세트 CARE 2% 성공률(시드 3개 평균)이 가장 높은 것'이며, 후보별 세부 규칙은 각 후보의 결과가 나오기 전에 문서로 고정했다(4.7절, docs/36 3절·2.0c·2.0d). 주행과 AMR은 각자의 개발 세트로 따로 정했다.
 
-### 5.7 언어 조건화의 효과
+{{table:v4_dev}}
 
-{{table:vla_language_ablation}}
+표 31. v4 개발 세트 결과(CARE 2%, 시드 3개 평균 ± 시드 표준편차). '전부'는 P2+P3+T1+P4다. P5는 v3 실영상 결과 뒤, P6은 주행 '전부'의 반사실 결과 뒤, P7은 '전부+P6'의 결과 뒤에 추가한 후보다. T1은 별도 규칙(반사실 개발 세트의 언어 있음 속도 오차가 v3 이하)으로 판정했다.
 
-표 19. 언어 입력 절제(테스트, 시드 3개). 평균 headway는 추종 구간의 평균 시간 간격이며, 지시문의 신중/보통/민첩 스타일별로 표시했다. 전문가 행의 언어 입력 열 '-'는 해당 없음(규칙 제어기)을 뜻한다.
+{{table:v4_dev_lang}}
 
-언어 입력의 효과는 측정되지 않았다(표 19).
+표 32. 주행 반사실 개발 세트(시드 170000번대, 시드 2개)의 속도 추종 오차. 'lang'은 언어 있음, 'nolang'은 같은 설정에서 언어 입력을 뺀 정책이다.
 
-- **전체 데이터(100%)**: 언어 입력이 있는 정책은 자유주행 속도 오차가 {{s:lang:full:lang:speed_error:2}} m/s로, 언어를 뺀 정책({{s:lang:full:nolang:speed_error:2}} m/s)보다 작았다. 정책이 지시문의 목표 속도를 일부 사용한다는 뜻이다. 그러나 성공률({{s:lang:full:lang:success}} 대 {{s:lang:full:nolang:success}})과 추종 간격의 스타일 구분에는 차이가 없었다.
-- **예산 2%**: CARE와 무작위 모두 언어 유무에 따른 차이가 시드 편차 범위 안이었다.
-  - 무작위 2%는 언어 없는 정책이 오히려 높았다({{s:lang:random:nolang:success}} 대 {{s:lang:random:lang:success}}).
-  - 무작위 조건은 시드 편차가 ±0.12 이상이어서 이 차이를 해석하기 어렵다.
-  - 이 절제는 같은 선별법·예산·시드 번호로 정책을 다시 학습한 것이므로 5.2절 주 비교의 반복 실험 역할도 한다. 언어 없는 조건에서는 CARE({{s:lang:ours:nolang:success}})가 무작위({{s:lang:random:nolang:success}})보다 높지 않았다.
+**채택.** 주행과 AMR 모두 '전부+P7'(P2+P3+T1+P4+P6+P7)이 채택되었다.
 
-언어를 뺀 정책도 스타일별 평균 추종 간격이 신중 > 보통 > 민첩 순으로 갈렸다(전체 데이터 {{s:lang:full:nolang:headway_mean:cautious:2}} / {{s:lang:full:nolang:headway_mean:normal:2}} / {{s:lang:full:nolang:headway_mean:brisk:2}} s). 원인을 추적한 결과, 본 벤치마크에서 에피소드 초기 속도가 목표 속도에 비례해 정해지므로(목표 속도 × U(0.85, 1.0)) **지시문 정보의 상당 부분이 초기 상태로 누출**된다는 것을 확인했다.
+- **주행**: 개발 세트 성공률은 v3 기준 {{s:k4:dev_choice:driving:dev_success:v3}}에서 단일 블록 {{s:k4:dev_choice:driving:dev_success:p3}}~{{s:k4:dev_choice:driving:dev_success:t1}}, '전부' {{s:k4:dev_choice:driving:dev_success:all}}, '전부+P6' {{s:k4:dev_choice:driving:dev_success:all_p6}}, '전부+P7' {{s:k4:dev_choice:driving:dev_success:all_p7}}의 순서로 올랐다(P5 제외).
+- **반사실 개발 세트(표 32)**: '전부'와 '전부+P6'에서는 언어를 넣은 정책의 오차({{s:k4:dev_choice:driving:devcf:all:lang:2}}, {{s:k4:dev_choice:driving:devcf:all_p6:lang:2}} m/s)가 언어를 뺀 정책({{s:k4:dev_choice:driving:devcf:all:nolang:2}} m/s)보다 컸다. 숫자 목표를 입력으로 주는 것(P6)만으로는 저속 편향이 남았다. '전부+P7'에서 처음으로 언어 있음({{s:k4:dev_choice:driving:devcf:all_p7:lang:2}} m/s)이 언어 없음보다 작아졌다.
+- **AMR**: 단일 블록과 '전부'는 v3 기준({{s:k4:dev_choice:robot:dev_success:v3}})과 비슷했고('전부' {{s:k4:dev_choice:robot:dev_success:all}}), '전부+P7'에서 크게 올랐다({{s:k4:dev_choice:robot:dev_success:all_p7}}). AMR 개발 세트의 개선은 대부분 P7에서 나왔다.
 
-따라서 본 벤치마크는 언어 조건화의 효과를 측정하지 못하며, 표 19는 '언어가 성능을 높인다'는 근거로 쓰지 않는다. 본 논문의 결과는 '언어를 입력으로 받는 소형 시각운동 정책'에 대한 것이며, 언어 이해가 핵심인 VLA에 대한 결론으로 일반화하지 않는다. 언어 축의 기여는 정책 성능 향상이 아니라, 수집 데이터에 지시문·물리량 서술·행동을 자동 정렬해 VLA 학습 형식으로 제공하는 것(R3, R4)에 한정한다. 언어 의존성을 엄밀히 측정하려면 같은 초기 상태에서 지시문만 바꾸는 대조 설계가 필요하다(6.3절).
+**기각.**
 
-### 5.8 실내 이동로봇(AMR) 도메인
+- **S1(점수 몫 에피소드 상한)**: 개발 비교 전에 측정으로 기각했다(5.3절 (4)).
+- **P5(자차 운동 이력)**: 주행 개발 세트 성공률({{s:k4:dev_choice:driving:dev_success:p5}})이 v3 기준보다 낮았고 시드 간 편차가 컸다(표 31). 자차의 최근 속도 변화를 그대로 따라 하는 관성 추종(copycat) 문제로 해석했다. AMR에서는 v3 기준과 비슷했다({{s:k4:dev_choice:robot:dev_success:p5}}). 이 기각 때문에 v4 실영상 정책에도 속도 이력이 없다(5.5절 (5)).
 
-{{table:vla_robot}}
+**해석상 주의.** 이 선택은 확증 근거가 아니다. 개발 세트는 여러 번 재사용되었고, 후보 집합 자체가 앞선 결과를 보고 늘어났다(P5·P6·P7). 최대 성공률 후보를 고르는 규칙은 개발 세트 값을 낙관적으로 만든다. 실제로 '전부+P7'의 주행 개발 세트 값({{s:k4:dev_choice:driving:dev_success:all_p7}})은 새 테스트 값({{s:k4:K1:value}}, 5.5절)보다 조금 높았다. 블록별 기여도 개발 세트의 시드 3개 비교일 뿐이며, 새 테스트에서 블록별 절제는 하지 않았다. 확증되는 것은 '채택된 v4 설정 전체'의 효과뿐이다(5.5절의 H-v).
 
-표 20. AMR 도메인 결과(예산 2%, 테스트 72 에피소드, 시드 3개). AMR 성공은 주행 중 충돌(자차 > 0.1 m/s)이 없고 진행이 전문가의 80% 이상인 경우이며, 전문가 기준 거리가 1 m 미만인 에피소드는 진행 조건을 면제했다(수정 기준, 4.5절). 점수기 구조, $\lambda$, $\rho$는 주행 도메인에서 정한 값을 그대로 썼다.
+### 5.5 2차 확증(v4, 새 테스트 세트)
 
-AMR 도메인의 결과는 다음과 같다(표 20). 모든 수치는 수정된 성공 기준(4.5절)으로 저장된 에피소드를 다시 판정한 값이다.
+2차 확증은 사전 등록(docs/37, 커밋 `6f97127`, 2026-10-04 23:26:29 UTC)을 커밋한 뒤, 처음 보는 새 테스트 세트(주행 1000000번대 147 에피소드, 반사실 1050000번대, AMR 1100000번대)에서 수행했다. 풀·점수기·풀 점수·선별 하이퍼파라미터는 v3와 같고, 정책·학습 설정만 5.4절의 채택 조합이다. 같은 새 테스트에서 v3 설정(CARE 2%·무작위 2%, 시드 10개)도 함께 평가해 개선 효과를 추정했다. 실영상에서는 아무것도 튜닝하지 않고 주행 조합을 그대로 적용했다.
 
-**(1) 위험 편향 붕괴는 그대로 재현되었다.** 성공률은 다음과 같다.
+**(1) 주행 폐루프(K1~K3).**
 
-- 감속 트리거: {{s:robot:action_trigger:0.02:success}}
-- 맥락 이벤트: {{s:robot:event:0.02:success}}
-- 오라클: {{s:robot:oracle:0.02:success}}
-- 비교: 무작위 {{s:robot:random:0.02:success}}
+{{table:v4_driving}}
 
-이 방법들은 모두 서행으로 진행 기준을 넘지 못했다.
+표 33. 새 테스트 세트의 주행 결과(평균 ± 시드 표준편차). '설정' 열의 v3는 v3 정책·학습 설정, v4는 채택 조합이다. 선별 방법·풀·점수기는 두 설정이 같다.
 
-**(2) CARE와 무작위의 차이는 유의하지 않았다.**
+- **K1(달성)**: v4 CARE 2%의 성공률은 {{s:k4:K1:value}} ± {{s:k4:K1:sd}}(시드 {{s:k4:K1:n_seeds:0}}개)로 목표 0.80을 넘었다.
+- **K2(미달)**: 전체 데이터 성공률({{s:k4:K2:full}})에 대한 비율은 {{s:k4:K2:value}}에 그쳤다. v3({{s:k:K2:value}})보다 높아졌으나 목표 0.90에 미달했다.
+- **K3(달성)**: 위험 시나리오 성공률({{s:k4:K3:value}})이 목표 0.75를 넘었다. 다만 목표와의 차이가 0.01 미만이어서, 시드 변동을 고려하면 경계선의 달성이다. 사전 등록 판정은 점추정 기준이므로 '달성'으로 보고한다.
+- 같은 새 테스트에서 v3 설정의 CARE 2% 성공률({{s:k4:driving:v3:care:success}})은 v3 자체 테스트의 값({{s:k:K1:value}})보다 낮았다. 새 테스트 세트가 v3 테스트보다 어려웠을 가능성이 있으며, v3·v4의 절대값 비교는 같은 세트 안에서만 해석한다.
 
-- 성공률: CARE {{s:robot:ours:0.02:success}}, 무작위 {{s:robot:random:0.02:success}}
-- 계층 부트스트랩: {{s:hb:robot_ours_vs_random_b0.02:diff}} [95% CI {{s:hb:robot_ours_vs_random_b0.02:lo}}, {{s:hb:robot_ours_vs_random_b0.02:hi}}]
-- 참고(에피소드 재표집): {{b:robot_ours_vs_random_b0.02}}
+**(2) 가설 검정(K4, H-a, H-v).**
 
-1차 원고의 성공 기준에서는 CARE가 무작위보다 낮았고, 에피소드 재표집 신뢰구간도 0을 포함하지 않았다. 그러나 그 기준은 robot_crowded 시나리오에서 성립하지 않는 결함이 있었다(4.5절). 결함을 고친 기준에서는 두 구간 모두 0을 포함하며, CARE가 평균적으로 조금 낮은 경향만 남았다. 즉 AMR에서는 CARE의 이득이 나타나지 않았고, 역전도 확인되지 않았다.
+| 비교(예산 2%, 시드 10개 대응) | 차이 | 계층 부트스트랩 95% CI | 시드 대응 $t$ 95% CI | 단측 $p$ | Holm 보정 $p$ | 판정 |
+|---|---|---|---|---|---|---|
+| K4: v4 CARE − v4 저장소 + 감속 트리거 | {{s:k4:K4:diff}} | [{{s:k4:K4:lo}}, {{s:k4:K4:hi}}] | [{{s:k4:K4:seed_t:lo}}, {{s:k4:K4:seed_t:hi}}] | {{s:k4:K4:p_le0:3}} | {{s:k4:K4:p_holm:3}} | 미달 |
+| H-a: v4 CARE − v4 무작위(공유 저장소) | {{s:k4:comparisons:care_vs_random_shared:diff}} | [{{s:k4:comparisons:care_vs_random_shared:lo}}, {{s:k4:comparisons:care_vs_random_shared:hi}}] | [{{s:k4:comparisons:care_vs_random_shared:seed_t:lo}}, {{s:k4:comparisons:care_vs_random_shared:seed_t:hi}}] | {{s:k4:comparisons:care_vs_random_shared:p_le0:4}} | {{s:k4:comparisons:care_vs_random_shared:p_holm:3}} | 지지 |
+| H-v: v4 CARE − v3 CARE | {{s:k4:comparisons:v4_vs_v3_care:diff}} | [{{s:k4:comparisons:v4_vs_v3_care:lo}}, {{s:k4:comparisons:v4_vs_v3_care:hi}}] | [{{s:k4:comparisons:v4_vs_v3_care:seed_t:lo}}, {{s:k4:comparisons:v4_vs_v3_care:seed_t:hi}}] | < 0.0001 | < 0.001 | 지지 |
+| (탐색) v4 무작위 − v3 무작위 | {{s:k4:comparisons:v4_vs_v3_random_shared:diff}} | [{{s:k4:comparisons:v4_vs_v3_random_shared:lo}}, {{s:k4:comparisons:v4_vs_v3_random_shared:hi}}] | [{{s:k4:comparisons:v4_vs_v3_random_shared:seed_t:lo}}, {{s:k4:comparisons:v4_vs_v3_random_shared:seed_t:hi}}] | < 0.0001 | 해당 없음 | - |
+| (탐색) v3 CARE − v3 무작위(새 테스트) | {{s:k4:comparisons:v3_care_vs_random_shared:diff}} | [{{s:k4:comparisons:v3_care_vs_random_shared:lo}}, {{s:k4:comparisons:v3_care_vs_random_shared:hi}}] | [{{s:k4:comparisons:v3_care_vs_random_shared:seed_t:lo}}, {{s:k4:comparisons:v3_care_vs_random_shared:seed_t:hi}}] | {{s:k4:comparisons:v3_care_vs_random_shared:p_le0:4}} | 해당 없음 | - |
 
-주행에서 고른 $\lambda$, $\rho$를 그대로 옮긴 것이 원인일 수 있어 AMR 검증 시나리오에서 같은 격자로 다시 탐색했다. AMR 검증 재탐색에서도 같은 설정이 선택되었고, 재실행 결과가 원 실행과 비트 단위로 일치했다. 다만 AMR 검증에서도 격자의 최고 설정(성공률 {{s:robot_retune_best_val}})은 무작위({{s:robot_retune_random_val}})보다 높지 않았고, 최고점은 다시 격자 경계($\rho$=0.9)였다. 이 검증 성공률은 재탐색 당시의 기준, 즉 1차 원고의 성공 기준(주행 중 무충돌 ∧ 진행 ≥ 0.8×전문가, 1 m 면제 없음)으로 판정한 값이며, 수정 기준(4.5절)으로 다시 판정하지 않았다. 이 재탐색은 테스트 결과를 본 뒤에 시작했다(표 6).
+표 34. v4 사전 등록 가설 검정(docs/37 3절, 새 테스트 세트). Holm 보정 군은 K4·H-a·H-v다. H-v와 v4 무작위 − v3 무작위는 계층 부트스트랩 10,000회 가운데 차이 ≤ 0인 재표집이 없었다. '(탐색)' 행은 사전 등록의 보조 분석이며 보정하지 않았다.
 
-AMR 점수기의 검증 macro-F1({{s:robot_scorer_val_macro_f1}})은 주행({{s:scorer_val_macro_f1}})보다 낮았다. 위험 판별 AUROC는 검증과 AMR 풀에서 각각 {{s:robot_scorer_val_hazard_auroc}}, {{s:robot_pool_scorer_auroc}}에 해당했다.
+- **K4(미달)**: v4 CARE와 v4 트리거 혼합의 차이는 {{s:k4:K4:diff}} [95% CI {{s:k4:K4:lo}}, {{s:k4:K4:hi}}]이고, 구간이 0을 포함했다(Holm 보정 $p$={{s:k4:K4:p_holm:3}}). 두 방법의 성공률(각각 {{s:k4:driving:v4:care:success}}, {{s:k4:driving:v4:mix_trigger:success}})은 거의 같았다. v3(5.2절)와 달리 이번에는 시드 대응 $t$ 구간도 0을 넓게 포함했다. 동시에 계층 CI의 상한({{s:k4:K4:hi}})을 보면, 이 설정에서 점수기 고유의 선택 효과가 있더라도 약 0.03보다 클 가능성은 낮다.
+- **H-a(지지)**: 공유 저장소를 고정한 무작위 대비 우위는 v4에서도 유지되었다({{s:k4:comparisons:care_vs_random_shared:diff}}, Holm 보정 $p$={{s:k4:comparisons:care_vs_random_shared:p_holm:3}}). 기술 통계로는 트리거 혼합({{s:k4:driving:v4:mix_trigger:success}})도 무작위({{s:k4:driving:v4:random_shared:success}})보다 높았다(검정하지 않음).
+- **H-v(지지)**: 같은 새 테스트에서 v4 설정은 v3 설정보다 CARE 2% 성공률이 {{s:k4:comparisons:v4_vs_v3_care:diff}} 높았다. 무작위 2%에서도 개선 폭이 비슷했다({{s:k4:comparisons:v4_vs_v3_random_shared:diff}}, 탐색). 정책·학습 블록의 개선은 선별 방법과 거의 무관하게 더해졌다.
+- **v3 효과의 재현(탐색)**: 같은 새 테스트에서 v3 설정의 CARE − 무작위({{s:k4:comparisons:v3_care_vs_random_shared:diff}})는 v3 테스트의 H-a({{s:k:comparisons:care_vs_random_shared_b0.02:diff}})와 방향·크기가 비슷했다. 다만 계층 CI 하한이 0에 걸쳤고({{s:k4:comparisons:v3_care_vs_random_shared:lo}}), 시드 대응 $t$ 구간은 0을 포함하지 않았다.
+- 충돌률은 CARE가 무작위보다 낮았다(v4 CARE {{s:k4:driving:v4:care:collision}}, 트리거 혼합 {{s:k4:driving:v4:mix_trigger:collision}}, 무작위 {{s:k4:driving:v4:random_shared:collision}}, 표 33).
 
-**(3) AMR 과제는 이 정책에게 데이터 선택 이전에 어려웠다.**
+**(3) 언어 지시 준수(K6).**
 
-- 전체 데이터(100%)로 학습한 정책의 성공률({{s:robot:full:1.00:success}})은 전문가({{p:robot_expert_success}})의 절반 수준이었다.
-- 같은 정책의 주행 중 충돌률은 {{s:robot:full:1.00:collision_moving}}에 달했다. 수정 기준에서 전문가의 남은 실패는 모두 주행 중 충돌이므로 전문가의 주행 중 충돌률은 1 − {{p:robot_expert_success}}에 해당하며, 정책의 충돌률은 이보다 크게 높았다.
+{{table:v4_language_cf}}
 
-AMR 시나리오는 작업자가 측면에서 경로로 걸어 들어오는 상황이 많다. 이런 상황에서는 화면 가장자리의 작은 사람 박스를 64×64 관측에서 식별해야 하고, 반응 거리도 주행보다 짧다. 하위 정책의 표현력이 부족한 영역에서는 소량의 위험 강화로 얻는 이득보다 정상 표본을 10% 줄이는 손해가 더 클 수 있다. 다만 이 설명은 검증하지 않은 가설이다.
+표 35. 새 반사실 세트(시드 1050000번대, 63 에피소드)의 언어 평가(v4 설정, 시드 5개). 언어를 빼면 지시문에서 목표 속도를 읽는 P6·P7 경로도 함께 꺼진다.
 
-따라서 CARE의 이득 징후는 **하위 정책이 충분한 데이터에서 과제를 대체로 해결할 수 있을 때**(주행: 전체 데이터 성공률 {{s:driving:full:1.00:success}}) 소예산 영역에서만 관찰되었다고 한정하는 것이 정확하다.
+- **K6(달성)**: v4 CARE 2%에서 언어를 넣으면 속도 추종 오차가 {{s:k4:K6:nolang:speed_error:2}} → {{s:k4:K6:lang:speed_error:2}} m/s로 {{p:k4:K6:speed_error_reduction}} 줄었다(목표 30%). 전체 데이터(보조)에서는 {{s:k4:K6:by_data:full:nolang:speed_error:2}} → {{s:k4:K6:by_data:full:lang:speed_error:2}} m/s로 {{p:k4:K6:by_data:full:speed_error_reduction}} 줄었다.
+- 신중−민첩 추종 간격 차는 언어를 넣으면 CARE {{s:k4:K6:nolang:style_sep:2}} → {{s:k4:K6:lang:style_sep:2}} s, 전체 데이터 {{s:k4:K6:by_data:full:nolang:style_sep:2}} → {{s:k4:K6:by_data:full:lang:style_sep:2}} s로 커졌다.
+- **해석 주의**: v4에는 P7(지시문의 목표 속도로 만든 비례 제어 기준 $a_0$ + 학습 잔차)이 들어 있다. 이 감소의 일부는 학습 파라미터가 없는 해석적 제어기 덕분이다. 같은 측정을 P7 없는 '전부+P6'으로 하면, 개발 세트에서는 언어가 오차를 오히려 키웠다(표 32). 새 테스트에서는 '전부+P6'을 평가하지 않았다. 해석은 6.5절에서 다룬다.
 
-### 5.9 실주행 영상 개루프 검증
+**(4) AMR(K5).**
 
-{{table:vla_comma}}
+{{table:v4_robot}}
 
-표 21. comma.ai 실주행 영상 개루프 결과(5-fold 블록 교차검증 × 시드 2개). ±는 10개 실행(fold×시드)의 표준편차다. 정책은 실영상 64×64 두 장과 속도로 미래 1초 가속도를 예측하며, 지시문은 고정 문장이어서 언어 조건 정책이 아니다. 제동 시작 예측 AUROC는 현재 제동 중이 아닌 프레임에서 1초 안의 제동 시작을 예측 청크 평균으로 판별한 값이다. 제동 프레임 회수율은 풀 전체 제동 프레임 가운데 선택된 비율이다. '맥락 이벤트(시뮬 점수기)'는 실라벨 없이 합성 데이터로만 학습한 점수기를 쓴 경우다. 전체 데이터(100%) 행의 엣지 가능 열 '-'는 해당 없음을 뜻한다.
+표 36. 새 AMR 테스트 세트(시드 1100000번대)의 결과(2%는 시드 5개, 전체는 시드 3개). 선별 하이퍼파라미터는 v3 AMR 튜닝값($\lambda$=0, $\rho$=0.95)이다.
 
-실영상 개루프 결과(표 21)는 시뮬레이터 결과의 **한 부분만** 재현했다. 이 실험은 개루프이므로 정책이 실제로 서행하는 붕괴 자체는 관찰할 수 없다. 또한 이 실험의 정책은 모든 표본에 같은 고정 지시문을 넣으므로 언어 조건 정책이 아니며, 언어에 관한 결론은 이 실험에서 끌어내지 않는다.
+- **K5(미달)**: v4 CARE − v4 무작위는 {{s:k4:K5:diff}} [95% CI {{s:k4:K5:lo}}, {{s:k4:K5:hi}}]였다. 점추정은 v3({{s:k:K5:diff}})보다 0에 가까웠지만, CI 하한이 비열등 한계 −0.03보다 낮아 비열등을 판정하지 못했다.
+- 절대 성공률은 크게 올랐다. CARE {{s:k:K5:care}} → {{s:k4:K5:care}}, 무작위 {{s:k:K5:random_shared}} → {{s:k4:K5:random_shared}}, 전체 데이터 {{s:k:robot_full_success}} → {{s:k4:robot_full_success}}(v3 → v4). 두 값의 테스트 시드는 서로 다르므로, 이 비교는 같은 세트의 대응 비교가 아니다.
+- 트리거 혼합({{s:k4:robot:v4:mix_trigger:success}})과 무작위의 성공률은 같았다.
 
-**(1) 위험 지향 선택의 개루프 트레이드오프는 실영상에서도 나타났다.**
+**(5) 실영상(K7).**
 
-- 감속 트리거와 오라클은 풀 전체 제동 프레임 가운데 많은 몫을 골랐다(제동 프레임 회수율: 감속 트리거 {{p:comma:action_trigger:0.10:hazard_frame_recall:0}}·{{p:comma:action_trigger:0.20:hazard_frame_recall:0}}, 오라클 {{p:comma:oracle:0.10:hazard_frame_recall:0}}·{{p:comma:oracle:0.20:hazard_frame_recall:0}}, 각각 예산 10%·20%).
-- 그 결과 제동 구간 MAE는 가장 낮았다.
-  - 감속 트리거: {{s:comma:action_trigger:0.10:mae_braking}}(10%), {{s:comma:action_trigger:0.20:mae_braking}}(20%)
-  - 오라클: {{s:comma:oracle:0.10:mae_braking}}(10%), {{s:comma:oracle:0.20:mae_braking}}(20%)
-- 그러나 전체 MAE는 다른 방법보다 크게 나빴다.
-  - 감속 트리거: {{s:comma:action_trigger:0.10:mae}}(10%)
-  - 오라클: {{s:comma:oracle:0.10:mae}}(10%)
-  - 비교: 무작위 {{s:comma:random:0.10:mae}}
-- 위험 구간 위주로 학습한 정책이 정상 주행 구간에서도 감속을 예측하는 경향으로, 시뮬레이터의 위험 편향 붕괴에 대응하는 개루프 트레이드오프다.
+{{table:v4_comma}}
 
-**(2) CARE와 무작위의 차이는 이 데이터에서 측정되지 않았다.**
+표 37. v4 설정의 comma.ai 실영상 개루프 결과(v3와 같은 5-fold × 시드 2개, ± 는 10회 실행의 표준편차). 실영상에서는 아무것도 튜닝하지 않고 주행 개발 조합(P7 이득은 주행 값)을 그대로 적용했다. GT 위험 라벨이 없어 오라클은 없고, 감속 트리거 단독은 v4에서 평가하지 않았다.
 
-- 전체 MAE: {{s:comma:ours:0.10:mae}} 대 {{s:comma:random:0.10:mae}}(10%), {{s:comma:ours:0.20:mae}} 대 {{s:comma:random:0.20:mae}}(20%)
-- 같은 fold·시드끼리 짝지은 차이(10쌍)는 전체 MAE 기준 {{s:cp:ours_vs_random:0.10:mae:diff}} [95% CI {{s:cp:ours_vs_random:0.10:mae:lo}}, {{s:cp:ours_vs_random:0.10:mae:hi}}](10%), {{s:cp:ours_vs_random:0.20:mae:diff}} [{{s:cp:ours_vs_random:0.20:mae:lo}}, {{s:cp:ours_vs_random:0.20:mae:hi}}](20%)로, 두 예산 모두 0을 포함한다.
+- **K7(미달)**: v4 전체 데이터 정책의 제동 시작 AUROC는 {{s:k4:K7:value}} ± {{s:k4:K7:sd}}에 그쳤다(v3 {{s:k:K7:value}}). fold·시드별 값은 {{s:k4:K7:min:2}}~{{s:k4:K7:max:2}} 범위에 흩어졌다.
+- 같은 시험 프레임에서 정책 없이 현재 자차 가속도 $-a_t$만 쓴 기준선의 AUROC는 {{s:k4:K7:baseline_neg_accel}}에 이르렀다. v4 정책은 이 단순 기준선에 크게 못 미쳤다. P5가 개발 세트에서 기각되어(5.4절) v4 정책에도 속도 이력 입력이 없다.
+- 예산 10·20%의 방법 간 AUROC는 0.52~0.57 범위로, 방법 간 차이를 가릴 분해능이 없었다.
 
-**(3) 제동 시작 예측은 모든 조건에서 우연 수준(AUROC 0.5 부근)이었다.**
+### 5.6 계산 비용
 
-- 예산 10%의 AUROC(무작위 {{s:comma:random:0.10:brake_onset_auroc:2}}, CARE {{s:comma:ours:0.10:brake_onset_auroc:2}}, 감속 트리거 {{s:comma:action_trigger:0.10:brake_onset_auroc:2}}, 오라클 {{s:comma:oracle:0.10:brake_onset_auroc:2}})를 비롯해 모든 조건이 비슷한 범위에 있었다(표 21).
-- 전체 데이터(100%)로 학습한 정책의 AUROC도 {{s:comma:full:1.00:brake_onset_auroc}}에 그쳤다.
-- 17분(학습 풀 약 6천 프레임)의 실영상과 64×64 관측으로는 사전학습 없는 소형 정책이 제동 시작을 예측하도록 학습되지 않았다.
-- 따라서 이 실험은 선별법 간 하위 성능 차이를 가릴 만큼의 분해능이 없다. 실영상에서의 CARE 효과 검증은 더 큰 데이터와 사전학습 시각 인코더가 필요한 과제로 남긴다.
-
-**(4) 합성 데이터 점수기는 회수율만 높았다.**
-
-- 합성 데이터로만 학습한 점수기('시뮬 점수기')는 예산 10%에서 제동 프레임 회수율({{s:comma:event_sim:0.10:hazard_frame_recall}})이 실라벨 초기 라벨 블록(fold당 영상의 1/5)으로 학습한 점수기({{s:comma:event:0.10:hazard_frame_recall}})보다 높았다.
-- 그러나 하위 지표에는 뚜렷한 차이가 없었다. 전체 MAE({{s:comma:event_sim:0.10:mae}} 대 {{s:comma:event:0.10:mae}})와 제동 시작 AUROC({{s:comma:event_sim:0.10:brake_onset_auroc}} 대 {{s:comma:event:0.10:brake_onset_auroc}})는 실행 간 표준편차 범위 안이었다. 20%에서는 회수율 차이도 작았다({{s:comma:event_sim:0.20:hazard_frame_recall}} 대 {{s:comma:event:0.20:hazard_frame_recall}}).
-- 회수율이 데이터 가치를 보장하지 않는다는 본 논문의 결과(5.2~5.6절)에 비추면, 이 결과는 합성 데이터로 학습한 점수기가 실영상에서도 제동 구간을 어느 정도 가려낸다는 것까지만 보여 준다. 실차 수집 장치에 바로 배치할 수 있다는 근거로는 부족하다.
-
-### 5.10 계산 비용
-
-표 22는 각 선별법을 수집 시점에 적용하는 데 드는 비용이다.
+표 38은 큐레이션과 하위 정책의 계산 비용이다. 점수기는 예비 연구·v3·v4에서 같으므로 예비 연구의 측정값을 그대로 쓴다.
 
 | 항목 | 값 | 비고 |
 |---|---|---|
-| 맥락 점수기 파라미터 | {{s:cost_scorer_params:0}} | 멀티채널 CNN-GRU, 창 16 |
+| 맥락 점수기 파라미터 | {{s:cost_scorer_params:0}} | 멀티채널 CNN-GRU, 창 16. v3·v4에서 재학습하지 않음 |
 | 점수기 1회 추론(창 1개, 배치 1) | {{s:cost_scorer_onnx_ms:3}} ms(ONNX Runtime) / {{s:cost_scorer_torch_ms:2}} ms(PyTorch) | x86 CPU 1스레드 |
-| 검출기 YOLOv8n | {{s:cost_yolo640_ms:1}} ms(640) / {{s:cost_yolo320_ms:1}} ms(320) | x86 CPU 4스레드. 수집 장치는 검출기를 인지용으로 이미 실행한다고 가정한다 |
-| CARE 선택(54만 프레임 풀, 예산 2%) | {{s:cost_ours_select_s:2}} s | 오프라인 전역 상위 $K$ 선택. 스트리밍 선택은 구현하지 않았다 |
-| Coreset 선택(같은 풀) | {{s:cost_coreset_s:1}} s | 풀 전체 특징이 필요해 수집 시점에 적용할 수 없다 |
-| 오프라인 손실 기준선 | 정책 학습 {{s:cost_offline_train_min:1}}분 + 풀 전체 추론 | 전체 데이터 저장과 정책 학습이 선행되어야 한다 |
+| 검출기 YOLOv8n(참고) | {{s:cost_yolo640_ms:1}} ms(640) / {{s:cost_yolo320_ms:1}} ms(320) | x86 CPU 4스레드 |
+| 하위 정책 파라미터 | v3 {{s:k4:cost:v3:n_params:0}} / v4 {{s:k4:cost:v4:n_params:0}} | v4 증가분은 GRU 특징 인코더, 보조 헤드, P6 MLP와 헤드 입력 확장이다. P7은 학습 파라미터가 없고, 보조 헤드는 추론에 쓰지 않는다 |
+| 정책 학습 처리량(통제 측정) | v3 1,657 / 1,579, v4 1,466 / 1,433 samples/s | docs/31 11.4절. 1스레드, 배치 128, 같은 기계에서 교대 2회 측정. v4는 P6·P7을 넣기 전 조합(564,526 파라미터) |
+| 정책 학습 처리량(본 실험 기록) | v3 {{s:k4:cost:v3:samples_per_s:0}}, v4 {{s:k4:cost:v4:samples_per_s:0}} samples/s(중앙값) | 새 테스트 2% 학습의 기록. 작업자 4개가 CPU를 공유한 상태라 참고치다 |
 
-표 22. 선별 비용(x86 클라우드 CPU 측정, 4.4절).
+표 38. 계산 비용(x86 클라우드 CPU). 배포 대상 임베디드 장치(Jetson Orin Nano)에서의 지연·전력은 측정하지 않았다.
 
-맥락 점수기 비용은 YOLOv8n(640 입력)의 약 {{p:cost_ratio_onnx_yolo640:1}}이다(x86 CPU, ONNX Runtime 기준). PyTorch 추론과 320 입력 검출기를 비교하면 약 {{p:cost_ratio_torch_yolo320:1}}이다. 어느 기준에서도 검출기보다 한 자릿수 이상 작지만, 이 수치는 x86 CPU에서 잰 값이다. 배포 대상 임베디드 장치에서의 지연·전력 측정과 스트리밍 선택의 구현은 남은 과제다(6.3절).
+- 통제 측정에서 v4 정책 학습은 v3보다 약 10% 느렸다. 특징 이력 조회, GRU의 8단계 순차 계산, 보조 헤드 역전파가 원인이다.
+- 수집 시점 큐레이션의 비용(점수기)은 v3·v4에서 바뀌지 않았다. v4의 추가 비용은 모두 학습·추론하는 정책 쪽에 있다.
 
-### 5.11 확증 실험 결과
+### 5.7 예비 연구(v2) 결과 요약
 
-확증 실험은 실행 전에 설계·가설·분석 계획을 고정했다(4.6절, `docs/32_확증실험_사전등록.md`, 커밋 `fcd7f3f`). 조건은 다음과 같다.
+예비 연구는 v3 이전의 벤치마크와 정책(특징 토큰 없음)으로 수행했다. 설계와 결함 진단은 4.2.1절에 있으며, 여기서는 본 연구의 판단에 쓰인 결과만 요약한다.
 
-- 학습 시드: 3~9의 7개(본 실험과 겹치지 않음)
-- 평가 세트: 새로 뽑은 147 에피소드(시드 700000번대)
-- CARE 설정: 본 실험과 같은 $\lambda$=0.5, $\rho$=0.9(다시 튜닝하지 않음)
+- **위험 편향 붕괴**: 위험 표본을 최대화하는 선별(감속 트리거, 맥락 이벤트, 오라클, 정책 손실 기반 오프라인 선별)은 주행 예산 2%에서 성공률 {{s:risk_methods_max_success_b0.02:2}} 이하로 무너졌다. 이 결과는 1~10% 예산과 AMR에서도 재현되었고, v3의 감속 트리거 단독(5.2절)에서도 다시 나타났다.
+- **CARE − 무작위**: 시드 3개 탐색 실험에서는 신뢰구간이 0을 포함했으나({{s:hb:ours_vs_random_b0.02:diff}} [95% CI {{s:hb:ours_vs_random_b0.02:lo}}, {{s:hb:ours_vs_random_b0.02:hi}}]), 새 시드 7개의 사전 등록 확증 실험(docs/32)에서는 예산 2%의 우위가 지지되었다({{s:ct:H1_ours_vs_random_b0.02:diff}} [95% CI {{s:ct:H1_ours_vs_random_b0.02:lo}}, {{s:ct:H1_ours_vs_random_b0.02:hi}}]). 예산 1%의 우위와 혼합 통제군 대비 우위는 유의하지 않았다(Holm 보정 $p$ ≥ {{s:ct:H3a_ours_vs_mix_trigger:p_holm:2}}).
+- **개루프와 폐루프**: 전체 구간 개루프 MAE는 폐루프 성공률과 강하게 상관했지만($r_s$={{s:ol_cl_spearman_mae:2}}), 예산 2% 안에서 위험 구간 MAE는 성공률과 오히려 양(+)의 상관을 보였다($r_s$={{s:ol_cl_within2_mae_hazard:2}}, $p$={{s:ol_cl_within2_mae_hazard_p:3}}).
+- **판단하지 못한 것**: AMR에서 CARE({{s:robot:ours:0.02:success}})와 무작위({{s:robot:random:0.02:success}})의 차이는 유의하지 않았다. 실영상 제동 시작 AUROC는 전체 데이터에서도 {{s:comma:full:1.00:brake_onset_auroc:2}}에 그쳤다. 언어 효과는 지시 정보가 초기 속도로 누출되어 측정하지 못했다.
 
-조건별 결과는 표 23, 가설 검정은 표 24에 정리했다.
-
-{{table:vla_confirm}}
-
-표 23. 확증 실험 조건별 결과(새 평가 세트, 평균 ± 시드 표준편차, 시드 7개). '선택 데이터 내 위험 비중'은 선택된 프레임 가운데 GT 위험 프레임의 비율이다. 혼합 통제군('저장소 ρ=0.9 + … 점수')은 저장소 비율과 혼합 규칙만 CARE와 같고, 저장소 클립은 방법마다 다르다(4.6절).
-
-{{table:vla_confirm_tests}}
-
-표 24. 사전 등록 가설 검정. 차이는 성공률 차이이고, 신뢰구간은 시드·에피소드 2단계 계층 부트스트랩(10,000회)이다. 단측 p는 차이 ≤ 0인 재표집의 비율이다(H1은 {{s:ct:H1_ours_vs_random_b0.02:p_le0:4}}, 10,000회 중 1회). Holm 보정은 H2·H3a~c에만 적용했으며, H1과 '(탐색)' 행의 보정 p 열은 해당 없음이다. '검출 가능 차이(근사)'는 시드 대응 차이의 표준오차로 근사한 최소 검출 효과(양측 α=0.05, 검정력 0.8, 2.8×표준오차)다. '(탐색)' 행은 사전 등록에서 검정 대상이 아니라고 정한 기술 통계다.
-
-**(1) 1차 가설 H1은 지지되었다(표 24).**
-
-- 예산 2%에서 CARE의 성공률({{s:confirm:ours_b0.02:success}})은 무작위({{s:confirm:random_b0.02:success}})보다 {{s:ct:H1_ours_vs_random_b0.02:diff}} 높았다.
-- 계층 부트스트랩 95% CI([{{s:ct:H1_ours_vs_random_b0.02:lo}}, {{s:ct:H1_ours_vs_random_b0.02:hi}}])와 시드 대응 t의 95% CI([{{s:ctt:H1_ours_vs_random_b0.02:lo}}, {{s:ctt:H1_ours_vs_random_b0.02:hi}}])는 모두 0을 포함하지 않았다.
-- 탐색 실험(시드 3개)에서 시드 변동 때문에 결론을 내리지 못했던 2% 우위가, 새 시드·새 평가 세트에서 재현되었다.
-- 표 23에서 CARE의 충돌률은 무작위의 약 절반이었고, 위험 시나리오 성공률은 높았으며, 속도 오차는 비슷했다.
-
-**(2) 2차 가설 H2(예산 1%)는 지지되지 않았다.** 차이({{s:ct:H2_ours_vs_random_b0.01:diff}})의 방향은 같았지만, 보정 전 단측 $p$({{s:ct:H2_ours_vs_random_b0.01:p_le0:3}})부터 0.05를 넘었고 신뢰구간도 0을 포함했다([{{s:ct:H2_ours_vs_random_b0.01:lo}}, {{s:ct:H2_ours_vs_random_b0.01:hi}}], Holm 보정 $p$={{s:ct:H2_ours_vs_random_b0.01:p_holm:3}}).
-
-**(3) 맥락 점수기 고유의 기여(H3a~c)는 확증되지 않았다.**
-
-- 저장소 비율($\rho$=0.9)과 혼합 규칙은 같게 두고 점수 몫만 다른 신호로 채운 통제군과 비교했다. 저장소 클립 자체는 방법마다 다르다(4.6절). CARE는 세 통제군 모두보다 점추정이 높았다.
-  - 감속 트리거 점수: {{s:ct:H3a_ours_vs_mix_trigger:diff}}
-  - 오라클 점수: {{s:ct:H3b_ours_vs_mix_oracle:diff}}
-  - 불확실성만: {{s:ct:H3c_ours_vs_mix_uncert:diff}}
-- 그러나 어느 비교도 유의하지 않았다(Holm 보정 $p$ ≥ {{s:ct:H3a_ours_vs_mix_trigger:p_holm:2}}, 세 신뢰구간 모두 0을 포함). 보정 전 단측 $p$가 0.05 아래였던 것은 감속 트리거 혼합 대비 비교(H3a, {{s:ct:H3a_ours_vs_mix_trigger:p_le0:3}})뿐이었다.
-- 관찰된 차이는 각 비교의 검출 가능 차이(근사, 표 24: H3a {{s:ct:H3a_ours_vs_mix_trigger:mde_seed:3}}, H3b {{s:ct:H3b_ours_vs_mix_oracle:mde_seed:3}}, H3c {{s:ct:H3c_ours_vs_mix_uncert:mde_seed:3}})보다 작았다. 따라서 이 결과는 차이가 없다는 증거가 아니라, 이 표본 크기로 차이를 판별하지 못했다는 뜻이다.
-- 탐색적으로, 감속 트리거 점수를 저장소와 섞은 통제군도 무작위보다 {{s:ct:X_mix_trigger_vs_random:diff}} 높았으나 신뢰구간은 0을 포함했다([{{s:ct:X_mix_trigger_vs_random:lo}}, {{s:ct:X_mix_trigger_vs_random:hi}}], 사전 등록 외 비교). 같은 방식의 탐색 비교에서 오라클 점수 혼합은 무작위보다 {{s:ct:X_mix_oracle_vs_random:diff}} 높았고(CI [{{s:ct:X_mix_oracle_vs_random:lo}}, {{s:ct:X_mix_oracle_vs_random:hi}}]), 불확실성 혼합은 {{s:ct:X_mix_uncert_vs_random:diff}}(CI [{{s:ct:X_mix_uncert_vs_random:lo}}, {{s:ct:X_mix_uncert_vs_random:hi}}])였다(표 24, 사전 등록 외). 위험 지향 점수(CARE·오라클·감속 트리거) 혼합이 모두 무작위보다 높은 점추정을 보인 것은, 이득이 특정 점수기보다 '큰 저장소 위의 소량 위험 강화'와 관련 있을 가능성을 시사한다. 다만 이는 탐색 비교이며 판별을 위해서는 더 많은 시드가 필요하다.
-- 따라서 확증 실험은 CARE의 무작위 대비 우위(H1)를 보였지만, 그 이득이 CNN-GRU 점수기에서 오는지, '정상 분포를 보존하는 큰 무작위 저장소 + 소량의 위험 지향 강화'라는 구조에서 오는지는 판별하지 못했다. 점추정으로는 세 통제군도 무작위보다 높아(표 23) 구조가 이득의 일부를 설명할 가능성이 있으나, 이는 검정되지 않은 관찰이다.
-
-**(4) 저장소 비율의 경계 확인(탐색).** $\rho$=0.95와 $\rho$=0.9의 차이는 신뢰구간이 0을 포함했다({{s:ct:X_rho095_vs_ours:diff}} [95% CI {{s:ct:X_rho095_vs_ours:lo}}, {{s:ct:X_rho095_vs_ours:hi}}]). 이 구간은 약 0.1 크기의 차이를 배제하지 못하므로, 0.9~0.95 구간의 성능이 같다고 결론 내릴 수는 없다. 기술 통계로는 $\rho$=0.95의 성공률({{s:confirm:ours_b0.02_r0.95:success}})도 무작위({{s:confirm:random_b0.02:success}})보다 높았다.
-
-새 평가 세트에서 예산 2% 조건의 성공률은 본 실험 테스트 세트보다 다소 낮았고(무작위 {{s:confirm:random_b0.02:success}} 대 {{s:driving:random:0.02:success}}, CARE {{s:confirm:ours_b0.02:success}} 대 {{s:driving:ours:0.02:success}}), 예산 1% 조건은 오히려 다소 높았다(무작위 {{s:confirm:random_b0.01:success}} 대 {{s:driving:random:0.01:success}}, CARE {{s:confirm:ours_b0.01:success}} 대 {{s:driving:ours:0.01:success}}). 학습 시드와 평가 세트가 함께 바뀌었으므로 차이의 원인은 구분할 수 없으며, 조건 간 비교는 같은 세트 안에서만 해석한다.
+이 결과가 K1~K7의 목표값과 v3의 벤치마크 수정(B1~B3), 공유 저장소 선별(M1)의 근거가 되었다(3.7절, 4.2.2절).

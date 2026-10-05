@@ -20,6 +20,8 @@ from .vla_report import _fmt, _write_table, hierarchical_bootstrap, holm, seed_t
 from .vla_v3_suite import V3Config, expert_reference
 
 logger = logging.getLogger(__name__)
+# 표에 쓰는 방법 이름(원고와 같은 한국어 표기)
+V3_LABELS = {"full": "전체(100%)", "random_shared": "무작위(공유 저장소)", "care": "CARE", "mix_trigger": "저장소 + 감속 트리거", "mix_oracle": "저장소 + 오라클*", "trigger_only": "감속 트리거 단독", "action_trigger": "감속 트리거 단독"}
 
 TARGETS = {
     "K1": ("CARE 2% 폐루프 성공률", ">= 0.80"),
@@ -116,7 +118,7 @@ def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -
                     "n": len(rs),
                 }
         rows = []
-        labels = {"full": "전체(100%)", "random_shared": "무작위(공유 저장소)", "care": "CARE", "mix_trigger": "저장소 + 감속 트리거", "mix_oracle": "저장소 + 오라클*", "trigger_only": "감속 트리거 단독"}
+        labels = V3_LABELS
         for (m, b), c in sorted(cond.items(), key=lambda kv: (kv[0][1], kv[0][0])):
             rows.append([labels.get(m, m), f"{int(round(b * 100))}%", str(c["n"]), _fmt(*c["success"]), _fmt(*c["hazard"]), _fmt(c["collision"][0]), _fmt(c["speed_error"][0], digits=2)])
         _write_table(tables / "v3_driving", ["방법", "예산", "시드", "성공률", "위험 시나리오 성공률", "충돌률", "속도 오차(m/s)"], rows)
@@ -177,7 +179,7 @@ def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -
                 rcond[(m, b)] = _succ(rs, exr, True)
         rows = []
         for (m, b), S in sorted(rcond.items()):
-            rows.append([m, f"{int(round(b * 100))}%", str(len(S[1])), _fmt(float(S[0].mean(1).mean()), float(S[0].mean(1).std(ddof=1)) if len(S[1]) > 1 else 0.0)])
+            rows.append([V3_LABELS.get(m, m), f"{int(round(b * 100))}%", str(len(S[1])), _fmt(float(S[0].mean(1).mean()), float(S[0].mean(1).std(ddof=1)) if len(S[1]) > 1 else 0.0)])
         _write_table(tables / "v3_robot", ["방법", "예산", "시드", "성공률"], rows)
         if ("care", 0.02) in rcond and ("random_shared", 0.02) in rcond:
             A, B = _pair(rcond[("care", 0.02)], rcond[("random_shared", 0.02)])
@@ -209,7 +211,7 @@ def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -
                     d = [v["cautious"] - v["brisk"] for v in hw.values() if "cautious" in v and "brisk" in v]
                     sep.append(float(np.mean(d)) if d else np.nan)
                 vals[lang] = {"speed_error": float(np.nanmean(se)), "success": float(S[0].mean()), "style_sep": float(np.nanmean(sep)), "n": len(rs)}
-                lang_rows.append([m, "있음" if lang else "없음", str(len(rs)), _fmt(vals[lang]["success"]), _fmt(vals[lang]["speed_error"], digits=2), _fmt(vals[lang]["style_sep"], digits=2)])
+                lang_rows.append([V3_LABELS.get(m, m), "있음" if lang else "없음", str(len(rs)), _fmt(vals[lang]["success"]), _fmt(vals[lang]["speed_error"], digits=2), _fmt(vals[lang]["style_sep"], digits=2)])
             if True in vals and False in vals:
                 k6[m] = {"lang": vals[True], "nolang": vals[False], "speed_error_reduction": 1.0 - vals[True]["speed_error"] / vals[False]["speed_error"]}
         ex_sep = []
@@ -234,7 +236,7 @@ def build_v3_report(root: Path, steps: int | None = None, quick: bool = False) -
             au = [r["open_loop"]["brake_onset_auroc"] for r in rs]
             mae = [r["open_loop"]["mae"] for r in rs]
             mb = [r["open_loop"]["mae_braking"] for r in rs]
-            rows.append([m, f"{int(round(b * 100))}%", "O" if f else "X", str(len(rs)), _fmt(float(np.mean(au)), float(np.std(au, ddof=1))), _fmt(float(np.mean(mae))), _fmt(float(np.mean(mb)))])
+            rows.append([V3_LABELS.get(m, m), f"{int(round(b * 100))}%", "O" if f else "X", str(len(rs)), _fmt(float(np.mean(au)), float(np.std(au, ddof=1))), _fmt(float(np.mean(mae))), _fmt(float(np.mean(mb)))])
         _write_table(tables / "v3_comma", ["방법", "예산", "특징 토큰", "실행", "제동 시작 AUROC", "MAE", "제동 MAE"], rows)
         full_f = cg.get(("full", 1.0, True))
         full_n = cg.get(("full", 1.0, False))
@@ -333,6 +335,7 @@ def _figures(root: Path, kpi: dict[str, Any], cond: dict[tuple[str, float], dict
         ax.axhline(0.80, color="#c53030", ls="--", lw=1, label="K1 목표")
         ax.set_xscale("log")
         ax.set_xticks([1, 2, 5], ["1%", "2%", "5%"])
+        ax.minorticks_off()  # 로그 축 보조 눈금 라벨(예: 3×10^0)이 찍히지 않게 한다
         ax.set_xlabel("저장 예산")
         ax.set_ylabel("폐루프 성공률")
         ax.legend(fontsize=8)
