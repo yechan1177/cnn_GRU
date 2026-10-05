@@ -5,6 +5,7 @@
 
 자리표시자
 - `{{s:키[:자릿수]}}`  : vla_stats.json 값(기본 3자리)
+- `{{u:키[:자릿수]}}`  : `s:`와 같되 lo·hi·diff 키에도 부호(+)를 붙이지 않는다(비율형 값의 신뢰구간 등)
 - `{{p:키[:자릿수]}}`  : 백분율(×100, 기본 1자리, '%' 포함)
 - `{{pp:키[:자릿수]}}` : 백분율 포인트(×100, '%' 없이)
 - `{{b:키}}`           : 대응 부트스트랩 차이 "+0.071 [95% CI 0.020, 0.120]"
@@ -156,7 +157,7 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                 fname, _, caption = body[4:].partition("|")
                 num = caption.split(".")[0] if caption.startswith("그림") else fname
                 return f"![{num}](figures/{fname})\n\n{caption}"
-            if body.startswith(("s:", "p:", "pp:", "b:")):
+            if body.startswith(("s:", "p:", "pp:", "b:", "u:")):
                 kind, _, rest = body.partition(":")
                 parts = rest.split(":")
                 digits = None
@@ -169,6 +170,9 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                     return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]".replace("-", "−")
                 v = lookup(key)
                 signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:", "k:", "k4:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
+                if kind == "u":
+                    kind = "s"
+                    signed = False
                 if kind == "s" and signed and isinstance(v, (int, float)) and math.isfinite(float(v)):
                     txt = f"{float(v):+.{3 if digits is None else digits}f}"
                     return txt.replace("-", "−")
@@ -177,9 +181,12 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                     if out == "-":
                         MISSING.append(f"{body} (값 없음/NaN)")
                     return out
+                if not (isinstance(v, (int, float)) and math.isfinite(float(v))):
+                    MISSING.append(f"{body} (값 없음/NaN/숫자 아님)")  # p·pp도 누락을 보고한다(3차 심사 대응 점검)
+                    return "-"
                 if kind == "p":
-                    return (fmt_num(100 * v, 1 if digits is None else digits) + "%") if isinstance(v, (int, float)) and math.isfinite(v) else "-"
-                return fmt_num(100 * v, 1 if digits is None else digits) if isinstance(v, (int, float)) else "-"
+                    return fmt_num(100 * v, 1 if digits is None else digits) + "%"
+                return fmt_num(100 * v, 1 if digits is None else digits)
             v = lookup(body)
             return fmt_num(v, 3) if isinstance(v, float) else str(v)
         except (KeyError, FileNotFoundError) as exc:

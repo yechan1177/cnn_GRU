@@ -13,6 +13,29 @@
 4. 하이브리드 룰 게이트로 최종 태그를 보정한다.
 5. UI에서 순수 모델 예측과 최종 하이브리드 결과를 함께 확인한다.
 
+## 2026-10 핵심 지표(KPI) 기반 2단계 재실험(v3·v4)
+
+원고를 7개 핵심 지표(K1~K7, [docs/33](docs/33_v3_핵심지표_벤치마크_개선계획.md)) 중심으로 재구성했다. 실험은 사전 등록한 두 단계로 진행했다.
+
+| 단계 | 내용 | 사전 등록 | 결과 위치 |
+|---|---|---|---|
+| v3(1차 확증) | 벤치마크 수정(언어 누출 제거·AMR 되밀림 제거·반사실 언어 평가), 특징 토큰 정책, 공유 저장소 비교 | [docs/34](docs/34_v3_사전등록.md) | `experiments/exp_120_vla_v3/summary/` |
+| v4(2차 확증, 새 테스트) | 미달 원인 진단 → 정책 블록(P2·P3·T1·P4·P6·P7) → 개발 세트 선택 → 처음 보는 테스트 | [docs/37](docs/37_v4_사전등록.md) | `experiments/exp_130_vla_v4/summary/` |
+| 3차 심사 대응 | 재분석과 탐색적 절제(K6 분해, K4 정화) | — | [docs/38](docs/38_3차심사_대응_탐색적_절제.md) |
+
+- v4 판정(새 테스트)
+  - 달성: K1 0.851, K3 0.755(경계선), K6 38.0%
+  - 미달: K2 0.888, K4 +0.002, K5 −0.008 [−0.069, +0.053], K7 0.558
+  - 해석
+    - K1·K3 달성은 정책 개선의 성과다. 무작위 선별도 K1을 넘는다.
+    - K6는 지시문 수치 목표 추출(P6)과 잔차 제어(P7)로 달성했다. 학습 언어 접지는 확인되지 않았다.
+    - CARE 점수기의 고유 선별 효과는 확인되지 않았다.
+- 재현
+  - `bash scripts/run_vla_v3.sh`
+  - `bash scripts/run_vla_v4.sh prepare dev robotdev` → `bash scripts/run_vla_v4.sh main lang robot comma report explore`
+  - 원고: `python scripts/build_vla_paper.py`
+- 개정 경과: v4 계획 [docs/36](docs/36_v4_알고리즘_모델_개선계획.md), 심사 [paper/review/review_round3_ko.md](paper/review/review_round3_ko.md)·[답변](paper/review/response_round3_ko.md). v2 원고는 [paper/manuscript_vla_v2_ko.md](paper/manuscript_vla_v2_ko.md)에 보관했다.
+
 ## 2026-10 VLA 연계 논문(v2): 수집 시점 큐레이션 CARE
 
 차량·이동로봇이 저장 예산 안에서 무엇을 남겨야 VLA 정책이 희소 위험 상황에서 실패하지 않는지를, **선별 데이터로 학습한 소형 VLA 정책의 폐루프 성능**으로 검증했다.
