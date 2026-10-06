@@ -28,8 +28,8 @@ from .vla_curation_suite import HAZARD_IDS, _json_default, chunk_targets, clip_i
 logger = logging.getLogger(__name__)
 
 SEED_BASES_V4 = {
-    "driving": {"dev": 160000, "devcf": 170000, "test": 1000000, "cf": 1050000},
-    "robot": {"dev": 460000, "devcf": 470000, "test": 1100000, "cf": 1150000},  # AMR 개발 세트는 셀당 4개
+    "driving": {"dev": 160000, "devcf": 170000, "test": 1000000, "cf": 1050000, "test3": 1200000, "cf3": 1250000},
+    "robot": {"dev": 460000, "devcf": 470000, "test": 1100000, "cf": 1150000, "test3": 1300000, "cf3": 1350000},  # AMR 개발 세트는 셀당 4개
 }
 
 # 설정 묶음(variant). v3 = v3 정책·선별 그대로, v4 = 개발 세트에서 채택한 조합(stage_dev 이후 cache/v4_choice.json로 확정)
@@ -51,6 +51,14 @@ VARIANTS: dict[str, dict[str, Any]] = {
 # 3차 심사(M2·M3) 대응 탐색적 절제(새 테스트는 이미 보았으므로 확증이 아니다, docs/38)
 VARIANTS["p67_nolangemb"] = dict(VARIANTS["all_p7"], lang_embedding=False)  # 학습 언어 경로 없이 P6·P7 수치 목표만
 VARIANTS["v4_noaux"] = {k: v for k, v in VARIANTS["all_p7"].items() if k not in ("aux_weight", "hazard_weight")}  # 점수기 출력을 학습에 쓰지 않는 v4
+
+# 4차(세 번째 테스트 세트, 사전 등록 docs/39) 블록별 제거(leave-one-out): "전부+P7"에서 하나씩 뺀다
+_ALL7 = VARIANTS["all_p7"]
+VARIANTS["loo_p2"] = {k: v for k, v in _ALL7.items() if k not in ("feature_history", "feature_stride", "feature_encoder")}
+VARIANTS["loo_p3"] = {k: v for k, v in _ALL7.items() if k != "aux_weight"}
+VARIANTS["loo_t1"] = {k: v for k, v in _ALL7.items() if k != "lang_dropout"}
+VARIANTS["loo_p4"] = {k: v for k, v in _ALL7.items() if k != "hazard_weight"}
+VARIANTS["loo_p67"] = {k: v for k, v in _ALL7.items() if k not in ("goal_encoding", "goal_residual_gain")}  # = "all"
 
 POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride", "goal_encoding", "goal_residual_gain", "lang_embedding")
 # P7 이득(정규화 단위) = 물리 이득 0.5 s⁻¹ × 속도 스케일 / 가속도 스케일(주행 30/4, AMR 3/1)
@@ -116,8 +124,8 @@ def eval_specs(cfg: V4Config, eval_set: str) -> list[Any]:
     from ..vla.closed_loop import make_test_specs
 
     base = SEED_BASES_V4[cfg.domain][eval_set]
-    per = {"dev": cfg.dev_per_cell, "devcf": cfg.devcf_per_cell, "test": cfg.test_per_cell, "cf": cfg.cf_per_cell}[eval_set]
-    return make_test_specs(cfg.domain, per, base, counterfactual=eval_set in ("devcf", "cf"))
+    per = {"dev": cfg.dev_per_cell, "devcf": cfg.devcf_per_cell, "test": cfg.test_per_cell, "cf": cfg.cf_per_cell, "test3": cfg.test_per_cell, "cf3": cfg.cf_per_cell}[eval_set]
+    return make_test_specs(cfg.domain, per, base, counterfactual=eval_set in ("devcf", "cf", "cf3"))
 
 
 def expert_reference(cfg: V4Config, eval_set: str) -> dict[str, Any]:
@@ -279,7 +287,7 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
         "n_train_frames": int(len(train_idx)),
         "train_log": {k: v for k, v in log.items() if k not in ("loss_curve", "config")},
         "closed_loop": closed,
-        "open_loop": open_loop(model, cfg, params) if job["eval"] == "test" else {},
+        "open_loop": open_loop(model, cfg, params) if job["eval"] in ("test", "test3") else {},
         "seconds": time.perf_counter() - t0,
     }
     cfg.runs.mkdir(parents=True, exist_ok=True)
@@ -464,12 +472,59 @@ def stage_explore(cfg: V4Config) -> list[dict[str, Any]]:
     return res
 
 
+THIRD_SEEDS = tuple(range(10))
+
+
+def stage_third(cfg: V4Config) -> list[dict[str, Any]]:
+    """세 번째 테스트 세트 확증(사전 등록 docs/39): 재현(K1~K6), K6 분해, K4 정화·동등성, H-v, P7 몫, 블록별 제거."""
+
+    for ev in ("test3", "cf3"):
+        expert_reference(cfg, ev)
+    jobs = []
+    for s in THIRD_SEEDS:
+        for m in ("random_shared", "care", "mix_trigger"):
+            jobs.append(make_job(cfg, "v4", m, 0.02, s, "test3"))        # 재현 K1~K4, H-a
+            jobs.append(make_job(cfg, "v4_noaux", m, 0.02, s, "test3"))  # K4 정화·동등성(H4e), H-a'
+        jobs.append(make_job(cfg, "v3", "care", 0.02, s, "test3"))       # H-v
+        jobs.append(make_job(cfg, "all_p6", "care", 0.02, s, "test3"))   # P7 몫(A6)
+        for lang in (True, False):
+            jobs.append(make_job(cfg, "v4", "care", 0.02, s, "cf3", use_language=lang))      # 재현 K6
+            jobs.append(make_job(cfg, "all_p6", "care", 0.02, s, "cf3", use_language=lang))  # K6 분해(P7 없음)
+        jobs.append(make_job(cfg, "p67_nolangemb", "care", 0.02, s, "cf3"))  # K6 분해(학습 언어 경로 없음)
+    for s in THIRD_SEEDS[:5]:
+        jobs.append(make_job(cfg, "v4", "full", 1.0, s, "test3"))  # K2 분모
+        for v in ("loo_p2", "loo_p3", "loo_t1", "loo_p4", "loo_p67"):
+            jobs.append(make_job(cfg, v, "care", 0.02, s, "test3"))  # 블록별 제거(A7)
+    jobs.sort(key=lambda j: (j["eval"] != "test3", j["variant"] not in ("v4", "v4_noaux", "v3"), j["seed"]))
+    res = run_jobs(cfg, jobs)
+    out = cfg.runs / "driving__cf3__ctrl__none__b0.00__s0__st0.json"
+    if not out.exists():
+        from ..vla.closed_loop import run_closed_loop
+
+        closed = run_closed_loop(controller_policy_fn(cfg.domain), eval_specs(cfg, "cf3"), domain=cfg.domain, collision_pushback=False, decouple_initial_speed=True)
+        job = {"domain": cfg.domain, "eval": "cf3", "variant": "ctrl", "method": "none", "budget": 0.0, "seed": 0, "steps": 0}
+        out.write_text(json.dumps({"job": job, "key": out.stem, "closed_loop": closed}, ensure_ascii=False, default=_json_default), encoding="utf-8")
+    return res
+
+
+def stage_robot3(cfg: V4Config) -> list[dict[str, Any]]:
+    """AMR 세 번째 테스트 세트(A4): 시드 10개로 K5 검정력 확보, v3 대조."""
+
+    rc = cfg.for_domain("robot")
+    prepare(rc)
+    expert_reference(rc, "test3")
+    jobs = [make_job(rc, "v4", m, 0.02, s, "test3") for s in THIRD_SEEDS for m in ("random_shared", "care", "mix_trigger")]
+    jobs += [make_job(rc, "v3", m, 0.02, s, "test3") for s in THIRD_SEEDS for m in ("random_shared", "care")]
+    jobs += [make_job(rc, "v4", "full", 1.0, s, "test3") for s in THIRD_SEEDS[:3]]
+    return run_jobs(rc, jobs)
+
+
 def main() -> None:
     import argparse
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser(description="v4 개선 개발·확증 실험")
-    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma", "explore"])
+    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma", "explore", "third", "robot3", "commap5"])
     ap.add_argument("--root", default="experiments/exp_130_vla_v4")
     ap.add_argument("--v3-root", default="experiments/exp_120_vla_v3")
     ap.add_argument("--workers", type=int, default=4)
@@ -490,6 +545,14 @@ def main() -> None:
         stage_lang(cfg)
     elif a.stage == "robot":
         stage_robot(cfg)
+    elif a.stage == "third":
+        stage_third(cfg)
+    elif a.stage == "robot3":
+        stage_robot3(cfg)
+    elif a.stage == "commap5":
+        from .comma_v4 import run_comma_v4
+
+        run_comma_v4(cfg, extra_policy={"proprio_history": 8, "proprio_stride": 2}, key_suffix="__p5", methods=(), **({"seeds": (0,), "steps": cfg.steps} if a.quick else {}))
     elif a.stage == "explore":
         stage_explore(cfg)
     elif a.stage == "comma":
