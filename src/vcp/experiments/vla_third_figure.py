@@ -7,6 +7,10 @@
 - v3: `<v3-root>/summary/v3_kpi.json`
 - v4(2차): `<root>/summary/v4_kpi.json`
 - 3차: `<root>/summary/third_kpi.json`, `<root>/summary/tables/third_driving.csv`(v3 설정의 위험 시나리오 성공률)
+- 4차 심사 보조: `<root>/summary/supp_round4.json`(2단계 K6 계층 구간; `scripts/supp_round4_analysis.py`)
+
+4차 심사 n10 대응: 2·3차 막대에 95% 구간 오차 막대(K1~K3는 시드·에피소드 부트스트랩, K6는 시드·에피소드 계층 부트스트랩)를,
+K7 자리에 정책 없는 −a_t 기준선을 표시한다. 1차(v3)는 결과 파일에 구간이 없어 오차 막대가 없다.
 출력: `<root>/summary/figures/fig_third_kpi.png`
 
 사용: PYTHONPATH=src python -m vcp.experiments.vla_third_figure [--root experiments/exp_130_vla_v4] [--v3-root experiments/exp_120_vla_v3]
@@ -72,6 +76,7 @@ def collect(root: Path, v3_root: Path) -> dict[str, dict[str, float]]:
     v3k = _load(v3_root / "summary" / "v3_kpi.json")
     v4k = _load(root / "summary" / "v4_kpi.json")
     t3 = _load(root / "summary" / "third_kpi.json")
+    s4 = _load(root / "summary" / "supp_round4.json")
     vals: dict[str, dict[str, float]] = {
         "v3": {k: _get(v3k, k, "speed_error_reduction" if k == "K6" else "value") for k in GOALS},
         "v4": {k: _get(v4k, k, "speed_error_reduction" if k == "K6" else "value") for k in GOALS},
@@ -86,6 +91,16 @@ def collect(root: Path, v3_root: Path) -> dict[str, dict[str, float]]:
         "v3_on_v4test": {"K1": _get(v4k, "driving", "v3", "care", "success"), "K3": _get(v4k, "driving", "v3", "care", "hazard")},
         "v3_on_third": {"K1": _get(t3, "tests", "H-v3", "b"), "K3": _v3_hazard_third(root)},
         "p5_explore": {"K7": _get(t3, "comma_p5", "auroc_p5")},
+        "neg_accel": {"K7": _get(v4k, "K7", "baseline_neg_accel")},
+        # 95% 구간(lo, hi): K1~K3 단일 조건 부트스트랩, K6 계층 부트스트랩(보조)
+        "v4_ci": {
+            **{k: (_get(v4k, k, "lo"), _get(v4k, k, "hi")) for k in ("K1", "K2", "K3")},
+            "K6": (_get(s4, "k6_hier_stage2", "lo"), _get(s4, "k6_hier_stage2", "hi")),
+        },
+        "third_ci": {
+            **{k: (_get(t3, "kpi", k, "lo"), _get(t3, "kpi", k, "hi")) for k in ("K1", "K2", "K3")},
+            "K6": (_get(t3, "k6", "K6_hier", "lo"), _get(t3, "k6", "K6_hier", "hi")),
+        },
     }
     return vals
 
@@ -100,14 +115,22 @@ def figure(root: Path, v3_root: Path) -> Path:
         import koreanize_matplotlib  # noqa: F401
     except ModuleNotFoundError:  # pragma: no cover
         logger.warning("koreanize_matplotlib 없음: 한글 글꼴이 깨질 수 있다")
+    matplotlib.rcParams["axes.unicode_minus"] = False  # 한글 글꼴에 U+2212가 없다
     vals = collect(root, v3_root)
     ks = list(GOALS)
     x = np.arange(len(ks))
     w = 0.26
-    fig, ax = plt.subplots(figsize=(7.6, 3.8))
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
     ax.bar(x - w, [vals["v3"][k] for k in ks], w, label="1차: v3 설정, v3 테스트(800000번대)", color="#cbd2d9", hatch="//", edgecolor="#7b8794")
     ax.bar(x, [vals["v4"][k] for k in ks], w, label="2차: v4 설정, 새 테스트(1000000번대)", color="#63a4e8")
     ax.bar(x + w, [vals["third"][k] for k in ks], w, label="3차: v4 설정, 세 번째 테스트(1200000번대)", color="#1a4f8b")
+    # 95% 구간 오차 막대(2·3차)
+    for off, vkey, ckey in ((0.0, "v4", "v4_ci"), (w, "third", "third_ci")):
+        for k, (lo, hi) in vals[ckey].items():
+            v = vals[vkey][k]
+            if all(math.isfinite(t) for t in (lo, hi, v)):
+                i = ks.index(k)
+                ax.errorbar(i + off, v, yerr=[[v - lo], [hi - v]], fmt="none", ecolor="#444444", elinewidth=1.0, capsize=2.5)
     # 같은 세트의 v3 설정 값(K1·K3): 2차·3차 막대 위에 표시
     first = True
     for off, key in ((0.0, "v3_on_v4test"), (w, "v3_on_third")):
@@ -119,12 +142,16 @@ def figure(root: Path, v3_root: Path) -> Path:
     p5 = vals["p5_explore"]["K7"]
     if math.isfinite(p5):
         ax.plot(ks.index("K7") + w, p5, marker="D", mfc="none", mec="#1a4f8b", ms=6, ls="none", label="3차 v4+P5(실영상, 탐색)")
+    na = vals["neg_accel"]["K7"]
+    if math.isfinite(na):
+        i = ks.index("K7")
+        ax.plot([i - 0.45, i + 0.45], [na] * 2, color="#2f855a", ls=":", lw=2.0, label="K7: 정책 없는 $-a_t$ 기준선(라벨에 가까운 참고값)")
     for i, k in enumerate(ks):
         ax.plot([i - 0.45, i + 0.45], [GOALS[k]] * 2, color="#c53030", ls="--", lw=1.5, label="목표" if i == 0 else None)
     ax.axhline(0, color="k", lw=0.6)
     ax.set_xticks(x, [f"{k}\n{SHORT[k]}" for k in ks], fontsize=8)
     ax.set_ylabel("값(K6는 감소율)")
-    ax.legend(fontsize=6.5, loc="lower right")
+    ax.legend(fontsize=6.5, loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=2, frameon=False)
     fig.tight_layout()
     out = root / "summary" / "figures"
     out.mkdir(parents=True, exist_ok=True)
