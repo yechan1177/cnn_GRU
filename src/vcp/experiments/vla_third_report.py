@@ -221,7 +221,7 @@ def build_third_report(root: Path, quick: bool = False, test_ev: str = "test3", 
                 k6[name] = {"lo": _ci(bs)[0], "hi": _ci(bs)[1], "n_seeds": int(A.shape[0])} | ({"p_ge_goal": float((bs >= 0.30).mean())} if name == "K6_hier" else {"p_le0": float((bs >= 0).mean())})
         out["k6"] = k6
         lab = {"v4_lang": "v4, 언어 있음", "v4_nolang": "v4, 언어 없음(P6·P7도 꺼짐)", "p6_lang": "전부+P6(P7 없음), 언어 있음", "p6_nolang": "전부+P6, 언어 없음", "p67_only": "P6·P7만(학습 언어 경로 없음)", "ctrl": "제어기 단독(학습 없음)"}
-        _write_table(tables / f"{tag}_k6", ["조건(CARE 2%, cf3)", "실행", "속도 오차(m/s)"], [[lab[k], str(len(v)), _fmt(float(np.nanmean(list(v.values()))), digits=2)] for k, v in se.items()])
+        _write_table(tables / f"{tag}_k6", [f"조건(CARE 2%, {cf_ev})", "실행", "속도 오차(m/s)"], [[lab[k], str(len(v)), _fmt(float(np.nanmean(list(v.values()))), digits=2)] for k, v in se.items()])
 
     # Holm 군 A
     fam = {k: out["tests"][k]["p_le0"] for k in ("H-v3", "H-a3", "H-a3n", "H-P7") if k in out["tests"]}
