@@ -13,28 +13,33 @@
 4. 하이브리드 룰 게이트로 최종 태그를 보정한다.
 5. UI에서 순수 모델 예측과 최종 하이브리드 결과를 함께 확인한다.
 
-## 2026-10 핵심 지표(KPI) 기반 2단계 재실험(v3·v4)
+## 2026-10 핵심 지표(KPI) 기반 4단계 사전 등록 검증(v3·v4)
 
-원고를 7개 핵심 지표(K1~K7, [docs/33](docs/33_v3_핵심지표_벤치마크_개선계획.md)) 중심으로 재구성했다. 실험은 사전 등록한 두 단계로 진행했다.
+원고는 7개 핵심 지표(K1~K7, [docs/33](docs/33_v3_핵심지표_벤치마크_개선계획.md)) 중심으로 구성했다. 실험은 단계마다 사전 등록한 뒤 실행했다.
 
-| 단계 | 내용 | 사전 등록 | 결과 위치 |
+| 단계 | 내용 | 사전 등록 | 핵심 결과 |
 |---|---|---|---|
-| v3(1차 확증) | 벤치마크 수정(언어 누출 제거·AMR 되밀림 제거·반사실 언어 평가), 특징 토큰 정책, 공유 저장소 비교 | [docs/34](docs/34_v3_사전등록.md) | `experiments/exp_120_vla_v3/summary/` |
-| v4(2차 확증, 새 테스트) | 미달 원인 진단 → 정책 블록(P2·P3·T1·P4·P6·P7) → 개발 세트 선택 → 처음 보는 테스트 | [docs/37](docs/37_v4_사전등록.md) | `experiments/exp_130_vla_v4/summary/` |
-| 3차 심사 대응 | 재분석과 탐색적 절제(K6 분해, K4 정화) | — | [docs/38](docs/38_3차심사_대응_탐색적_절제.md) |
+| 1단계 v3 | 벤치마크 수정, 특징 토큰 정책, 공유 저장소 비교 | [docs/34](docs/34_v3_사전등록.md) | K1~K7 모두 미달 |
+| 2단계 v4(새 테스트) | 원인 진단 → 정책 블록(P2·P3·T1·P4·P6·P7) → 개발 세트 선택 | [docs/37](docs/37_v4_사전등록.md) | K1·K3·K6 달성 |
+| 3단계(세 번째 테스트) | 3차 심사 요구 분석 확증(K6 분해, K4 정화·동등성, 블록 제거, AMR 시드 10) | [docs/39](docs/39_세번째테스트_사전등록.md) | K1·K2·K3·K6 달성, K4·K5 미달 |
+| 4단계(새 학습 시드·네 번째 평가) | 학습 시드 독립 반복 | [docs/40](docs/40_네번째평가_새학습시드_사전등록.md) | K1·K2·K3·K6 재현, K4 미달 |
 
-- v4 판정(새 테스트)
-  - 달성: K1 0.851, K3 0.755(경계선), K6 38.0%
-  - 미달: K2 0.888, K4 +0.002, K5 −0.008 [−0.069, +0.053], K7 0.558
-  - 해석
-    - K1·K3 달성은 정책 개선의 성과다. 무작위 선별도 K1을 넘는다.
-    - K6는 지시문 수치 목표 추출(P6)과 잔차 제어(P7)로 달성했다. 학습 언어 접지는 확인되지 않았다.
-    - CARE 점수기의 고유 선별 효과는 확인되지 않았다.
-- 재현
+해석은 사전 등록 규칙대로 적었다.
+- K1·K3 달성은 정책 개선의 성과다. v4 − v3 차이는 +0.13~0.16이다.
+- CARE − 무작위는 3단계·4단계 모두 유의하다. 점수기 출력을 학습에 쓰지 않는 조건의 효과는 단계마다 갈려 **불안정**으로 적었다.
+- 점수기의 고유 기여(K4)는 네 번의 확증 모두 미달이다.
+- K6는 지시문 수치 목표 추출(P6)과 잔차 제어(P7)로 달성했다. 학습 언어 경로의 기여(H-L)는 미지지이며, 점추정은 반대 방향이다.
+
+추가 정보
+- 결과 위치: `experiments/exp_120_vla_v3/summary/`, `experiments/exp_130_vla_v4/summary/`(`v4_kpi.json`, `third_kpi.json`, `fourth_kpi.json`, 보조 `supp_round4.json`·`supp_round5.json`)
+- 재현 명령
   - `bash scripts/run_vla_v3.sh`
-  - `bash scripts/run_vla_v4.sh prepare dev robotdev` → `bash scripts/run_vla_v4.sh main lang robot comma report explore`
+  - `bash scripts/run_vla_v4.sh prepare dev robotdev`
+  - `bash scripts/run_vla_v4.sh main lang robot comma report explore`
+  - `bash scripts/run_vla_v4.sh third robot3 commap5 thirdreport`
+  - `bash scripts/run_vla_v4.sh fourth fourthreport p5dev`
   - 원고: `python scripts/build_vla_paper.py`
-- 개정 경과: v4 계획 [docs/36](docs/36_v4_알고리즘_모델_개선계획.md), 심사 [paper/review/review_round3_ko.md](paper/review/review_round3_ko.md)·[답변](paper/review/response_round3_ko.md). v2 원고는 [paper/manuscript_vla_v2_ko.md](paper/manuscript_vla_v2_ko.md)에 보관했다.
+- 심사: 3차(Major) → 4차(Minor) → 5차(Minor, 추가 실험 불필요). 보고서·답변서는 `paper/review/`에 있다(round3~5).
 
 ## 2026-10 VLA 연계 논문(v2): 수집 시점 큐레이션 CARE
 

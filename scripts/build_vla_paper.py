@@ -19,6 +19,8 @@
                          3단계 코드를 재사용해 같다(예: k5:tests:H-v3:diff는 4단계의 H-v4, H-a3n은 H-a4n, H-P7은 H-P7b, k6:H-L은 H-L4)
 - `{{s:p5:경로}}`      : 4단계 탐색(N3) 개발 세트 v4+P5·v4 폐루프(exp_130 p5dev_explore.json) 값(예: p5:all_p7_p5:mean)
 - `{{s:s4:경로}}`      : 4차 심사 대응 보조 분석(exp_130 supp_round4.json, `scripts/supp_round4_analysis.py`) 값(예: s4:ha_diff:diff, s4:pooled_23:K2:lo)
+- `{{s:s5:경로}}`      : 5차 심사 대응 보조 분석(exp_130 supp_round5.json, `scripts/supp_round5_analysis.py`) 값
+                         (예: s5:k2_paired_stage4:lo, s5:policy_minus_selection:stage4:diff, s5:p5dev:all_p7:mean_s34). 리스트는 인덱스로 찾는다
 - `{{이름}}`           : vla_stats.json 최상위 값(문자열 그대로)
 
 사용: python scripts/build_vla_paper.py [--root experiments/exp_110_vla_curation]
@@ -133,6 +135,11 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
             for part in key.split(":")[1:]:
                 vs4 = vs4[part]
             return vs4
+        if key.startswith("s5:"):  # 5차 심사 보조 분석(supp_round5.json): s5:<경로...>
+            vs5: Any = SUPP5
+            for part in key.split(":")[1:]:
+                vs5 = vs5[int(part)] if isinstance(vs5, list) else vs5[part]
+            return vs5
         if key.startswith("k5:"):  # 4단계(fourth_kpi.json): k5:<경로...>
             v5t: Any = KPI5
             for part in key.split(":")[1:]:
@@ -194,7 +201,7 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                     bt = stats["bootstrap"][key]
                     return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]".replace("-", "−")
                 v = lookup(key)
-                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:", "k:", "k4:", "k3:", "k5:", "s4:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
+                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:", "k:", "k4:", "k3:", "k5:", "s4:", "s5:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
                 if kind == "u":
                     kind = "s"
                     signed = False
@@ -226,6 +233,7 @@ KPI: dict[str, Any] = {}
 KPI4: dict[str, Any] = {}
 KPI3: dict[str, Any] = {}
 SUPP4: dict[str, Any] = {}
+SUPP5: dict[str, Any] = {}
 KPI5: dict[str, Any] = {}
 P5DEV: dict[str, Any] = {}
 V3_TABLES: list[Path] = []
@@ -245,6 +253,8 @@ def main() -> None:
     V3_TABLES.append(v4r / "summary" / "tables")
     if (v4r / "summary" / "supp_round4.json").exists():
         SUPP4.update(json.loads((v4r / "summary" / "supp_round4.json").read_text(encoding="utf-8")))
+    if (v4r / "summary" / "supp_round5.json").exists():
+        SUPP5.update(json.loads((v4r / "summary" / "supp_round5.json").read_text(encoding="utf-8")))
     if (v4r / "summary" / "fourth_kpi.json").exists():
         KPI5.update(json.loads((v4r / "summary" / "fourth_kpi.json").read_text(encoding="utf-8")))
     if (v4r / "summary" / "p5dev_explore.json").exists():
