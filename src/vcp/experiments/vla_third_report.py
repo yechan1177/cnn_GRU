@@ -96,7 +96,37 @@ def _se_by_seed(rs: list[dict[str, Any]]) -> dict[int, float]:
     return {r["job"]["seed"]: float(r["closed_loop"]["overall"].get("speed_error") or np.nan) for r in rs}
 
 
-def build_third_report(root: Path, quick: bool = False) -> dict[str, Any]:
+def _ep_se(rs: list[dict[str, Any]]) -> tuple[np.ndarray, list[int]]:
+    """실행별 에피소드 속도 오차 [시드, 에피소드](값 없는 에피소드는 NaN)."""
+
+    return np.array([[np.nan if e.get("speed_error") is None else float(e["speed_error"]) for e in r["closed_loop"]["episodes"]] for r in rs]), [r["job"]["seed"] for r in rs]
+
+
+def _hier_ratio(L: np.ndarray, N: np.ndarray, n_boot: int = 10000, seed: int = 0) -> np.ndarray:
+    """1 − mean(L)/mean(N)의 시드·에피소드 2단계 부트스트랩(같은 시드·에피소드 대응). 4차 심사 N2 보조 분석."""
+
+    rng = np.random.default_rng(seed)
+    n_s, n_e = L.shape
+    out = np.empty(n_boot)
+    for i in range(n_boot):
+        si, ei = rng.integers(0, n_s, n_s), rng.integers(0, n_e, n_e)
+        out[i] = 1 - np.nanmean(L[np.ix_(si, ei)]) / np.nanmean(N[np.ix_(si, ei)])
+    return out
+
+
+def _hier_diff(A: np.ndarray, B: np.ndarray, n_boot: int = 10000, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    n_s, n_e = A.shape
+    out = np.empty(n_boot)
+    for i in range(n_boot):
+        si, ei = rng.integers(0, n_s, n_s), rng.integers(0, n_e, n_e)
+        out[i] = np.nanmean(A[np.ix_(si, ei)]) - np.nanmean(B[np.ix_(si, ei)])
+    return out
+
+
+def build_third_report(root: Path, quick: bool = False, test_ev: str = "test3", cf_ev: str = "cf3", tag: str = "third") -> dict[str, Any]:
+    """기본 인자(test3·cf3·third)는 사전 등록(docs/39)으로 고정한 분석과 같다. 네 번째 평가 세트(docs/40)는 인자만 바꿔 같은 분석을 쓴다."""
+
     from dataclasses import replace
 
     cfg = V4Config(root=root, quick=quick)
@@ -106,16 +136,16 @@ def build_third_report(root: Path, quick: bool = False) -> dict[str, Any]:
     out: dict[str, Any] = {"kpi": {}, "tests": {}, "loo": {}, "k6": {}, "robot": {}, "comma_p5": {}}
 
     # ---------------- 주행 test3 ----------------
-    if (root / "cache" / "expert_driving_test3.json").exists():
-        ex = expert_reference(cfg, "test3")
-        G = _runs(root, "driving", "test3")
+    if (root / "cache" / f"expert_driving_{test_ev}.json").exists():
+        ex = expert_reference(cfg, test_ev)
+        G = _runs(root, "driving", test_ev)
         C = {(v, m, b): _S(rs, ex, False) for (v, m, b, lang), rs in G.items() if lang}
         hz = np.array([bool(e["hazard"]) for e in ex["episodes"]])
         rows = []
         for (v, m, b), S in sorted(C.items(), key=lambda kv: (list(VAR_LABELS).index(kv[0][0]) if kv[0][0] in VAR_LABELS else 99, kv[0][2], kv[0][1])):
             sm = S[0].mean(1)
             rows.append([VAR_LABELS.get(v, v), LABELS.get(m, m), f"{int(round(100 * b))}%", str(len(sm)), _fmt(float(sm.mean()), float(sm.std(ddof=1)) if len(sm) > 1 else 0.0), _fmt(float(S[0][:, hz].mean()))])
-        _write_table(tables / "third_driving", ["설정", "방법", "예산", "시드", "성공률", "위험 시나리오 성공률"], rows)
+        _write_table(tables / f"{tag}_driving", ["설정", "방법", "예산", "시드", "성공률", "위험 시나리오 성공률"], rows)
         out["expert_success"] = float(np.mean([not e["collision"] for e in ex["episodes"]]))
 
         care, full = C.get(("v4", "care", 0.02)), C.get(("v4", "full", 1.0))
@@ -156,11 +186,11 @@ def build_third_report(root: Path, quick: bool = False) -> dict[str, Any]:
                 out["loo"][v] = hierarchical_bootstrap(A, B) | {"n_seeds": len(A), "v4": float(A.mean()), "removed": float(B.mean())}
         for k, p in holm({k: v["p_le0"] for k, v in out["loo"].items()}).items():
             out["loo"][k]["p_holm"] = p
-        _write_table(tables / "third_loo", ["제거한 블록", "시드", "v4 성공률", "제거 시 성공률", "v4 − 제거 [95% CI]", "Holm p"], [[VAR_LABELS[k], str(v["n_seeds"]), _fmt(v["v4"]), _fmt(v["removed"]), f"{v['diff']:+.3f} [{v['lo']:+.3f}, {v['hi']:+.3f}]".replace("-", "−"), f"{v['p_holm']:.3f}"] for k, v in out["loo"].items()])
+        _write_table(tables / f"{tag}_loo", ["제거한 블록", "시드", "v4 성공률", "제거 시 성공률", "v4 − 제거 [95% CI]", "Holm p"], [[VAR_LABELS[k], str(v["n_seeds"]), _fmt(v["v4"]), _fmt(v["removed"]), f"{v['diff']:+.3f} [{v['lo']:+.3f}, {v['hi']:+.3f}]".replace("-", "−"), f"{v['p_holm']:.3f}"] for k, v in out["loo"].items()])
 
     # ---------------- 반사실 cf3(K6 재현·분해) ----------------
-    if (root / "cache" / "expert_driving_cf3.json").exists():
-        H = _runs(root, "driving", "cf3")
+    if (root / "cache" / f"expert_driving_{cf_ev}.json").exists():
+        H = _runs(root, "driving", cf_ev)
         se = {}
         for key, name in ((("v4", "care", 0.02, True), "v4_lang"), (("v4", "care", 0.02, False), "v4_nolang"), (("all_p6", "care", 0.02, True), "p6_lang"), (("all_p6", "care", 0.02, False), "p6_nolang"), (("p67_nolangemb", "care", 0.02, True), "p67_only"), (("ctrl", "none", 0.0, True), "ctrl")):
             if key in H:
@@ -183,9 +213,15 @@ def build_third_report(root: Path, quick: bool = False) -> dict[str, Any]:
             L, N = np.array([se["p6_lang"][c] for c in common]), np.array([se["p6_nolang"][c] for c in common])
             k6["p6_reduction"] = float(1 - L.mean() / N.mean())
         k6["mean_speed_error"] = {k: float(np.nanmean(list(v.values()))) for k, v in se.items()}
+        # 보조(4차 심사 N2): 시드·에피소드 계층 부트스트랩 구간. 사전 등록 판정에는 쓰지 않는다
+        for a_key, b_key, name in ((("v4", "care", 0.02, True), ("v4", "care", 0.02, False), "K6_hier"), (("v4", "care", 0.02, True), ("p67_nolangemb", "care", 0.02, True), "H-L_hier")):
+            if a_key in H and b_key in H:
+                A, B = _pair(_ep_se(H[a_key]), _ep_se(H[b_key]))
+                bs = _hier_ratio(A, B) if name == "K6_hier" else _hier_diff(A, B)
+                k6[name] = {"lo": _ci(bs)[0], "hi": _ci(bs)[1], "n_seeds": int(A.shape[0])} | ({"p_ge_goal": float((bs >= 0.30).mean())} if name == "K6_hier" else {"p_le0": float((bs >= 0).mean())})
         out["k6"] = k6
         lab = {"v4_lang": "v4, 언어 있음", "v4_nolang": "v4, 언어 없음(P6·P7도 꺼짐)", "p6_lang": "전부+P6(P7 없음), 언어 있음", "p6_nolang": "전부+P6, 언어 없음", "p67_only": "P6·P7만(학습 언어 경로 없음)", "ctrl": "제어기 단독(학습 없음)"}
-        _write_table(tables / "third_k6", ["조건(CARE 2%, cf3)", "실행", "속도 오차(m/s)"], [[lab[k], str(len(v)), _fmt(float(np.nanmean(list(v.values()))), digits=2)] for k, v in se.items()])
+        _write_table(tables / f"{tag}_k6", ["조건(CARE 2%, cf3)", "실행", "속도 오차(m/s)"], [[lab[k], str(len(v)), _fmt(float(np.nanmean(list(v.values()))), digits=2)] for k, v in se.items()])
 
     # Holm 군 A
     fam = {k: out["tests"][k]["p_le0"] for k in ("H-v3", "H-a3", "H-a3n", "H-P7") if k in out["tests"]}
@@ -204,15 +240,15 @@ def build_third_report(root: Path, quick: bool = False) -> dict[str, Any]:
     if "H-K4e" in out["tests"]:
         t = out["tests"]["H-K4e"]
         trows.append(["H-K4e(동등성 ±0.03, 90% CI)", str(t["n_seeds"]), "-", "-", f"{t['diff']:+.3f} [{t['lo90']:+.3f}, {t['hi90']:+.3f}]".replace("-", "−"), "동등" if t["equivalent"] else "동등 아님", "-"])
-    _write_table(tables / "third_tests", ["가설·비교", "시드", "A", "B", "A − B [95% CI]", "단측 p", "Holm p"], trows)
+    _write_table(tables / f"{tag}_tests", ["가설·비교", "시드", "A", "B", "A − B [95% CI]", "단측 p", "Holm p"], trows)
 
     # ---------------- AMR test3(K5, A4) ----------------
     rc = cfg.for_domain("robot")
-    if (rc.cache / "expert_robot_test3.json").exists():
-        exr = expert_reference(rc, "test3")
-        R = {(v, m, b): _S(rs, exr, True) for (v, m, b, lang), rs in _runs(root, "robot", "test3").items()}
+    if (rc.cache / f"expert_robot_{test_ev}.json").exists():
+        exr = expert_reference(rc, test_ev)
+        R = {(v, m, b): _S(rs, exr, True) for (v, m, b, lang), rs in _runs(root, "robot", test_ev).items()}
         rows = [[VAR_LABELS.get(v, v), LABELS.get(m, m), f"{int(round(100 * b))}%", str(len(S[1])), _fmt(float(S[0].mean(1).mean()), float(S[0].mean(1).std(ddof=1)) if len(S[1]) > 1 else 0.0)] for (v, m, b), S in sorted(R.items())]
-        _write_table(tables / "third_robot", ["설정", "방법", "예산", "시드", "성공률"], rows)
+        _write_table(tables / f"{tag}_robot", ["설정", "방법", "예산", "시드", "성공률"], rows)
         for name, a, b in (("K5", ("v4", "care", 0.02), ("v4", "random_shared", 0.02)), ("K5_v3", ("v3", "care", 0.02), ("v3", "random_shared", 0.02)), ("v4_vs_v3_care", ("v4", "care", 0.02), ("v3", "care", 0.02))):
             if a in R and b in R:
                 A, B = _pair(R[a], R[b])
@@ -245,7 +281,7 @@ def build_third_report(root: Path, quick: bool = False) -> dict[str, Any]:
         j["K6"] = "달성" if out["k6"]["K6"]["speed_error_reduction"] >= 0.30 else "미달"
     out["judgement"] = j
     (root / "summary").mkdir(parents=True, exist_ok=True)
-    (root / "summary" / "third_kpi.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
+    (root / "summary" / f"{tag}_kpi.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=float), encoding="utf-8")
     logger.info("세 번째 테스트 판정: %s", j)
     return out
 
@@ -257,8 +293,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="experiments/exp_130_vla_v4")
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--test-ev", default="test3")
+    ap.add_argument("--cf-ev", default="cf3")
+    ap.add_argument("--tag", default="third")
     a = ap.parse_args()
-    build_third_report(Path(a.root), a.quick)
+    build_third_report(Path(a.root), a.quick, a.test_ev, a.cf_ev, a.tag)
 
 
 if __name__ == "__main__":

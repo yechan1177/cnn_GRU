@@ -28,7 +28,7 @@ from .vla_curation_suite import HAZARD_IDS, _json_default, chunk_targets, clip_i
 logger = logging.getLogger(__name__)
 
 SEED_BASES_V4 = {
-    "driving": {"dev": 160000, "devcf": 170000, "test": 1000000, "cf": 1050000, "test3": 1200000, "cf3": 1250000},
+    "driving": {"dev": 160000, "devcf": 170000, "test": 1000000, "cf": 1050000, "test3": 1200000, "cf3": 1250000, "test4": 1400000, "cf4": 1450000},
     "robot": {"dev": 460000, "devcf": 470000, "test": 1100000, "cf": 1150000, "test3": 1300000, "cf3": 1350000},  # AMR 개발 세트는 셀당 4개
 }
 
@@ -59,6 +59,8 @@ VARIANTS["loo_p3"] = {k: v for k, v in _ALL7.items() if k != "aux_weight"}
 VARIANTS["loo_t1"] = {k: v for k, v in _ALL7.items() if k != "lang_dropout"}
 VARIANTS["loo_p4"] = {k: v for k, v in _ALL7.items() if k != "hazard_weight"}
 VARIANTS["loo_p67"] = {k: v for k, v in _ALL7.items() if k not in ("goal_encoding", "goal_residual_gain")}  # = "all"
+
+VARIANTS["all_p7_p5"] = dict(VARIANTS["all_p7"], proprio_history=8, proprio_stride=2)  # 4차 심사 N3: v4 + P5 폐루프(탐색적)
 
 POLICY_KEYS = ("feature_history", "feature_stride", "feature_encoder", "aux_weight", "lang_dropout", "proprio_history", "proprio_stride", "goal_encoding", "goal_residual_gain", "lang_embedding")
 # P7 이득(정규화 단위) = 물리 이득 0.5 s⁻¹ × 속도 스케일 / 가속도 스케일(주행 30/4, AMR 3/1)
@@ -124,8 +126,8 @@ def eval_specs(cfg: V4Config, eval_set: str) -> list[Any]:
     from ..vla.closed_loop import make_test_specs
 
     base = SEED_BASES_V4[cfg.domain][eval_set]
-    per = {"dev": cfg.dev_per_cell, "devcf": cfg.devcf_per_cell, "test": cfg.test_per_cell, "cf": cfg.cf_per_cell, "test3": cfg.test_per_cell, "cf3": cfg.cf_per_cell}[eval_set]
-    return make_test_specs(cfg.domain, per, base, counterfactual=eval_set in ("devcf", "cf", "cf3"))
+    per = {"dev": cfg.dev_per_cell, "devcf": cfg.devcf_per_cell, "test": cfg.test_per_cell, "cf": cfg.cf_per_cell, "test3": cfg.test_per_cell, "cf3": cfg.cf_per_cell, "test4": cfg.test_per_cell, "cf4": cfg.cf_per_cell}[eval_set]
+    return make_test_specs(cfg.domain, per, base, counterfactual=eval_set in ("devcf", "cf", "cf3", "cf4"))
 
 
 def expert_reference(cfg: V4Config, eval_set: str) -> dict[str, Any]:
@@ -287,7 +289,7 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
         "n_train_frames": int(len(train_idx)),
         "train_log": {k: v for k, v in log.items() if k not in ("loss_curve", "config")},
         "closed_loop": closed,
-        "open_loop": open_loop(model, cfg, params) if job["eval"] in ("test", "test3") else {},
+        "open_loop": open_loop(model, cfg, params) if job["eval"] in ("test", "test3", "test4") else {},
         "seconds": time.perf_counter() - t0,
     }
     cfg.runs.mkdir(parents=True, exist_ok=True)
@@ -507,6 +509,38 @@ def stage_third(cfg: V4Config) -> list[dict[str, Any]]:
     return res
 
 
+FOURTH_SEEDS = tuple(range(10, 20))  # 새 학습 시드(4차 심사 N2): 2·3단계(시드 0~9)와 가중치가 겹치지 않는다
+
+
+def stage_fourth(cfg: V4Config) -> list[dict[str, Any]]:
+    """네 번째 평가 세트 + 새 학습 시드 독립 반복(사전 등록 docs/40)."""
+
+    for ev in ("test4", "cf4"):
+        expert_reference(cfg, ev)
+    jobs = []
+    for s in FOURTH_SEEDS:
+        for m in ("random_shared", "care", "mix_trigger"):
+            jobs.append(make_job(cfg, "v4", m, 0.02, s, "test4"))
+            jobs.append(make_job(cfg, "v4_noaux", m, 0.02, s, "test4"))
+        jobs.append(make_job(cfg, "v3", "care", 0.02, s, "test4"))
+        jobs.append(make_job(cfg, "all_p6", "care", 0.02, s, "test4"))
+        for lang in (True, False):
+            jobs.append(make_job(cfg, "v4", "care", 0.02, s, "cf4", use_language=lang))
+        jobs.append(make_job(cfg, "p67_nolangemb", "care", 0.02, s, "cf4"))
+    for s in FOURTH_SEEDS[:5]:
+        jobs.append(make_job(cfg, "v4", "full", 1.0, s, "test4"))
+    jobs.sort(key=lambda j: (j["eval"] != "test4", j["variant"] not in ("v4", "v4_noaux", "v3"), j["seed"]))
+    return run_jobs(cfg, jobs)
+
+
+def stage_p5dev(cfg: V4Config) -> list[dict[str, Any]]:
+    """4차 심사 N3(탐색적): v4 + P5의 폐루프 성공률을 같은 개발 세트에서 v4와 비교."""
+
+    expert_reference(cfg, "dev")
+    jobs = [make_job(cfg, v, "care", 0.02, s, "dev") for v in ("all_p7_p5", "all_p7") for s in range(5)]
+    return run_jobs(cfg, jobs)
+
+
 def stage_robot3(cfg: V4Config) -> list[dict[str, Any]]:
     """AMR 세 번째 테스트 세트(A4): 시드 10개로 K5 검정력 확보, v3 대조."""
 
@@ -524,7 +558,7 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     ap = argparse.ArgumentParser(description="v4 개선 개발·확증 실험")
-    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma", "explore", "third", "robot3", "commap5"])
+    ap.add_argument("stage", choices=["prepare", "dev", "robotdev", "main", "lang", "robot", "comma", "explore", "third", "robot3", "commap5", "fourth", "p5dev"])
     ap.add_argument("--root", default="experiments/exp_130_vla_v4")
     ap.add_argument("--v3-root", default="experiments/exp_120_vla_v3")
     ap.add_argument("--workers", type=int, default=4)
@@ -547,6 +581,10 @@ def main() -> None:
         stage_robot(cfg)
     elif a.stage == "third":
         stage_third(cfg)
+    elif a.stage == "fourth":
+        stage_fourth(cfg)
+    elif a.stage == "p5dev":
+        stage_p5dev(cfg)
     elif a.stage == "robot3":
         stage_robot3(cfg)
     elif a.stage == "commap5":
