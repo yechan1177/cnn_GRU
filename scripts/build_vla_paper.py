@@ -15,6 +15,9 @@
 - `{{s:k:경로}}`       : v3 KPI(v3_kpi.json) 값. 경로는 ':'로 구분(예: k:K1:value, k:comparisons:care_vs_mix_trigger_b0.02:lo)
 - `{{s:k4:경로}}`      : v4 KPI(exp_130 v4_kpi.json) 값(예: k4:K1:value, k4:comparisons:v4_vs_v3_care:lo)
 - `{{s:k3:경로}}`      : 세 번째 테스트(exp_130 third_kpi.json) 값(예: k3:kpi:K1:value, k3:tests:H-v3:diff, k3:loo:loo_p2:p_holm)
+- `{{s:k5:경로}}`      : 4단계(새 학습 시드·네 번째 평가 세트, exp_130 fourth_kpi.json) 값. 구조는 third_kpi.json과 같고 키 이름도
+                         3단계 코드를 재사용해 같다(예: k5:tests:H-v3:diff는 4단계의 H-v4, H-a3n은 H-a4n, H-P7은 H-P7b, k6:H-L은 H-L4)
+- `{{s:p5:경로}}`      : 4단계 탐색(N3) 개발 세트 v4+P5·v4 폐루프(exp_130 p5dev_explore.json) 값(예: p5:all_p7_p5:mean)
 - `{{s:s4:경로}}`      : 4차 심사 대응 보조 분석(exp_130 supp_round4.json, `scripts/supp_round4_analysis.py`) 값(예: s4:ha_diff:diff, s4:pooled_23:K2:lo)
 - `{{이름}}`           : vla_stats.json 최상위 값(문자열 그대로)
 
@@ -130,6 +133,16 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
             for part in key.split(":")[1:]:
                 vs4 = vs4[part]
             return vs4
+        if key.startswith("k5:"):  # 4단계(fourth_kpi.json): k5:<경로...>
+            v5t: Any = KPI5
+            for part in key.split(":")[1:]:
+                v5t = v5t[part]
+            return v5t
+        if key.startswith("p5:"):  # 4단계 탐색(p5dev_explore.json): p5:<경로...>
+            vp5: Any = P5DEV
+            for part in key.split(":")[1:]:
+                vp5 = vp5[int(part)] if isinstance(vp5, list) else vp5[part]
+            return vp5
         if key.startswith("k3:"):  # 세 번째 테스트(third_kpi.json): k3:<경로...>
             v3t: Any = KPI3
             for part in key.split(":")[1:]:
@@ -181,7 +194,7 @@ def render(text: str, stats: dict[str, Any], root: Path, depth: int = 0) -> str:
                     bt = stats["bootstrap"][key]
                     return f"{bt['diff']:+.3f} [95% CI {bt['lo']:+.3f}, {bt['hi']:+.3f}]".replace("-", "−")
                 v = lookup(key)
-                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:", "k:", "k4:", "k3:", "s4:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
+                signed = key.startswith(("hb:", "hbt:", "ct:", "ctt:", "cp:", "sdiff:", "k:", "k4:", "k3:", "k5:", "s4:")) and key.split(":")[-1] in ("diff", "lo", "hi") or key.startswith("sdiff:")
                 if kind == "u":
                     kind = "s"
                     signed = False
@@ -213,6 +226,8 @@ KPI: dict[str, Any] = {}
 KPI4: dict[str, Any] = {}
 KPI3: dict[str, Any] = {}
 SUPP4: dict[str, Any] = {}
+KPI5: dict[str, Any] = {}
+P5DEV: dict[str, Any] = {}
 V3_TABLES: list[Path] = []
 
 
@@ -230,6 +245,10 @@ def main() -> None:
     V3_TABLES.append(v4r / "summary" / "tables")
     if (v4r / "summary" / "supp_round4.json").exists():
         SUPP4.update(json.loads((v4r / "summary" / "supp_round4.json").read_text(encoding="utf-8")))
+    if (v4r / "summary" / "fourth_kpi.json").exists():
+        KPI5.update(json.loads((v4r / "summary" / "fourth_kpi.json").read_text(encoding="utf-8")))
+    if (v4r / "summary" / "p5dev_explore.json").exists():
+        P5DEV.update(json.loads((v4r / "summary" / "p5dev_explore.json").read_text(encoding="utf-8")))
     if (v4r / "summary" / "third_kpi.json").exists():
         KPI3.update(json.loads((v4r / "summary" / "third_kpi.json").read_text(encoding="utf-8")))
     if (v4r / "summary" / "v4_kpi.json").exists():
