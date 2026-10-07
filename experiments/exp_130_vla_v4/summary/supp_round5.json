@@ -1,0 +1,263 @@
+{
+ "n_boot": 10000,
+ "note": "보조 통계. 'posthoc' 표시는 사전 등록 가설이 아닌 사후 분석이며 판정에 쓰지 않는다.",
+ "scenario_stage4": {
+  "v4": {
+   "care": {
+    "cut_in": 0.919047619047619,
+    "lead_brake": 0.861904761904762,
+    "stop_and_go": 0.8714285714285714,
+    "vru_crossing": 0.6523809523809524,
+    "dense_traffic": 0.9333333333333333,
+    "follow": 0.9904761904761905,
+    "free_drive": 0.9952380952380953,
+    "n_seeds": 10
+   },
+   "mix_trigger": {
+    "cut_in": 0.9333333333333333,
+    "lead_brake": 0.9380952380952381,
+    "stop_and_go": 0.8809523809523809,
+    "vru_crossing": 0.5333333333333333,
+    "dense_traffic": 0.8666666666666667,
+    "follow": 0.9857142857142858,
+    "free_drive": 0.9952380952380953,
+    "n_seeds": 10
+   },
+   "random_shared": {
+    "cut_in": 0.9285714285714286,
+    "lead_brake": 0.8476190476190476,
+    "stop_and_go": 0.6714285714285714,
+    "vru_crossing": 0.5904761904761905,
+    "dense_traffic": 0.7904761904761904,
+    "follow": 0.9904761904761905,
+    "free_drive": 0.9952380952380953,
+    "n_seeds": 10
+   },
+   "full": {
+    "cut_in": 0.9523809523809523,
+    "lead_brake": 1.0,
+    "stop_and_go": 1.0,
+    "vru_crossing": 0.9238095238095239,
+    "dense_traffic": 0.9523809523809523,
+    "follow": 1.0,
+    "free_drive": 1.0,
+    "n_seeds": 5
+   }
+  },
+  "v3": {
+   "care": {
+    "cut_in": 0.780952380952381,
+    "lead_brake": 0.7333333333333333,
+    "stop_and_go": 0.7142857142857143,
+    "vru_crossing": 0.5095238095238095,
+    "dense_traffic": 0.9095238095238095,
+    "follow": 0.8666666666666667,
+    "free_drive": 0.8142857142857143,
+    "n_seeds": 10
+   }
+  },
+  "expert": {
+   "cut_in": 0.9523809523809523,
+   "lead_brake": 1.0,
+   "stop_and_go": 1.0,
+   "vru_crossing": 0.9523809523809523,
+   "dense_traffic": 0.9523809523809523,
+   "follow": 1.0,
+   "free_drive": 1.0
+  },
+  "expert_summary": {
+   "driving": 0.9795918367346939,
+   "hazard": 0.9761904761904762,
+   "vru_crossing": 0.9523809523809523
+  }
+ },
+ "expert_stage4": {
+  "driving": 0.9795918367346939,
+  "hazard": 0.9761904761904762,
+  "vru_crossing": 0.9523809523809523
+ },
+ "lowest_scenario_care": {
+  "stage2": {
+   "scenario": "vru_crossing",
+   "value": 0.5333333333333333
+  },
+  "stage3": {
+   "scenario": "vru_crossing",
+   "value": 0.7380952380952381
+  },
+  "stage4": {
+   "scenario": "vru_crossing",
+   "value": 0.6523809523809524
+  }
+ },
+ "vru_lowest_all_three": true,
+ "k2_paired_stage4": {
+  "value": 0.911436541143654,
+  "lo": 0.8732874353749197,
+  "hi": 0.9444444444444445,
+  "p_ge_goal": 0.7396
+ },
+ "k2_independent_stage4": {
+  "value": 0.911436541143654,
+  "lo": 0.8632582041553613,
+  "hi": 0.9588654784931381,
+  "p_ge_goal": 0.6886
+ },
+ "ha_diff_stage4": {
+  "diff": 0.012244897959183673,
+  "lo": -0.02585034013605442,
+  "hi": 0.05170068027210884,
+  "p_le0": 0.2787,
+  "n_seeds": 10,
+  "h_a3": 0.058503401360544216,
+  "h_a3n": 0.04625850340136054,
+  "posthoc": true
+ },
+ "policy_minus_selection": {
+  "stage3": {
+   "diff": 0.11020408163265306,
+   "lo": 0.06190476190476191,
+   "hi": 0.15850340136054422,
+   "p_le0": 0.0,
+   "n_seeds": 10,
+   "a_v4_random": 0.8489795918367347,
+   "b_v3_care": 0.7387755102040816,
+   "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "posthoc": true,
+   "check_hv_minus_ha": 0.11020408163265305
+  },
+  "stage4": {
+   "diff": 0.06938775510204082,
+   "lo": 0.01020408163265306,
+   "hi": 0.12585034013605442,
+   "p_le0": 0.011,
+   "n_seeds": 10,
+   "a_v4_random": 0.8306122448979592,
+   "b_v3_care": 0.7612244897959184,
+   "seeds": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+   ],
+   "posthoc": true,
+   "check_hv_minus_ha": 0.06938775510204082
+  }
+ },
+ "ratio": {
+  "stage4": 2.186046511627907,
+  "stage3": 3.103896103896104,
+  "stage2_min": 3.3906250000000004,
+  "stage2_max": 4.017857142857142,
+  "min_234": 2.186046511627907,
+  "max_234": 4.017857142857142
+ },
+ "p5dev": {
+  "all_p7_p5": {
+   "by_seed": {
+    "0": 0.7619047619047619,
+    "1": 0.8095238095238095,
+    "2": 0.8333333333333334,
+    "3": 0.75,
+    "4": 0.8452380952380952
+   },
+   "mean_all": 0.8,
+   "mean_s34": 0.7976190476190477,
+   "matches_p5dev_explore": true
+  },
+  "all_p7": {
+   "by_seed": {
+    "0": 0.8809523809523809,
+    "1": 0.8809523809523809,
+    "2": 0.8452380952380952,
+    "3": 0.8809523809523809,
+    "4": 0.9047619047619048
+   },
+   "mean_all": 0.8785714285714287,
+   "mean_s34": 0.8928571428571428,
+   "matches_p5dev_explore": true
+  },
+  "s34_p5_lower_both": true,
+  "all_p5_lower": true,
+  "runs": {
+   "planned": 10,
+   "remaining_at_start": 7,
+   "executed": [
+    "driving__dev__all_p7__care__b0.02__s3__st6000",
+    "driving__dev__all_p7__care__b0.02__s4__st6000",
+    "driving__dev__all_p7_p5__care__b0.02__s0__st6000",
+    "driving__dev__all_p7_p5__care__b0.02__s1__st6000",
+    "driving__dev__all_p7_p5__care__b0.02__s2__st6000",
+    "driving__dev__all_p7_p5__care__b0.02__s3__st6000",
+    "driving__dev__all_p7_p5__care__b0.02__s4__st6000"
+   ],
+   "n_executed": 7,
+   "reused": [
+    "driving__dev__all_p7__care__b0.02__s0__st6000",
+    "driving__dev__all_p7__care__b0.02__s1__st6000",
+    "driving__dev__all_p7__care__b0.02__s2__st6000"
+   ],
+   "n_reused": 3,
+   "reused_mtime_utc": {
+    "driving__dev__all_p7__care__b0.02__s0__st6000": "2026-10-04T22:54:30+00:00",
+    "driving__dev__all_p7__care__b0.02__s1__st6000": "2026-10-04T22:54:29+00:00",
+    "driving__dev__all_p7__care__b0.02__s2__st6000": "2026-10-04T22:54:23+00:00"
+   }
+  }
+ },
+ "unique_policies_stage4": {
+  "n_runs": 115,
+  "n_unique_train_keys": 105,
+  "n_unique_train_logs": 105,
+  "n_shared_keys": 10,
+  "all_shared_identical": true,
+  "shared_conditions": {
+   "v4:care:0.02:lang:cf4+test4": 10
+  },
+  "by_condition": {
+   "cf4:p67_nolangemb:care:0.02:lang": 10,
+   "cf4:v4:care:0.02:lang": 10,
+   "cf4:v4:care:0.02:nolang": 10,
+   "test4:all_p6:care:0.02:lang": 10,
+   "test4:v3:care:0.02:lang": 10,
+   "test4:v4:care:0.02:lang": 10,
+   "test4:v4:full:1.0:lang": 5,
+   "test4:v4:mix_trigger:0.02:lang": 10,
+   "test4:v4:random_shared:0.02:lang": 10,
+   "test4:v4_noaux:care:0.02:lang": 10,
+   "test4:v4_noaux:mix_trigger:0.02:lang": 10,
+   "test4:v4_noaux:random_shared:0.02:lang": 10
+  },
+  "seeds": [
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19
+  ],
+  "overlap_keys_with_other_stages": 0,
+  "overlap_train_logs_with_other_stages": 0
+ }
+}

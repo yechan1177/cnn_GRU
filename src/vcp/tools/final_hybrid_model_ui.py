@@ -9,6 +9,7 @@ from typing import Any
 import torch
 
 from vcp.components.temporal import TemporalGRUNet, build_temporal_channel_groups
+from vcp.features.semantic_v1 import V1_KEYS
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 
@@ -174,7 +175,7 @@ def load_hybrid_params(manifest_path: Path) -> HybridParams:
 def load_model(checkpoint_path: Path) -> tuple[TemporalGRUNet, list[str], int]:
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"checkpoint를 찾을 수 없습니다: {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     model_config = checkpoint.get("model_config", {})
     labels_map = checkpoint.get("labels", {})
     labels = [""] * len(labels_map)
@@ -258,7 +259,10 @@ def predict_sequence(
     labels: list[str],
     feature_window: list[list[float]],
     params: HybridParams,
+    feature_keys: list[str] | None = None,
 ) -> dict[str, Any]:
+    """순수 모델 예측 + 하이브리드 룰 게이트 최종 예측(v1 특징 기준)."""
+
     x = torch.tensor([feature_window], dtype=torch.float32)
     with torch.no_grad():
         output = model(x)
@@ -271,12 +275,19 @@ def predict_sequence(
     warn_idx = label_to_index.get("brake_warning", 0)
     hard_idx = label_to_index.get("hard_brake_risk", 0)
 
+    keys = list(feature_keys) if feature_keys is not None else list(V1_KEYS)
     last = feature_window[-1]
-    roi_risk = float(last[11]) if len(last) > 11 else 0.0
-    motion_delta = float(last[12]) if len(last) > 12 else 0.0
-    center = float(last[13]) if len(last) > 13 else 0.0
-    looming = float(last[14]) if len(last) > 14 else 0.0
-    occlusion = float(last[15]) if len(last) > 15 else 0.0
+
+    def _feat(name: str) -> float:
+        # 인덱스 하드코딩 대신 key 이름으로 조회한다(특징 버전 변경 시 오동작 방지).
+        idx = keys.index(name) if name in keys else -1
+        return float(last[idx]) if 0 <= idx < len(last) else 0.0
+
+    roi_risk = _feat("roi_risk")
+    motion_delta = _feat("motion_delta")
+    center = _feat("center_closeness")
+    looming = _feat("looming_score")
+    occlusion = _feat("occlusion_score")
 
     warn_rule_feat = (
         roi_risk >= params.roi_thr

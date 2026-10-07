@@ -1,0 +1,66 @@
+{
+ "codebase_version": "v2.0-compatible (vcp export, 공식 로더 미검증)",
+ "dataset_name": "vcp_synthetic_driving",
+ "fps": 15.0,
+ "total_episodes": 20,
+ "total_frames": 9000,
+ "total_tasks": 1,
+ "data_path": "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
+ "features": {
+  "observation.state": {
+   "dtype": "float32",
+   "shape": [
+    2
+   ],
+   "names": [
+    "ego_speed",
+    "ego_accel"
+   ]
+  },
+  "observation.semantic_features": {
+   "dtype": "float32",
+   "shape": [
+    16
+   ]
+  },
+  "observation.context_probs": {
+   "dtype": "float32",
+   "shape": [
+    6
+   ],
+   "names": [
+    "normal_drive",
+    "front_vehicle_follow",
+    "brake_warning",
+    "hard_brake_risk",
+    "post_brake_recovery",
+    "dense_traffic"
+   ]
+  },
+  "action": {
+   "dtype": "float32",
+   "shape": [
+    2
+   ],
+   "names": [
+    "accel_t+0.5s",
+    "accel_t+1.0s"
+   ]
+  },
+  "annotation.context": {
+   "dtype": "string"
+  },
+  "annotation.narration_ko": {
+   "dtype": "string"
+  },
+  "annotation.narration_en": {
+   "dtype": "string"
+  },
+  "curation.event_score": {
+   "dtype": "float32"
+  },
+  "curation.uncertainty": {
+   "dtype": "float32"
+  }
+ }
+}
